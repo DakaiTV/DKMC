@@ -15,7 +15,7 @@ msgstr ""
 
 msgctxt "#0"
 msgid "Programs"
-msgstr "Ohjelmat"
+msgstr "Sovellukset"
 
 msgctxt "#1"
 msgid "Pictures"
@@ -861,10 +861,6 @@ msgctxt "#251"
 msgid "Select destination directory"
 msgstr "Valitse kohdehakemisto"
 
-msgctxt "#252"
-msgid "Output stereo to all speakers"
-msgstr "Syötä stereoääni kaikille kaiuttimille"
-
 msgctxt "#253"
 msgid "Number of channels"
 msgstr "Kanavien määrä"
@@ -1078,7 +1074,7 @@ msgid "Original stream's language"
 msgstr "Alkuperäisen lähteen kieli"
 
 msgctxt "#309"
-msgid "User Interface language"
+msgid "User interface language"
 msgstr "Käyttöliittymän kieli"
 
 msgctxt "#312"
@@ -1181,9 +1177,17 @@ msgctxt "#336"
 msgid "Framerate conversion"
 msgstr "Kuvataajuuden muunto"
 
+msgctxt "#337"
+msgid "Output configuration"
+msgstr "Ulostulo asetukset"
+
 msgctxt "#338"
 msgid "Fixed"
 msgstr "Kiinteä"
+
+msgctxt "#339"
+msgid "Optimized"
+msgstr "Optimoitu"
 
 msgctxt "#340"
 msgid "Various artists"
@@ -1676,10 +1680,6 @@ msgstr "Kuvaruutuvalikon sijainti"
 msgctxt "#470"
 msgid "Credits"
 msgstr "Tekijät"
-
-msgctxt "#471"
-msgid "Modchip"
-msgstr "Mod-piiri"
 
 msgctxt "#474"
 msgid "Off"
@@ -3069,6 +3069,10 @@ msgctxt "#1260"
 msgid "Announce these services to other systems via Zeroconf"
 msgstr "Julkista nämä palvelut toisiin järjestelmiin Zeroconf-julkaisujärjestelmän kautta"
 
+msgctxt "#1269"
+msgid "Allow volume control"
+msgstr "Salli äänenvoimakkuuden säätö"
+
 msgctxt "#1270"
 msgid "Allow XBMC to receive AirPlay content"
 msgstr "Salli XBMC:n vastaanottaa AirPlay-sisältöä"
@@ -3449,9 +3453,25 @@ msgctxt "#10035"
 msgid "Reset"
 msgstr "Resetoida"
 
+msgctxt "#10036"
+msgid "Basic"
+msgstr "Perus"
+
 msgctxt "#10037"
 msgid "Standard"
 msgstr "Normaali"
+
+msgctxt "#10038"
+msgid "Advanced"
+msgstr "Lisäasetukset"
+
+msgctxt "#10039"
+msgid "Expert"
+msgstr "Expertti"
+
+msgctxt "#10041"
+msgid "Reset above settings to default"
+msgstr "Resetoi ylläolevat asetukset vakioihin."
 
 msgctxt "#10042"
 msgid "Are you sure you want to reset the settings in this category?"
@@ -3464,6 +3484,10 @@ msgstr "Ohje"
 msgctxt "#10044"
 msgid "No help available"
 msgstr "Ohjetta ei ole saatavilla"
+
+msgctxt "#10100"
+msgid "Yes/No dialogue"
+msgstr "Kyllä/Ei -dialogi"
 
 msgctxt "#10126"
 msgid "File browser"
@@ -3605,9 +3629,17 @@ msgctxt "#10524"
 msgid "Movie info"
 msgstr "Elokuvatiedot"
 
+msgctxt "#12000"
+msgid "Select dialogue"
+msgstr "Valitse dialogi"
+
 msgctxt "#12001"
 msgid "Music/Info"
 msgstr "Musiikki/Tiedot"
+
+msgctxt "#12002"
+msgid "Dialogue OK"
+msgstr "Dialogi OK"
 
 msgctxt "#12003"
 msgid "Videos/Info"
@@ -4518,8 +4550,8 @@ msgid "Scan for new content"
 msgstr "Etsi uusi sisältö"
 
 msgctxt "#13350"
-msgid "Now playing..."
-msgstr "Nykyinen toistolista..."
+msgid "Current playlist"
+msgstr "Nykyinen toistolista"
 
 msgctxt "#13351"
 msgid "Album information"
@@ -4805,6 +4837,10 @@ msgctxt "#13435"
 msgid "Enable HQ Scalers for scalings above"
 msgstr "Käytä HQ-skaalaimia yllä oleville"
 
+msgctxt "#13455"
+msgid "Software"
+msgstr "Ohjelmallinen"
+
 msgctxt "#13500"
 msgid "A/V sync method"
 msgstr "A/V-tahdistusmenetelmä"
@@ -4885,6 +4921,14 @@ msgctxt "#13553"
 msgid "%.1f Seconds"
 msgstr "%.1f sekunniksi"
 
+msgctxt "#13554"
+msgid "%d Minute"
+msgstr "%d Minuutti"
+
+msgctxt "#13555"
+msgid "%d Minutes"
+msgstr "%d Minuutit"
+
 msgctxt "#13600"
 msgid "Apple remote"
 msgstr "Apple remote -kauko-ohjain"
@@ -4916,10 +4960,6 @@ msgstr "Yleiskauko-ohjain (Harmony)"
 msgctxt "#13620"
 msgid "Apple Remote Error"
 msgstr "Apple Remote -kauko-ohjain virhe"
-
-msgctxt "#13621"
-msgid "Apple Remote support could be enabled."
-msgstr "Apple Remote -kauko-ohjain voidaan ottaa käyttöön."
 
 msgctxt "#14000"
 msgid "Stack"
@@ -5017,25 +5057,9 @@ msgctxt "#14026"
 msgid "Video cache - DVD-ROM"
 msgstr "Videovälimuisti - DVD-ROM"
 
-msgctxt "#14027"
-msgid "Local Network"
-msgstr "Lähiverkko"
-
-msgctxt "#14028"
-msgid "Internet"
-msgstr "Internet"
-
 msgctxt "#14030"
 msgid "Audio cache - DVD-ROM"
 msgstr "Musiikkivälimuisti - DVD-ROM"
-
-msgctxt "#14031"
-msgid "Local Network"
-msgstr "Lähiverkko"
-
-msgctxt "#14032"
-msgid "Internet"
-msgstr "Internet"
 
 msgctxt "#14034"
 msgid "DVD cache - DVD-ROM"
@@ -5280,6 +5304,14 @@ msgstr "Poista CD kun rippaus on valmis"
 msgctxt "#14100"
 msgid "Stop ripping CD"
 msgstr "Lopeta CD:n rippaus"
+
+msgctxt "#14101"
+msgid "Acceleration"
+msgstr "Kiihdytys"
+
+msgctxt "#15014"
+msgid "Keep"
+msgstr "Säilytä"
 
 msgctxt "#15015"
 msgid "Remove"
@@ -5769,10 +5801,6 @@ msgctxt "#19017"
 msgid "TV recordings"
 msgstr "Nauhoitukset"
 
-msgctxt "#19018"
-msgid "Default folder for PVR thumbnails"
-msgstr "PVR-pienoiskuvien oletuskansio"
-
 msgctxt "#19019"
 msgid "Channels"
 msgstr "Kanavat"
@@ -5961,6 +5989,10 @@ msgctxt "#19065"
 msgid "Default EPG window"
 msgstr "Ohjelmaoppaan oletusnäkymä"
 
+msgctxt "#19066"
+msgid "Channel icons"
+msgstr "Kanavakuvakkeet"
+
 msgctxt "#19067"
 msgid "This event is already being recorded."
 msgstr "Tämän ohjelman nauhoitus on jo aloitettu."
@@ -6132,10 +6164,6 @@ msgstr "Hae kanavia"
 msgctxt "#19118"
 msgid "Cannot use PVR functions while searching."
 msgstr "PVR-toimintoja ei voi käyttää haun aikana."
-
-msgctxt "#19119"
-msgid "On which server you want to search?"
-msgstr "Miltä palvelimelta haluat hakea?"
 
 msgctxt "#19120"
 msgid "Client number"
@@ -6517,10 +6545,6 @@ msgctxt "#19220"
 msgid "Channels in"
 msgstr "Kanavat ryhmässä"
 
-msgctxt "#19221"
-msgid "Synchronise channel groups with backends"
-msgstr "Synkronoi kanavaryhmät taustaosien kanssa"
-
 msgctxt "#19222"
 msgid "EPG"
 msgstr "Ohjelmaopas"
@@ -6732,6 +6756,22 @@ msgstr "Asiakasohjelmakohtaiset asetukset"
 msgctxt "#19281"
 msgid "Confirm channel switches by pressing OK"
 msgstr "Vahvista kanavien vaihto painamalla OK"
+
+msgctxt "#19282"
+msgid "Current icon"
+msgstr "Nykyinen kuvake"
+
+msgctxt "#19283"
+msgid "No icon"
+msgstr "Ei kuvakkeita"
+
+msgctxt "#19284"
+msgid "Choose icon"
+msgstr "Valitse kuvake"
+
+msgctxt "#19285"
+msgid "Browse for icon"
+msgstr "Hae kuvake"
 
 msgctxt "#19499"
 msgid "Other/Unknown"
@@ -7018,7 +7058,7 @@ msgid "Motoring"
 msgstr "Autoilu"
 
 msgctxt "#19648"
-msgid "Fitness &amp; Health"
+msgid "Fitness & Health"
 msgstr "Kuntoilu ja terveys"
 
 msgctxt "#19649"
@@ -7042,7 +7082,7 @@ msgid "Original Language"
 msgstr "Alkuperäisellä kielellä"
 
 msgctxt "#19662"
-msgid "Black &amp; White"
+msgid "Black & White"
 msgstr "Mustavalkoinen"
 
 msgctxt "#19663"
@@ -7945,6 +7985,10 @@ msgctxt "#20321"
 msgid "Scanning albums using %s"
 msgstr "Skannataan albumeja lähteestä %s"
 
+msgctxt "#20323"
+msgid "Movie plot"
+msgstr "Elokuvan juoni"
+
 msgctxt "#20324"
 msgid "Play part..."
 msgstr "Toista osa..."
@@ -7956,10 +8000,6 @@ msgstr "Kalibroinnin nollaus"
 msgctxt "#20326"
 msgid "This will reset the calibration values for %s"
 msgstr "Tämä palauttaa asettamasi %s kalibroinnin arvot"
-
-msgctxt "#20327"
-msgid "to it's default values."
-msgstr "oletusarvoiksi"
 
 msgctxt "#20328"
 msgid "Browse for destination"
@@ -8177,10 +8217,6 @@ msgctxt "#20381"
 msgid "Specials"
 msgstr "Erikoisuudet"
 
-msgctxt "#20382"
-msgid "Automatically grab season thumbs"
-msgstr "Automaattisesti luodut jakson pienoiskuvat"
-
 msgctxt "#20383"
 msgid "Selected folder contains a single video"
 msgstr "Valittu kansio sisältää yhden videon"
@@ -8296,10 +8332,6 @@ msgstr "Esittely"
 msgctxt "#20411"
 msgid "Flatten"
 msgstr "Tiivistä"
-
-msgctxt "#20412"
-msgid "Flatten TV shows"
-msgstr "Tiivistä TV-ohjelmat"
 
 msgctxt "#20413"
 msgid "Get fanart"
@@ -8557,10 +8589,6 @@ msgctxt "#21365"
 msgid "Remove media share"
 msgstr "Poista sijainti"
 
-msgctxt "#21366"
-msgid "Subtitle folder"
-msgstr "Tekstityskansio"
-
 msgctxt "#21367"
 msgid "Movie & alternate subtitle directory"
 msgstr "Elokuvien ja vaihtoehtoisten tekstitysten hakemisto"
@@ -8568,10 +8596,6 @@ msgstr "Elokuvien ja vaihtoehtoisten tekstitysten hakemisto"
 msgctxt "#21368"
 msgid "Override ASS/SSA subtitles fonts"
 msgstr "Älä käytä ASS/SSA -tekstitysten kirjasinta"
-
-msgctxt "#21369"
-msgid "Enable mouse and Touch Screen support"
-msgstr "Hiiri- ja kosketusnäyttötuki käytössä"
 
 msgctxt "#21370"
 msgid "Play navigation sounds during media playback"
@@ -8926,8 +8950,8 @@ msgid "Group by"
 msgstr "Ryhmitys"
 
 msgctxt "#21460"
-msgid "Subtitle location"
-msgstr "Tekstityksen sijainti"
+msgid "Subtitle position on screen"
+msgstr "Tekstityksen paikka ruudulla"
 
 msgctxt "#21461"
 msgid "Fixed"
@@ -9558,6 +9582,10 @@ msgid "Enable"
 msgstr "Ota käyttöön"
 
 msgctxt "#24023"
+msgid "Disabled"
+msgstr "Ei käytössä"
+
+msgctxt "#24024"
 msgid "Add-on disabled"
 msgstr "Lisäosa ei ole käytössä"
 
@@ -9636,6 +9664,10 @@ msgstr "Lisäosan rakenne on väärä"
 msgctxt "#24048"
 msgid "Rollback"
 msgstr "Palauta"
+
+msgctxt "#24049"
+msgid "Incompatible"
+msgstr "Yhteensopimaton"
 
 msgctxt "#24050"
 msgid "Available Add-ons"
@@ -9777,6 +9809,34 @@ msgctxt "#24103"
 msgid "Skin is missing some files"
 msgstr "Kuosista puuttuu tiedostoja"
 
+msgctxt "#24105"
+msgid "Pause when searching for subtitles"
+msgstr "Laita tauolle kun haetaan tekstityksiä"
+
+msgctxt "#24107"
+msgid "Searching for subtitles ..."
+msgstr "Etsitään tekstityksiä ..."
+
+msgctxt "#24108"
+msgid "%d subtitles found"
+msgstr "%d tekstityksiä löytyi"
+
+msgctxt "#24109"
+msgid "No subtitles found"
+msgstr "Tekstityksiä ei löytynyt"
+
+msgctxt "#24110"
+msgid "Downloading subtitles ..."
+msgstr "Ladataan tekstityksiä ..."
+
+msgctxt "#24121"
+msgid "Enter search string"
+msgstr "Anna hakusana"
+
+msgctxt "#24122"
+msgid "Update all"
+msgstr "Päivitä kaikki"
+
 msgctxt "#25000"
 msgid "Notifications"
 msgstr "Ilmoitukset"
@@ -9790,7 +9850,7 @@ msgid "Select from all titles ..."
 msgstr "Valitse kaikista otsakkeista"
 
 msgctxt "#25003"
-msgid "Show bluray menus"
+msgid "Show Blu-ray menus"
 msgstr "Näytä Blu-ray-valikot"
 
 msgctxt "#25004"
@@ -9804,6 +9864,10 @@ msgstr "Otsikko: %d"
 msgctxt "#25006"
 msgid "Select playback item"
 msgstr "Valitse toistettavat tiedostot"
+
+msgctxt "#25008"
+msgid "Playback of Blu-ray failed"
+msgstr "Blu-rayn toisto ei onnistu"
 
 msgctxt "#29800"
 msgid "Library Mode"
@@ -10150,8 +10214,8 @@ msgid "Flac"
 msgstr "Flac"
 
 msgctxt "#34100"
-msgid "Speaker Configuration"
-msgstr "Kaiutinjärjestelmä"
+msgid "Number of channels"
+msgstr "Kanavien määrä"
 
 msgctxt "#34101"
 msgid "2.0"
@@ -10461,18 +10525,6 @@ msgctxt "#36041"
 msgid "* Item folder"
 msgstr "* Kohteiden kansio"
 
-msgctxt "#36101"
-msgid "Change the look and feel of the User Interface."
-msgstr "Vaihda käyttöliittymän ulkoasua."
-
-msgctxt "#36102"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36103"
-msgid "Select the skin for the User Interface. This will define the look and feel of XBMC."
-msgstr "Valitse käyttöliittymän ulkoasu. Tämä vaikuttaa siihen miltä XBMC näyttää."
-
 msgctxt "#36104"
 msgid "Change specific skin settings. The available options are dependent on the skin used."
 msgstr "Vaihda ulkoasun asetuksia. Valittavissa olevat vaihtoehdot riippuvät käytetystä ulkoasusta."
@@ -10485,21 +10537,9 @@ msgctxt "#36106"
 msgid "Change the colours of your selected skin."
 msgstr "Vaihda käytössä olevan ulkoasun värejä."
 
-msgctxt "#36107"
-msgid "Choose the fonts displayed in the User Interface. The font sets are configured by your skin."
-msgstr "Valitse käyttöliittymän fontit. Fonttivalikoima on määritelty ulkoasussa."
-
-msgctxt "#36108"
-msgid "Resize the view of the GUI."
-msgstr "Muuta käyttöliittymän kokoa."
-
 msgctxt "#36109"
 msgid "Select the media window that XBMC displays on startup."
 msgstr "Valitse mediaikkuna, jonka XBMC näyttää käynnistyttyään."
-
-msgctxt "#36110"
-msgid "Select or disable the sound scheme used in the User Interface."
-msgstr "Valitse tai poista käytöstä käyttöliittymän äänet."
 
 msgctxt "#36111"
 msgid "Turn this off to remove the scrolling RSS news ticker."
@@ -10509,21 +10549,9 @@ msgctxt "#36112"
 msgid "Edit the RSS feeds."
 msgstr "Muokkaa RSS-syötteitä."
 
-msgctxt "#36113"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36114"
-msgid "Chooses the language of the User Interface."
-msgstr "Valitsee käyttöliittymän kielen."
-
 msgctxt "#36115"
 msgid "Select the formats for temperature, time and date. The available options depend on the selected language."
 msgstr "Valitse missä muodossa lämpötila, aika ja päiväys näytetään. Vaihtoehdot riippuvat valitusta kielestä."
-
-msgctxt "#36116"
-msgid "Choose which character set is used for displaying text in the GUI."
-msgstr "Valitse mitä merkistöä käytetään tekstin näyttämiseen käyttöliittymässä."
 
 msgctxt "#36117"
 msgid "Select country location."
@@ -10541,10 +10569,6 @@ msgctxt "#36120"
 msgid "Select the default subtitles when different languages are available."
 msgstr "Valitse oletustekstitys kun useampia kieliä on saatavilla."
 
-msgctxt "#36121"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
 msgctxt "#36122"
 msgid "Display the (..) item in lists for visiting the parent folder."
 msgstr "Näytä (..) valinta yläkansion valitsemiseksi."
@@ -10553,25 +10577,9 @@ msgctxt "#36123"
 msgid "Show file extensions on media files. For example, 'You Enjoy Myself.mp3' would be simply be shown as 'You Enjoy Myself'."
 msgstr "Näytä mediatiedostojen päätteet. Esimerkiksi 'You Enjoy Myself.mp3' näkyisi pelkästään 'You Enjoy Myself' ilman päätettä."
 
-msgctxt "#36124"
-msgid "Ignore certain tokens during sort operations. For example, 'The Simpsons' would simply be sorted as 'Simpsons'. To configure tokens, see http://wiki.xbmc.org/index.php?title=Settings/Appearance."
-msgstr "Älä huomio tiettyjä sanoja aakkosjärjestettäessä. Esimerkiksi 'The Simpsons' näkyisi S-kirjaimen kohdalla kuten 'Simpsons'. Katso lisää http://wiki.xbmc.org/index.php?title=Settings/Appearance."
-
 msgctxt "#36125"
 msgid "Allow files to be deleted and renamed through the user interface, via the contextual menu (press C on a keyboard, for example, to bring up this menu)."
 msgstr "Salli tiedostojen poisto ja uudelleen nimeäminen käyttöliittymän avulla (paina esimerkiksi näppäimistöltä C päästäksesi tähän valikkoon)."
-
-msgctxt "#36126"
-msgid "Show the add source button from root sections of the user interface."
-msgstr "Näytä Lisää lähde -nappi käyttöliittymän päätasoilla."
-
-msgctxt "#36127"
-msgid "Show hidden files and directories."
-msgstr "Näytä piilotetut tiedostot ja kansiot."
-
-msgctxt "#36128"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
 
 msgctxt "#36132"
 msgid "Preview the selected screensaver."
@@ -10589,113 +10597,21 @@ msgctxt "#36137"
 msgid "No info available yet."
 msgstr "Ei tietoa saatavilla vielä."
 
-msgctxt "#36138"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36139"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36140"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36142"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36151"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36154"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36156"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36157"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36158"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36159"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36160"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36161"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36162"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36163"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36173"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36176"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36178"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
+msgctxt "#36146"
+msgid "Check for new media files on XBMC startup."
+msgstr "Etsi uusia mediatiedostoja XBMC:n käynnistyessä."
 
 msgctxt "#36181"
 msgid "No info available yet."
 msgstr "Ei tietoa saatavilla vielä."
 
-msgctxt "#36184"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36185"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36186"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36187"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36188"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36189"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36190"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
+msgctxt "#36191"
+msgid "Set a custom directory for your subtitles. This can be a file share."
+msgstr "Aseta oma hakemisto tekstityksillesi. Tämä voi olla jakokansio."
 
 msgctxt "#36192"
 msgid "Location of subtitles on the screen."
 msgstr "Tekstityksen sijainti näytöllä."
-
-msgctxt "#36193"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
 
 msgctxt "#36194"
 msgid "Autorun DVD video when inserted in drive."
@@ -10705,15 +10621,11 @@ msgctxt "#36195"
 msgid "Force a region for DVD playback."
 msgstr "Pakota alue DVD-toistoa varten."
 
+msgctxt "#36196"
+msgid "Attempt to skip 'unskippable' introductions before DVD menu."
+msgstr "Ohita ennen DVD-valikkoa olevat \"ohittamattomat\" esittelyt"
+
 msgctxt "#36197"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36201"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36202"
 msgid "No info available yet."
 msgstr "Ei tietoa saatavilla vielä."
 
@@ -10721,157 +10633,57 @@ msgctxt "#36203"
 msgid "Enable the Personal Video Recorder (PVR) features in XBMC. This requires that at least one PVR Add-on is installed."
 msgstr "Aktivoi videotallennusominaisuudet (PVR) XBMC:ssä. Ainakin yhden PVR-lisäosan on oltava asennettu tätä varten."
 
-msgctxt "#36210"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36211"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36212"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36213"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36214"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36215"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36216"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
 msgctxt "#36217"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36218"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36226"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
+msgid "Scan for missing channel icons."
+msgstr "Hae puuttuvat kanavakuvakkeet"
 
 msgctxt "#36229"
 msgid "Display signal quality information in the codec information window (if supported by the Add-on and backend)."
 msgstr "Näytä signaalin voimakkuustiedot codecin infoikkunassa (mikäli lisäosa ja backend tukee tätä ominaisuutta)."
 
-msgctxt "#36230"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
+msgctxt "#36245"
+msgid "Execute the wakeup command every day at the given time."
+msgstr "Suorita herätyskomento joka päivä ilmoitettuun aikaan."
 
-msgctxt "#36232"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
+msgctxt "#36246"
+msgid "When to execute the daily wakeup command."
+msgstr "Koska suorittaa päivittäinen herätyskomento."
 
-msgctxt "#36233"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36235"
-msgid "Priority of the recording. Higher number means higher priority. Defaults to 50. Not supported by all Add-ons and backends."
-msgstr "Tallennuksen prioriteetti. Korkeampi numero tarkoittaa korkeampaa prioriteettiä. Oletus on 50. Kaikki lisäosat ja backendit eivät tue tätä."
-
-msgctxt "#36236"
-msgid "Delete recording after this time. Defaults to 99 days. Not supported by all Add-ons and backends."
-msgstr "Poista tallennus tämän ajan jälkeen. Oletus on 99 päivää. Kaikki lisäosat ja backendit eivät tue tätä."
-
-msgctxt "#36237"
-msgid "Start recordings before the actual time. Defaults to 2 minutes. Not supported by all Add-ons and backends."
-msgstr "Aloita tallennus hieman ennen ohjelma-aikaa. Oletus on 2 minuuttia. Kaikki lisäosat ja backendit eivät tue tätä."
-
-msgctxt "#36238"
-msgid "End recordings after the actual time. Defaults to 10 minutes. Not supported by all Add-ons and backends."
-msgstr "Lopeta tallentaminen hieman ohjelma-ajan jälkeen. Oletus on 10 minuuttia. Kaikki lisäosat ja backendit eivät tue tätä."
-
-msgctxt "#36240"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36243"
-msgid "The command to execute. Defaults to '/usr/bin/setwakeup.sh'."
-msgstr "Suoritettava komento. Oletuksena '/usr/bin/setwakeup.sh'."
-
-msgctxt "#36247"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36251"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36252"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36253"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
+msgctxt "#36249"
+msgid "Enter a new pin code to unlock parental locked channels."
+msgstr "Syötä uusi pin-koodi avataksesi lapsilukitut kanavat."
 
 msgctxt "#36254"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
+msgid "Enable the music library."
+msgstr "Salli musiikkikirjasto"
+
+msgctxt "#36259"
+msgid "Check for new and removed media files on XBMC startup."
+msgstr "Tarkista uudet ja poistetut mediatiedostot XBMC:n käynnistyessä."
 
 msgctxt "#36260"
 msgid "No info available yet."
 msgstr "Ei tietoa saatavilla vielä."
 
-msgctxt "#36261"
-msgid "Path where taken screenshots will be stored."
-msgstr "Polku, johon otetut kuvakaappaukset tallennetaan."
+msgctxt "#36263"
+msgid "Import a XML file into the Music Library database."
+msgstr "Tuo XML-tiedosto Musiikkikirjaston tietokantaan."
 
-msgctxt "#36264"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
+msgctxt "#36268"
+msgid "Default is 89dB per standard. Change with caution."
+msgstr "Oletuksena on 89dB. Muuta varoen."
 
-msgctxt "#36277"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36278"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36279"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36280"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36282"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
+msgctxt "#36269"
+msgid "Default is 89dB per standard. Change with caution."
+msgstr "Oletuksena on 89dB. Muuta varoen."
 
 msgctxt "#36283"
 msgid "Autorun CDs when inserted in drive."
 msgstr "Käynnistä CD-levyt automaattisesti, kun levy syötetään asemaan."
 
-msgctxt "#36292"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36294"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36299"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36300"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
+msgctxt "#36291"
+msgid "Auto eject disc after rip is complete."
+msgstr "Poista CD automaattisesti kun rippaus on valmis."
 
 msgctxt "#36301"
 msgid "No info available yet."
@@ -10885,47 +10697,7 @@ msgctxt "#36303"
 msgid "No info available yet."
 msgstr "Ei tietoa saatavilla vielä."
 
-msgctxt "#36304"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36305"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
 msgctxt "#36310"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36311"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36315"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36316"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36319"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36320"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36322"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36325"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36327"
 msgid "No info available yet."
 msgstr "Ei tietoa saatavilla vielä."
 
@@ -10938,100 +10710,24 @@ msgid "Define the webserver username."
 msgstr "Määritä web-palvelimen käyttäjätunnus."
 
 msgctxt "#36331"
-msgid "Define webserver password."
+msgid "Define the webserver password."
 msgstr "Määritä web-palvelimen salasana."
 
-msgctxt "#36333"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
 msgctxt "#36335"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36336"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36337"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36339"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36340"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36341"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36342"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36343"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
+msgid "Define the remote control port."
+msgstr "Määritä kauko-ohjaimen portti."
 
 msgctxt "#36344"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
+msgid "Enable AirPlay password protection."
+msgstr "Salli AirPlay salasanasuojaus."
 
 msgctxt "#36345"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
+msgid "Sets the AirPlay password."
+msgstr "Aseta AirPlay salasana."
 
-msgctxt "#36346"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36347"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36348"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36349"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36351"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36352"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36353"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36359"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36360"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36374"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36375"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36379"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
+msgctxt "#36378"
+msgid "Use a joystick to control XBMC."
+msgstr "Käytä ohjainta ohjataksesi XBMC:tä."
 
 msgctxt "#36380"
 msgid "If your internet connection uses a proxy, configure it here."
@@ -11057,61 +10753,9 @@ msgctxt "#36385"
 msgid "Configure the proxy server password."
 msgstr "Määritä välityspalveimen salasana."
 
-msgctxt "#36388"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36392"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
 msgctxt "#36393"
 msgid "Folder used to save screenshots taken within XBMC."
 msgstr "Kansio, johon XBMC:ssä otetut kuvakaappaukset tallennetaan."
-
-msgctxt "#36399"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36400"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36401"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36402"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36403"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36404"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36405"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36406"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36407"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36408"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36409"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
 
 msgctxt "#36410"
 msgid "No info available yet."
@@ -11137,17 +10781,9 @@ msgctxt "#36415"
 msgid "No info available yet."
 msgstr "Ei tietoa saatavilla vielä."
 
-msgctxt "#36417"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36418"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
-
-msgctxt "#36420"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
+msgctxt "#36416"
+msgid "Specify the type of remote used."
+msgstr "Määritä käytettävän ohjaimen malli."
 
 msgctxt "#36426"
 msgid "Switch to channel"
@@ -11157,21 +10793,29 @@ msgctxt "#36428"
 msgid "Record"
 msgstr "Nauhoita"
 
-msgctxt "#36537"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
+msgctxt "#36504"
+msgid "Side by side"
+msgstr "Vierekkäin"
 
-msgctxt "#36538"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
+msgctxt "#36521"
+msgid "Ask me"
+msgstr "Kysy minulta"
 
-msgctxt "#36539"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä.§"
+msgctxt "#36532"
+msgid "Same as movie"
+msgstr "Sama kuin elokuva"
 
-msgctxt "#36540"
-msgid "No info available yet."
-msgstr "Ei tietoa saatavilla vielä."
+msgctxt "#37001"
+msgid "(Directors Comments)"
+msgstr "(Ohjaajan kommentit)"
+
+msgctxt "#37012"
+msgid "(Forced)"
+msgstr "(Pakotettu)"
+
+msgctxt "#37013"
+msgid "(Directors Comments)"
+msgstr "(Ohjaajan kommentit)"
 
 msgctxt "#37014"
 msgid "Last used profile"

@@ -27,6 +27,7 @@
 #include "threads/Thread.h"
 #include "utils/JobManager.h"
 #include "utils/Observer.h"
+#include "interfaces/IAnnouncer.h"
 
 class CGUIDialogProgressBarHandle;
 class CStopWatch;
@@ -84,7 +85,7 @@ namespace PVR
 
   typedef boost::shared_ptr<PVR::CPVRChannelGroup> CPVRChannelGroupPtr;
 
-  class CPVRManager : public ISettingCallback, private CThread, public Observable
+  class CPVRManager : public ISettingCallback, private CThread, public Observable, public ANNOUNCEMENT::IAnnouncer
   {
     friend class CPVRClients;
 
@@ -99,6 +100,8 @@ namespace PVR
      * @brief Stop the PVRManager and destroy all objects it created.
      */
     virtual ~CPVRManager(void);
+
+    virtual void Announce(ANNOUNCEMENT::AnnouncementFlag flag, const char *sender, const char *message, const CVariant &data);
 
     /*!
      * @brief Get the instance of the PVRManager.
@@ -394,6 +397,11 @@ namespace PVR
     void TriggerSaveChannelSettings(void);
 
     /*!
+     * @brief Let the background thread search for missing channel icons.
+     */
+    void TriggerSearchMissingChannelIcons(void);
+
+    /*!
      * @brief Update the channel that is currently active.
      * @param item The new channel.
      * @return True if it was updated correctly, false otherwise.
@@ -544,7 +552,7 @@ namespace PVR
      */
     bool OnAction(const CAction &action);
 
-    static void SettingOptionsPvrStartLastChannelFiller(const CSetting *setting, std::vector< std::pair<std::string, int> > &list, int &current);
+    static void SettingOptionsPvrStartLastChannelFiller(const CSetting *setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
 
     /*!
      * @brief Create EPG tags for all channels in internal channel groups
@@ -741,5 +749,15 @@ namespace PVR
   private:
     CFileItem* m_previous;
     CFileItem* m_next;
+  };
+
+  class CPVRSearchMissingChannelIconsJob : public CJob
+  {
+  public:
+    CPVRSearchMissingChannelIconsJob(void) {}
+    virtual ~CPVRSearchMissingChannelIconsJob() {}
+    virtual const char *GetType() const { return "pvr-search-missing-channel-icons"; }
+
+    bool DoWork();
   };
 }

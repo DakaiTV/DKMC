@@ -48,12 +48,8 @@
 #include "android/activity/AndroidFeatures.h"
 #endif
 #include "Audio/DVDAudioCodecFFmpeg.h"
-#include "Audio/DVDAudioCodecLibMad.h"
 #include "Audio/DVDAudioCodecPcm.h"
 #include "Audio/DVDAudioCodecLPcm.h"
-#if defined(TARGET_DARWIN_OSX) || defined(TARGET_DARWIN_IOS)
-#include "Audio/DVDAudioCodecPassthroughFFmpeg.h"
-#endif
 #include "Audio/DVDAudioCodecPassthrough.h"
 #include "Overlay/DVDOverlayCodecSSA.h"
 #include "Overlay/DVDOverlayCodecText.h"
@@ -196,17 +192,20 @@ CDVDVideoCodec* CDVDFactoryCodec::CreateVideoCodec(CDVDStreamInfo &hint, unsigne
 #endif
 
   CLog::Log(LOGDEBUG, "CDVDFactoryCodec: compiled in hardware support: %s", hwSupport.c_str());
+
+  if (hint.stills && (hint.codec == AV_CODEC_ID_MPEG2VIDEO || hint.codec == AV_CODEC_ID_MPEG1VIDEO))
+  {
+     // If dvd is an mpeg2 and hint.stills
+     if ( (pCodec = OpenCodec(new CDVDVideoCodecLibMpeg2(), hint, options)) ) return pCodec;
+  }
+
 #if defined(HAS_LIBAMCODEC)
   // amcodec can handle dvd playback.
-  if (!CSettings::Get().GetBool("videoplayer.useamcodec"))
-#endif
+  if (!hint.software && CSettings::Get().GetBool("videoplayer.useamcodec"))
   {
-    // dvd's have weird still-frames in it, which is not fully supported in ffmpeg
-    if(hint.stills && (hint.codec == AV_CODEC_ID_MPEG2VIDEO || hint.codec == AV_CODEC_ID_MPEG1VIDEO))
-    {
-      if( (pCodec = OpenCodec(new CDVDVideoCodecLibMpeg2(), hint, options)) ) return pCodec;
-    }
+     if ( (pCodec = OpenCodec(new CDVDVideoCodecAmlogic(), hint, options)) ) return pCodec;
   }
+#endif
 
 #if defined(TARGET_DARWIN_OSX)
   if (!hint.software && CSettings::Get().GetBool("videoplayer.usevda"))
@@ -258,14 +257,6 @@ CDVDVideoCodec* CDVDFactoryCodec::CreateVideoCodec(CDVDStreamInfo &hint, unsigne
         break;
       }
     }
-  }
-#endif
-
-#if defined(HAS_LIBAMCODEC)
-  if (!hint.software && CSettings::Get().GetBool("videoplayer.useamcodec"))
-  {
-    CLog::Log(LOGINFO, "Amlogic Video Decoder...");
-    if ( (pCodec = OpenCodec(new CDVDVideoCodecAmlogic(), hint, options)) ) return pCodec;
   }
 #endif
 
@@ -332,18 +323,6 @@ CDVDAudioCodec* CDVDFactoryCodec::CreateAudioCodec( CDVDStreamInfo &hint)
   CDVDCodecOptions options;
 
   // try passthrough first
-#if defined(TARGET_DARWIN_OSX) || defined(TARGET_DARWIN_IOS)
-  switch(hint.codec)
-  {
-    case AV_CODEC_ID_AC3:
-    case AV_CODEC_ID_DTS:
-      pCodec = OpenCodec( new CDVDAudioCodecPassthroughFFmpeg(), hint, options );
-      if( pCodec ) return pCodec;
-      break;
-    default:
-      break;
-  }
-#endif
   pCodec = OpenCodec( new CDVDAudioCodecPassthrough(), hint, options );
   if( pCodec ) return pCodec;
 
@@ -352,7 +331,7 @@ CDVDAudioCodec* CDVDFactoryCodec::CreateAudioCodec( CDVDStreamInfo &hint)
   case AV_CODEC_ID_MP2:
   case AV_CODEC_ID_MP3:
     {
-      pCodec = OpenCodec( new CDVDAudioCodecLibMad(), hint, options );
+      pCodec = OpenCodec( new CDVDAudioCodecFFmpeg(), hint, options );
       if( pCodec ) return pCodec;
       break;
     }

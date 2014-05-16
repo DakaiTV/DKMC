@@ -80,15 +80,16 @@ void CAddonInstaller::OnJobComplete(unsigned int jobID, bool success, CJob* job)
   { // repo job finished
     m_repoUpdateDone.Set();
     m_repoUpdateJob = 0;
+    lock.Leave();
   }
   else
   { // download job
     JobMap::iterator i = find_if(m_downloadJobs.begin(), m_downloadJobs.end(), bind2nd(find_map(), jobID));
     if (i != m_downloadJobs.end())
       m_downloadJobs.erase(i);
+    lock.Leave();
     PrunePackageCache();
   }
-  lock.Leave();
 
   CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_UPDATE);
   g_windowManager.SendThreadMessage(msg);
@@ -733,7 +734,10 @@ void CAddonInstallJob::OnPostInstall(bool reloadAddon)
         toast->ResetTimer();
         toast->Close(true);
       }
-      CSettings::Get().SetString("lookandfeel.skin",m_addon->ID().c_str());
+      if (CSettings::Get().GetString("lookandfeel.skin") == m_addon->ID())
+        CApplicationMessenger::Get().ExecBuiltIn("ReloadSkin", true);
+      else
+        CSettings::Get().SetString("lookandfeel.skin",m_addon->ID().c_str());
     }
   }
 

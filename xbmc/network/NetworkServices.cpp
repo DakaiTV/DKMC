@@ -210,12 +210,7 @@ bool CNetworkServices::OnSettingChanging(const CSetting *setting)
       }
 #endif //HAS_ZEROCONF
 
-      if (!StartAirPlayServer())
-      {
-        CGUIDialogOK::ShowAndGetInput(g_localizeStrings.Get(1273), "", g_localizeStrings.Get(33100), "");
-        return false;
-      }
-
+      // note - airtunesserver has to start before airplay server (ios7 client detection bug)
 #ifdef HAS_AIRTUNES
       if (!StartAirTunesServer())
       {
@@ -223,6 +218,12 @@ bool CNetworkServices::OnSettingChanging(const CSetting *setting)
         return false;
       }
 #endif //HAS_AIRTUNES
+      
+      if (!StartAirPlayServer())
+      {
+        CGUIDialogOK::ShowAndGetInput(g_localizeStrings.Get(1273), "", g_localizeStrings.Get(33100), "");
+        return false;
+      }      
     }
     else
     {
@@ -256,7 +257,14 @@ bool CNetworkServices::OnSettingChanging(const CSetting *setting)
   if (settingId == "services.upnpserver")
   {
     if (((CSettingBool*)setting)->GetValue())
-      return StartUPnPServer();
+    {
+      if (!StartUPnPServer())
+        return false;
+
+      // always stop and restart the client if necessary
+      StopUPnPClient();
+      StartUPnPClient();
+    }
     else
       return StopUPnPServer();
   }
@@ -395,15 +403,19 @@ void CNetworkServices::OnSettingChanged(const CSetting *setting)
 void CNetworkServices::Start()
 {
   StartZeroconf();
+#ifdef HAS_WEB_SERVER
   if (CSettings::Get().GetBool("services.webserver") && !StartWebserver())
     CGUIDialogKaiToast::QueueNotification(CGUIDialogKaiToast::Warning, g_localizeStrings.Get(33101), g_localizeStrings.Get(33100));
+#endif // HAS_WEB_SERVER
   StartUPnP();
   if (CSettings::Get().GetBool("services.esenabled") && !StartEventServer())
     CGUIDialogKaiToast::QueueNotification(CGUIDialogKaiToast::Warning, g_localizeStrings.Get(33102), g_localizeStrings.Get(33100));
   if (CSettings::Get().GetBool("services.esenabled") && !StartJSONRPCServer())
     CGUIDialogKaiToast::QueueNotification(CGUIDialogKaiToast::Warning, g_localizeStrings.Get(33103), g_localizeStrings.Get(33100));
-  StartAirPlayServer();
+  
+  // note - airtunesserver has to start before airplay server (ios7 client detection bug)
   StartAirTunesServer();
+  StartAirPlayServer();
   StartRss();
 }
 
@@ -761,7 +773,8 @@ bool CNetworkServices::StopUPnP(bool bWait)
 bool CNetworkServices::StartUPnPClient()
 {
 #ifdef HAS_UPNP
-  if (!CSettings::Get().GetBool("services.upnpcontroller"))
+  if (!CSettings::Get().GetBool("services.upnpcontroller") ||
+      !CSettings::Get().GetBool("services.upnpserver"))
     return false;
 
   CLog::Log(LOGNOTICE, "starting upnp controller");
@@ -852,6 +865,8 @@ bool CNetworkServices::StopUPnPServer()
 #ifdef HAS_UPNP
   if (!IsUPnPRendererRunning())
     return true;
+
+  StopUPnPClient();
 
   CLog::Log(LOGNOTICE, "stopping upnp server");
   CUPnP::GetInstance()->StopServer();

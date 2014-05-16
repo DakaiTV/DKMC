@@ -23,7 +23,20 @@
 #include "system.h"
 
 #include <vector>
+#include <string>
 #include "cores/VideoRenderers/RenderFormats.h"
+
+extern "C" {
+#include "libavcodec/avcodec.h"
+}
+
+class CSetting;
+
+struct DVDCodecAvailableType 
+{
+  AVCodecID codec;
+  const char* setting;
+};
 
 // when modifying these structures, make sure you update all codecs accordingly
 #define FRAME_TYPE_UNDEF 0
@@ -97,8 +110,8 @@ struct DVDVideoPicture
   unsigned int extended_format;
   char         stereo_mode[32];
 
-  int8_t* qscale_table; // Quantization parameters, primarily used by filters
-  int qscale_stride;
+  int8_t* qp_table; // Quantization parameters, primarily used by filters
+  int qstride;
   int qscale_type;
 
   unsigned int iWidth;
@@ -263,4 +276,15 @@ public:
    * be retained when calling decode on the next demux packet
    */
   virtual unsigned GetAllowedReferences() { return 0; }
+
+  /**
+   * Hide or Show Settings depending on the currently running hardware 
+   *
+   */
+   static bool IsSettingVisible(const std::string &condition, const std::string &value, const CSetting *setting);
+
+  /**
+  * Interact with user settings so that user disabled codecs are disabled
+  */
+  static bool IsCodecDisabled(DVDCodecAvailableType* map, unsigned int size, AVCodecID id);
 };

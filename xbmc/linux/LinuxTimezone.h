@@ -22,18 +22,21 @@
  */
 
 #include "settings/lib/ISettingCallback.h"
+#include "settings/lib/ISettingsHandler.h"
 #include "utils/StdString.h"
 #include <vector>
 #include <map>
 
 class CSetting;
 
-class CLinuxTimezone : public ISettingCallback
+class CLinuxTimezone : public ISettingCallback, public ISettingsHandler
 {
 public:
    CLinuxTimezone();
 
    virtual void OnSettingChanged(const CSetting *setting);
+
+   virtual void OnSettingsLoaded();
 
    CStdString GetOSConfiguredTimezone();
 
@@ -44,8 +47,8 @@ public:
    void SetTimezone(CStdString timezone);
    int m_IsDST;
 
-   static void SettingOptionsTimezoneCountriesFiller(const CSetting *setting, std::vector< std::pair<std::string, std::string> > &list, std::string &current);
-   static void SettingOptionsTimezonesFiller(const CSetting *setting, std::vector< std::pair<std::string, std::string> > &list, std::string &current);
+   static void SettingOptionsTimezoneCountriesFiller(const CSetting *setting, std::vector< std::pair<std::string, std::string> > &list, std::string &current, void *data);
+   static void SettingOptionsTimezonesFiller(const CSetting *setting, std::vector< std::pair<std::string, std::string> > &list, std::string &current, void *data);
 
 private:
    std::vector<CStdString> m_counties;

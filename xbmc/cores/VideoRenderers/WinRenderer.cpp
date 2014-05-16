@@ -20,7 +20,6 @@
 
 #ifdef HAS_DX
 
-#include "DllSwScale.h"
 #include "Util.h"
 #include "WinRenderer.h"
 #include "cores/dvdplayer/DVDCodecs/Video/DVDVideoCodec.h"
@@ -39,6 +38,7 @@
 #include "VideoShaders/WinVideoFilter.h"
 #include "win32/WIN32Util.h"
 #include "windowing/WindowingFactory.h"
+#include "cores/FFmpeg.h"
 
 typedef struct {
   RenderMethod  method;
@@ -84,11 +84,8 @@ CWinRenderer::CWinRenderer()
     m_VideoBuffers[i] = NULL;
 
   m_sw_scale_ctx = NULL;
-  m_dllSwScale = NULL;
   m_destWidth = 0;
   m_destHeight = 0;
-  m_dllAvUtil = NULL;
-  m_dllAvCodec = NULL;
   m_bConfigured = false;
   m_clearColour = 0;
   m_format = RENDER_FMT_NONE;
@@ -140,10 +137,11 @@ void CWinRenderer::SelectRenderMethod()
   {
     CLog::Log(LOGNOTICE, "D3D: rendering method forced to DXVA processor");
     m_renderMethod = RENDER_DXVA;
-    if (!m_processor->Open(m_sourceWidth, m_sourceHeight, m_iFlags, m_format, m_extended_format))
+    if (!m_processor || !m_processor->Open(m_sourceWidth, m_sourceHeight, m_iFlags, m_format, m_extended_format))
     {
       CLog::Log(LOGNOTICE, "D3D: unable to open DXVA processor");
-      m_processor->Close();
+      if (m_processor)  
+        m_processor->Close();
       m_renderMethod = RENDER_INVALID;
     }
   }
@@ -155,13 +153,16 @@ void CWinRenderer::SelectRenderMethod()
     {
       case RENDER_METHOD_DXVAHD:
       case RENDER_METHOD_DXVA:
-        m_renderMethod = RENDER_DXVA;
-        if (m_processor->Open(m_sourceWidth, m_sourceHeight, m_iFlags, m_format, m_extended_format))
-            break;
-        else
+        if (!m_processor || !m_processor->Open(m_sourceWidth, m_sourceHeight, m_iFlags, m_format, m_extended_format))
         {
           CLog::Log(LOGNOTICE, "D3D: unable to open DXVA processor");
-          m_processor->Close();
+          if (m_processor)
+            m_processor->Close();
+        }
+        else
+        {
+          m_renderMethod = RENDER_DXVA;
+          break;
         }
       // Drop through to pixel shader
       case RENDER_METHOD_AUTO:
@@ -206,11 +207,6 @@ bool CWinRenderer::UpdateRenderMethod()
 
   if (m_renderMethod == RENDER_SW)
   {
-    m_dllSwScale = new DllSwScale();
-
-    if (!m_dllSwScale->Load())
-      CLog::Log(LOGERROR,"CDVDDemuxFFmpeg::Open - failed to load ffmpeg libraries");
-
     if(!m_SWTarget.Create(m_sourceWidth, m_sourceHeight, 1, D3DUSAGE_DYNAMIC, D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT))
     {
       CLog::Log(LOGNOTICE, __FUNCTION__": Failed to create sw render target.");
@@ -392,20 +388,14 @@ unsigned int CWinRenderer::PreInit()
 
   g_Windowing.Get3DDevice()->GetDeviceCaps(&m_deviceCaps);
 
+  m_formats.clear();
   m_formats.push_back(RENDER_FMT_YUV420P);
-  if(g_Windowing.IsTextureFormatOk(D3DFMT_L16, 0))
-  {
-    m_formats.push_back(RENDER_FMT_YUV420P10);
-    m_formats.push_back(RENDER_FMT_YUV420P16);
-  }
-  m_formats.push_back(RENDER_FMT_NV12);
-  m_formats.push_back(RENDER_FMT_YUYV422);
-  m_formats.push_back(RENDER_FMT_UYVY422);
 
   m_iRequestedMethod = CSettings::Get().GetInt("videoplayer.rendermethod");
 
-  if (g_advancedSettings.m_DXVAForceProcessorRenderer || m_iRequestedMethod == RENDER_METHOD_DXVA
-      || m_iRequestedMethod == RENDER_METHOD_DXVAHD)
+  if (g_advancedSettings.m_DXVAForceProcessorRenderer
+  ||  m_iRequestedMethod == RENDER_METHOD_DXVA
+  ||  m_iRequestedMethod == RENDER_METHOD_DXVAHD)
   {
     if (m_iRequestedMethod != RENDER_METHOD_DXVA && CSysInfo::IsWindowsVersionAtLeast(CSysInfo::WindowsVersionWin7))
     {
@@ -414,18 +404,30 @@ unsigned int CWinRenderer::PreInit()
       {
         CLog::Log(LOGNOTICE, "CWinRenderer::Preinit - could not init DXVA-HD processor - skipping");
         SAFE_DELETE(m_processor);
-        m_processor = new DXVA::CProcessor();
       }
-      else
-        return 0;
     }
-    else
+    if (!m_processor)
+    {
       m_processor = new DXVA::CProcessor();
-
-    if (!m_processor->PreInit())
-      CLog::Log(LOGNOTICE, "CWinRenderer::Preinit - could not init DXVA2 processor - skipping");
+      if (!m_processor->PreInit())
+      {
+        CLog::Log(LOGNOTICE, "CWinRenderer::Preinit - could not init DXVA2 processor - skipping");
+        SAFE_DELETE(m_processor);
+      }
+    }
   }
-
+  // allow other color spaces besides YV12 in case DXVA rendering is not used or not available
+  if (!m_processor || (m_iRequestedMethod != RENDER_METHOD_DXVA && m_iRequestedMethod != RENDER_METHOD_DXVAHD))
+  {
+    if (g_Windowing.IsTextureFormatOk(D3DFMT_L16, 0))
+    {
+      m_formats.push_back(RENDER_FMT_YUV420P10);
+      m_formats.push_back(RENDER_FMT_YUV420P16);
+    }
+    m_formats.push_back(RENDER_FMT_NV12);
+    m_formats.push_back(RENDER_FMT_YUYV422);
+    m_formats.push_back(RENDER_FMT_UYVY422);
+  }
   return 0;
 }
 
@@ -452,10 +454,9 @@ void CWinRenderer::UnInit()
 
   if (m_sw_scale_ctx)
   {
-    m_dllSwScale->sws_freeContext(m_sw_scale_ctx);
+    sws_freeContext(m_sw_scale_ctx);
     m_sw_scale_ctx = NULL;
   }
-  SAFE_DELETE(m_dllSwScale);
 
   if (m_processor)
   {
@@ -717,7 +718,7 @@ void CWinRenderer::RenderSW()
   enum PixelFormat format = PixelFormatFromFormat(m_format);
 
   // 1. convert yuv to rgb
-  m_sw_scale_ctx = m_dllSwScale->sws_getCachedContext(m_sw_scale_ctx,
+  m_sw_scale_ctx = sws_getCachedContext(m_sw_scale_ctx,
                                                       m_sourceWidth, m_sourceHeight, format,
                                                       m_sourceWidth, m_sourceHeight, PIX_FMT_BGRA,
                                                       SWS_FAST_BILINEAR | SwScaleCPUFlags(), NULL, NULL, NULL);
@@ -746,7 +747,7 @@ void CWinRenderer::RenderSW()
   uint8_t *dst[]  = { (uint8_t*) destlr.pBits, 0, 0, 0 };
   int dstStride[] = { destlr.Pitch, 0, 0, 0 };
 
-  m_dllSwScale->sws_scale(m_sw_scale_ctx, src, srcStride, 0, m_sourceHeight, dst, dstStride);
+  sws_scale(m_sw_scale_ctx, src, srcStride, 0, m_sourceHeight, dst, dstStride);
 
   for (unsigned int idx = 0; idx < buf->GetActivePlanes(); idx++)
     if(!(buf->planes[idx].texture.UnlockRect(0)))
@@ -950,6 +951,11 @@ void CWinRenderer::Stage1()
 
     // Restore the render target
     pD3DDevice->SetRenderTarget(0, oldRT);
+
+    // MSDN says: Setting a new render target will cause the viewport 
+    // to be set to the full size of the new render target.
+    // So we need restore our viewport
+    g_Windowing.RestoreViewPort();
 
     oldRT->Release();
     newRT->Release();

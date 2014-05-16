@@ -112,6 +112,10 @@ msgctxt "#31045"
 msgid "REWIND"
 msgstr "KELAUS TAAKSEPÄIN"
 
+msgctxt "#31046"
+msgid "SEEKING"
+msgstr "HAKEE"
+
 msgctxt "#31049"
 msgid "End Time"
 msgstr "Päättymisaika"
@@ -231,6 +235,10 @@ msgstr "Musiikki-OSD"
 msgctxt "#31141"
 msgid "Video OSD"
 msgstr "Video-OSD"
+
+msgctxt "#31142"
+msgid "Settings level"
+msgstr "Asetustaso"
 
 msgctxt "#31200"
 msgid "Shortcuts"
@@ -436,9 +444,21 @@ msgctxt "#31413"
 msgid "Local subtitle available"
 msgstr "Paikallinen tekstitys saatavilla"
 
+msgctxt "#31420"
+msgid "Login"
+msgstr "Kirjaudu"
+
 msgctxt "#31421"
 msgid "Select your XBMC user Profile[CR]to login and continue"
 msgstr "Valitse XBMC-käyttäjäprofiili[CR]kirjautuaksesi sisään"
+
+msgctxt "#31422"
+msgid "Show or hide the login screen at startup."
+msgstr "Näytä tai piilota kirjautumisruutu käynnistyksessä."
+
+msgctxt "#31423"
+msgid "Select the profile that will be used at startup when the login screen is disabled."
+msgstr "Valitse se profiili, jota käytetään käynnistyksessä, kun kirjautumisruutu on poiskytketty."
 
 msgctxt "#31501"
 msgid "Scheduled Time"
@@ -515,6 +535,10 @@ msgstr "SÄÄ"
 msgctxt "#31951"
 msgid "PICTURES"
 msgstr "KUVAT"
+
+msgctxt "#31952"
+msgid "LIVE TV"
+msgstr "LIVE-TV"
 
 msgctxt "#31953"
 msgid "VIDEOS"

@@ -41,6 +41,10 @@
 #include "cores/AudioEngine/Utils/AEConvert.h"
 #include "cores/AudioEngine/AEFactory.h"
 
+extern "C" {
+#include "libavutil/crc.h"
+}
+
 using namespace std;
 
 static const uint16_t AC3Bitrates[] = {32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512, 576, 640};
@@ -117,12 +121,12 @@ bool COMXAudio::PortSettingsChanged()
     if(!m_omx_splitter.Initialize("OMX.broadcom.audio_splitter", OMX_IndexParamAudioInit))
       return false;
   }
-  if (CSettings::Get().GetBool("audiooutput.dualaudio") || CSettings::Get().GetString("audiooutput.audiodevice") == "Pi:Analogue")
+  if (CSettings::Get().GetBool("audiooutput.dualaudio") || CSettings::Get().GetString("audiooutput.audiodevice") == "PI:Analogue")
   {
     if(!m_omx_render_analog.Initialize("OMX.broadcom.audio_render", OMX_IndexParamAudioInit))
       return false;
   }
-  if (CSettings::Get().GetBool("audiooutput.dualaudio") || CSettings::Get().GetString("audiooutput.audiodevice") != "Pi:Analogue")
+  if (CSettings::Get().GetBool("audiooutput.dualaudio") || CSettings::Get().GetString("audiooutput.audiodevice") != "PI:Analogue")
   {
     if(!m_omx_render_hdmi.Initialize("OMX.broadcom.audio_render", OMX_IndexParamAudioInit))
       return false;
@@ -414,9 +418,6 @@ bool COMXAudio::Initialize(AEAudioFormat format, OMXClock *clock, CDVDStreamInfo
 
   Deinitialize();
 
-  if(!m_dllAvUtil.Load())
-    return false;
-
   m_HWDecode    = bUseHWDecode;
   m_Passthrough = bUsePassthrough;
 
@@ -470,7 +471,7 @@ bool COMXAudio::Initialize(AEAudioFormat format, OMXClock *clock, CDVDStreamInfo
     enum PCMChannels outLayout[OMX_AUDIO_MAXCHANNELS];
     enum PCMLayout layout = (enum PCMLayout)std::max(0, CSettings::Get().GetInt("audiooutput.channels")-1);
     // ignore layout setting for analogue
-    if (CSettings::Get().GetBool("audiooutput.dualaudio") || CSettings::Get().GetString("audiooutput.audiodevice") == "Pi:Analogue")
+    if (CSettings::Get().GetBool("audiooutput.dualaudio") || CSettings::Get().GetString("audiooutput.audiodevice") == "PI:Analogue")
       layout = PCM_LAYOUT_2_0;
 
     // force out layout to stereo if input is not multichannel - it gives the receiver a chance to upmix
@@ -745,8 +746,6 @@ bool COMXAudio::Deinitialize()
     free(m_extradata);
   m_extradata = NULL;
   m_extrasize = 0;
-
-  m_dllAvUtil.Unload();
 
   while(!m_ampqueue.empty())
     m_ampqueue.pop_front();
@@ -1543,7 +1542,7 @@ unsigned int COMXAudio::SyncAC3(BYTE* pData, unsigned int iSize)
     else crc_size = (framesize >> 1) + (framesize >> 3) - 1;
 
     if (crc_size <= iSize - skip)
-      if(m_dllAvUtil.av_crc(m_dllAvUtil.av_crc_get_table(AV_CRC_16_ANSI), 0, &pData[2], crc_size * 2))
+      if(av_crc(av_crc_get_table(AV_CRC_16_ANSI), 0, &pData[2], crc_size * 2))
         continue;
 
     /* if we get here, we can sync */

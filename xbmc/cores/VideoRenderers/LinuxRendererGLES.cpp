@@ -34,6 +34,7 @@
 #include "utils/fastmemcpy.h"
 #include "utils/MathUtils.h"
 #include "utils/GLUtils.h"
+#include "utils/log.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/DisplaySettings.h"
 #include "settings/MediaSettings.h"
@@ -42,15 +43,17 @@
 #include "VideoShaders/YUV2RGBShader.h"
 #include "VideoShaders/VideoFilterShader.h"
 #include "windowing/WindowingFactory.h"
-#include "dialogs/GUIDialogKaiToast.h"
 #include "guilib/Texture.h"
-#include "lib/DllSwScale.h"
 #include "../dvdplayer/DVDCodecs/Video/OpenMaxVideo.h"
 #include "threads/SingleLock.h"
 #include "RenderCapture.h"
 #include "RenderFormats.h"
 #include "xbmc/Application.h"
 #include "cores/IPlayer.h"
+
+extern "C" {
+#include "libswscale/swscale.h"
+}
 
 #if defined(__ARM_NEON__)
 #include "yuv2rgb.neon.h"
@@ -133,7 +136,6 @@ CLinuxRendererGLES::CLinuxRendererGLES()
   m_rgbBuffer = NULL;
   m_rgbBufferSize = 0;
 
-  m_dllSwScale = new DllSwScale;
   m_sw_context = NULL;
   m_NumYV12Buffers = 0;
   m_iLastRenderBuffer = 0;
@@ -168,8 +170,6 @@ CLinuxRendererGLES::~CLinuxRendererGLES()
     delete m_pYUVShader;
     m_pYUVShader = NULL;
   }
-
-  delete m_dllSwScale;
 }
 
 bool CLinuxRendererGLES::ValidateRenderTarget()
@@ -588,6 +588,7 @@ unsigned int CLinuxRendererGLES::PreInit()
   m_iYV12RenderBuffer = 0;
   m_NumYV12Buffers = 2;
 
+  m_formats.clear();
   m_formats.push_back(RENDER_FMT_YUV420P);
   m_formats.push_back(RENDER_FMT_NV12);
   m_formats.push_back(RENDER_FMT_BYPASS);
@@ -606,9 +607,6 @@ unsigned int CLinuxRendererGLES::PreInit()
 
   // setup the background colour
   m_clearColour = (float)(g_advancedSettings.m_videoBlackBarColour & 0xff) / 0xff;
-
-  if (!m_dllSwScale->Load())
-    CLog::Log(LOGERROR,"CLinuxRendererGL::PreInit - failed to load rescale libraries!");
 
   return true;
 }
@@ -663,7 +661,6 @@ void CLinuxRendererGLES::UpdateVideoFilter()
     break;
   }
 
-  CGUIDialogKaiToast::QueueNotification("Video Renderering", "Failed to init video filters/scalers, falling back to bilinear scaling");
   CLog::Log(LOGERROR, "GL: Falling back to bilinear due to failure to init scaler");
   if (m_pVideoFilterShader)
   {
@@ -838,9 +835,9 @@ void CLinuxRendererGLES::UnInit()
   for (int i = 0; i < NUM_BUFFERS; ++i)
     (this->*m_textureDelete)(i);
 
-  if (m_dllSwScale && m_sw_context)
+  if (m_sw_context)
   {
-    m_dllSwScale->sws_freeContext(m_sw_context);
+    sws_freeContext(m_sw_context);
     m_sw_context = NULL;
   }
 
@@ -887,7 +884,13 @@ void CLinuxRendererGLES::ReleaseBuffer(int idx)
 #if defined(TARGET_ANDROID)
   if ( m_renderMethod & RENDER_MEDIACODEC )
   {
-    SAFE_RELEASE(buf.mediacodec);
+    if (buf.mediacodec)
+    {
+      // The media buffer has been queued to the SurfaceView but we didn't render it
+      // We have to do to the updateTexImage or it will get stuck
+      buf.mediacodec->UpdateTexImage();
+      SAFE_RELEASE(buf.mediacodec);
+    }
   }
 #endif
 }
@@ -1482,10 +1485,10 @@ void CLinuxRendererGLES::RenderSurfaceTexture(int index, int field)
   }
 
   // Set texture coordinates (MediaCodec is flipped in y)
-  tex[0][0] = tex[3][0] = 0.0f;
-  tex[0][1] = tex[1][1] = 1.0f;
-  tex[1][0] = tex[2][0] = 1.0f;
-  tex[2][1] = tex[3][1] = 0.0f;
+  tex[0][0] = tex[3][0] = plane.rect.x1;
+  tex[0][1] = tex[1][1] = plane.rect.y2;
+  tex[1][0] = tex[2][0] = plane.rect.x2;
+  tex[2][1] = tex[3][1] = plane.rect.y1;
 
   for(int i = 0; i < 4; i++)
   {
@@ -1679,7 +1682,7 @@ void CLinuxRendererGLES::UploadYV12Texture(int source)
     else
 #endif
     {
-      m_sw_context = m_dllSwScale->sws_getCachedContext(m_sw_context,
+      m_sw_context = sws_getCachedContext(m_sw_context,
         im->width, im->height, PIX_FMT_YUV420P,
         im->width, im->height, PIX_FMT_RGBA,
         SWS_FAST_BILINEAR, NULL, NULL, NULL);
@@ -1688,7 +1691,7 @@ void CLinuxRendererGLES::UploadYV12Texture(int source)
       int srcStride[] = { im->stride[0], im->stride[1], im->stride[2], 0 };
       uint8_t *dst[]  = { m_rgbBuffer, 0, 0, 0 };
       int dstStride[] = { m_sourceWidth*4, 0, 0, 0 };
-      m_dllSwScale->sws_scale(m_sw_context, src, srcStride, 0, im->height, dst, dstStride);
+      sws_scale(m_sw_context, src, srcStride, 0, im->height, dst, dstStride);
     }
   }
 
@@ -2454,6 +2457,27 @@ void CLinuxRendererGLES::DeleteSurfaceTexture(int index)
 }
 bool CLinuxRendererGLES::CreateSurfaceTexture(int index)
 {
+  YV12Image &im     = m_buffers[index].image;
+  YUVFIELDS &fields = m_buffers[index].fields;
+  YUVPLANE  &plane  = fields[0][0];
+
+  memset(&im    , 0, sizeof(im));
+  memset(&fields, 0, sizeof(fields));
+
+  im.height = m_sourceHeight;
+  im.width  = m_sourceWidth;
+
+  plane.texwidth  = im.width;
+  plane.texheight = im.height;
+  plane.pixpertex_x = 1;
+  plane.pixpertex_y = 1;
+
+  if(m_renderMethod & RENDER_POT)
+  {
+    plane.texwidth  = NP2(plane.texwidth);
+    plane.texheight = NP2(plane.texheight);
+  }
+
   return true;
 }
 

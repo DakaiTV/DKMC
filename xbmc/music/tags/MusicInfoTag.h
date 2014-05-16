@@ -27,7 +27,7 @@ class CArtist;
 #include <string>
 #include <stdint.h>
 
-#include "utils/Archive.h"
+#include "utils/IArchivable.h"
 #include "utils/ISerializable.h"
 #include "utils/ISortable.h"
 #include "XBDateTime.h"
@@ -46,7 +46,7 @@ enum ReplayGain
 
 namespace MUSIC_INFO
 {
-  class EmbeddedArtInfo
+  class EmbeddedArtInfo : public IArchivable
   {
   public:
     EmbeddedArtInfo() {};
@@ -55,6 +55,7 @@ namespace MUSIC_INFO
     void clear();
     bool empty() const;
     bool matches(const EmbeddedArtInfo &right) const;
+    virtual void Archive(CArchive& ar);
     size_t      size;
     std::string mime;
   };
@@ -201,7 +202,7 @@ protected:
   int m_iDuration;
   int m_iTrack;     // consists of the disk number in the high 16 bits, the track number in the low 16bits
   int m_iDbId;
-  std::string m_type; ///< item type "song", "album", "artist"
+  MediaType m_type; ///< item type "song", "album", "artist"
   bool m_bLoaded;
   char m_rating;
   int m_listeners;

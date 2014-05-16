@@ -19,6 +19,7 @@
  */
 
 #include "AEStreamInfo.h"
+#include "utils/log.h"
 
 #define IEC61937_PREAMBLE1 0xF872
 #define IEC61937_PREAMBLE2 0x4E1F
@@ -85,13 +86,11 @@ CAEStreamInfo::CAEStreamInfo() :
   m_dataIsLE      (false),
   m_packFunc      (NULL)
 {
-  m_dllAvUtil.Load();
-  m_dllAvUtil.av_crc_init(m_crcTrueHD, 0, 16, 0x2D, sizeof(m_crcTrueHD));
+  av_crc_init(m_crcTrueHD, 0, 16, 0x2D, sizeof(m_crcTrueHD));
 }
 
 CAEStreamInfo::~CAEStreamInfo()
 {
-  m_dllAvUtil.Unload();
 }
 
 int CAEStreamInfo::AddData(uint8_t *data, unsigned int size, uint8_t **buffer/* = NULL */, unsigned int *bufferSize/* = 0 */)
@@ -360,7 +359,7 @@ unsigned int CAEStreamInfo::SyncAC3(uint8_t *data, unsigned int size)
         crc_size = (framesize >> 1) + (framesize >> 3) - 1;
 
       if (crc_size <= size - skip)
-        if (m_dllAvUtil.av_crc(m_dllAvUtil.av_crc_get_table(AV_CRC_16_ANSI), 0, &data[2], crc_size * 2))
+        if (av_crc(av_crc_get_table(AV_CRC_16_ANSI), 0, &data[2], crc_size * 2))
           continue;
 
       /* if we get here, we can sync */
@@ -473,7 +472,7 @@ unsigned int CAEStreamInfo::SyncDTS(uint8_t *data, unsigned int size)
           break;
         }
         dtsBlocks = (((data[5] & 0x7) << 4) | ((data[6] & 0x3C) >> 2)) + 1;
-        m_fsize     = ((((data[6] & 0x3 << 8) | data[7]) << 4) | ((data[8] & 0x3C) >> 2)) + 1;
+        m_fsize     = (((((data[6] & 0x3) << 8) | data[7]) << 4) | ((data[8] & 0x3C) >> 2)) + 1;
         amode       = ((data[8] & 0x3) << 4) | ((data[9] & 0xF0) >> 4);
         sfreq       = data[9] & 0xF;
         lfe         = (data[12] & 0x18) >> 3;
@@ -489,7 +488,7 @@ unsigned int CAEStreamInfo::SyncDTS(uint8_t *data, unsigned int size)
           break;
         }
         dtsBlocks = (((data[4] & 0x7) << 4) | ((data[7] & 0x3C) >> 2)) + 1;
-        m_fsize     = ((((data[7] & 0x3 << 8) | data[6]) << 4) | ((data[9] & 0x3C) >> 2)) + 1;
+        m_fsize     = (((((data[7] & 0x3) << 8) | data[6]) << 4) | ((data[9] & 0x3C) >> 2)) + 1;
         amode       = ((data[9] & 0x3) << 4) | ((data[8] & 0xF0) >> 4);
         sfreq       = data[8] & 0xF;
         lfe         = (data[13] & 0x18) >> 3;
@@ -668,7 +667,7 @@ unsigned int CAEStreamInfo::SyncTrueHD(uint8_t *data, unsigned int size)
         continue;
 
       /* verify the crc of the audio unit */
-      uint16_t crc = m_dllAvUtil.av_crc(m_crcTrueHD, 0, data + 4, 24);
+      uint16_t crc = av_crc(m_crcTrueHD, 0, data + 4, 24);
       crc ^= (data[29] << 8) | data[28];
       if (((data[31] << 8) | data[30]) != crc)
         continue;

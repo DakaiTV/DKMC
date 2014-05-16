@@ -25,7 +25,7 @@
  */
 
 #include "guilib/GUIListItem.h"
-#include "utils/Archive.h"
+#include "utils/IArchivable.h"
 #include "utils/ISerializable.h"
 #include "utils/ISortable.h"
 #include "XBDateTime.h"
@@ -331,6 +331,12 @@ public:
    \sa GetLocalArt
    */
   CStdString FindLocalArt(const std::string &artFile, bool useFolder) const;
+
+  /*! \brief Whether or not to skip searching for local art.
+   \return true if local art should be skipped for this item, false otherwise.
+   \sa GetLocalArt, FindLocalArt
+   */
+  bool SkipLocalArt() const;
 
   // Gets the .tbn file associated with this item
   CStdString GetTBNFile() const;

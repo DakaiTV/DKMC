@@ -22,6 +22,9 @@
  *
  */
 
+#include <set>
+#include <Platinum/Source/Platinum/Platinum.h>
+
 #include "threads/SystemClock.h"
 #include "UPnP.h"
 #include "UPnPInternal.h"
@@ -33,7 +36,6 @@
 #include "ApplicationMessenger.h"
 #include "network/Network.h"
 #include "utils/log.h"
-#include "Platinum.h"
 #include "URL.h"
 #include "profiles/ProfilesManager.h"
 #include "settings/Settings.h"
@@ -287,6 +289,9 @@ public:
 
   ~CMediaController()
   {
+    for (std::set<std::string>::const_iterator itRenderer = m_registeredRenderers.begin(); itRenderer != m_registeredRenderers.end(); ++itRenderer)
+      unregisterRenderer(*itRenderer);
+    m_registeredRenderers.clear();
   }
 
 #define CHECK_USERDATA_RETURN(userdata) do {     \
@@ -351,16 +356,33 @@ public:
 
   virtual bool OnMRAdded(PLT_DeviceDataReference& device )
   {
+    if (device->GetUUID().IsEmpty() || device->GetUUID().GetChars() == NULL)
+      return false;
+
     CPlayerCoreFactory::Get().OnPlayerDiscovered((const char*)device->GetUUID()
                                           ,(const char*)device->GetFriendlyName()
                                           , EPC_UPNPPLAYER);
+    m_registeredRenderers.insert(std::string(device->GetUUID().GetChars()));
     return true;
   }
 
   virtual void OnMRRemoved(PLT_DeviceDataReference& device )
   {
-    CPlayerCoreFactory::Get().OnPlayerRemoved((const char*)device->GetUUID());
+    if (device->GetUUID().IsEmpty() || device->GetUUID().GetChars() == NULL)
+      return;
+
+    std::string uuid(device->GetUUID().GetChars());
+    unregisterRenderer(uuid);
+    m_registeredRenderers.erase(uuid);
   }
+
+private:
+  void unregisterRenderer(const std::string &deviceUUID)
+  {
+    CPlayerCoreFactory::Get().OnPlayerRemoved(deviceUUID);
+  }
+
+  std::set<std::string> m_registeredRenderers;
 };
 
 /*----------------------------------------------------------------------
@@ -496,7 +518,8 @@ CUPnP::StartClient()
     m_MediaBrowser = new CMediaBrowser(m_CtrlPointHolder->m_CtrlPoint);
 
     // start controller
-    if (CSettings::Get().GetBool("services.upnpcontroller")) {
+    if (CSettings::Get().GetBool("services.upnpcontroller") &&
+        CSettings::Get().GetBool("services.upnpserver")) {
         m_MediaController = new CMediaController(m_CtrlPointHolder->m_CtrlPoint);
     }
 }

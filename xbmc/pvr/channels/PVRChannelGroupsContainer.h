@@ -180,6 +180,12 @@ namespace PVR
      */
     CFileItemPtr GetLastPlayedChannel(void) const;
 
+    /*!
+     * @brief The group that was played last.
+     * @return The last watched group.
+     */
+    CPVRChannelGroupPtr GetLastPlayedGroup() const;
+
     bool CreateChannel(const CPVRChannel &channel);
 
     /*!
@@ -187,6 +193,18 @@ namespace PVR
      * @return True if EPG tags were created succesfully.
      */
     bool CreateChannelEpgs(void);
+
+    /*!
+     * @brief Return the group which was previous played.
+     * @return The group which was previous played.
+     */
+    CPVRChannelGroupPtr GetPreviousPlayedGroup(void);
+
+    /*!
+     * @brief Set the last played group.
+     * @param The last played group
+     */
+    void SetLastPlayedGroup(CPVRChannelGroupPtr group);
 
   protected:
     /*!
@@ -201,5 +219,6 @@ namespace PVR
     CCriticalSection   m_critSection;
     bool               m_bUpdateChannelsOnly;
     bool               m_bIsUpdating;
+    CPVRChannelGroupPtr m_lastPlayedGroups[2]; /*!< used to store the last played groups */
   };
 }

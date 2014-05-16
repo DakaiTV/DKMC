@@ -256,7 +256,8 @@ vector<CStdString> CScraper::Run(const CStdString& function,
   CLog::Log(LOGDEBUG,"scraper: %s returned %s",function.c_str(),strXML.c_str());
 
   CXBMCTinyXML doc;
-  doc.Parse(strXML, TIXML_ENCODING_UNKNOWN);
+  /* all data was converted to UTF-8 before being processed by scraper */
+  doc.Parse(strXML, TIXML_ENCODING_UTF8);
   if (!doc.RootElement())
   {
     CLog::Log(LOGERROR, "%s: Unable to parse XML",__FUNCTION__);
@@ -930,7 +931,7 @@ bool CScraper::GetVideoDetails(XFILE::CCurlFile &fcurl, const CScraperUrl &scurl
 {
   CLog::Log(LOGDEBUG, "%s: Reading %s '%s' using %s scraper "
     "(file: '%s', content: '%s', version: '%s')", __FUNCTION__,
-    fMovie ? "movie" : "episode", scurl.m_url[0].m_url.c_str(), Name().c_str(), Path().c_str(),
+    fMovie ? MediaTypeMovie : MediaTypeEpisode, scurl.m_url[0].m_url.c_str(), Name().c_str(), Path().c_str(),
     ADDON::TranslateContent(Content()).c_str(), Version().c_str());
 
   video.Reset();

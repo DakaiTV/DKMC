@@ -156,6 +156,7 @@ public:
   void ReloadSkin(bool confirm = false);
   const CStdString& CurrentFile();
   CFileItem& CurrentFileItem();
+  CFileItem& CurrentUnstackedItem();
   virtual bool OnMessage(CGUIMessage& message);
   PLAYERCOREID GetCurrentPlayer();
   virtual void OnPlayBackEnded();
@@ -282,10 +283,6 @@ public:
   PlayState m_ePlayState;
   CCriticalSection m_playStateMutex;
 
-  bool m_bInBackground;
-  inline bool IsInBackground() { return m_bInBackground; };
-  void SetInBackground(bool background);
-
   CKaraokeLyricsManager* m_pKaraokeMgr;
 
   PLAYERCOREID m_eForcedNextPlayer;
@@ -364,9 +361,8 @@ protected:
   virtual bool OnSettingUpdate(CSetting* &setting, const char *oldSettingId, const TiXmlNode *oldSettingNode);
 
   bool LoadSkin(const CStdString& skinID);
-  void LoadSkin(const boost::shared_ptr<ADDON::CSkinInfo>& skin);
+  bool LoadSkin(const boost::shared_ptr<ADDON::CSkinInfo>& skin);
 
-  bool m_skinReloading; // if true we disallow LoadSkin until ReloadSkin is called
   bool m_skinReverting;
 
   bool m_loggingIn;

@@ -71,40 +71,7 @@ bool CSettingsManager::Initialize(const TiXmlElement *root)
         section = itSection->second;
 
       if (section->Deserialize(sectionNode, update))
-      {
-        section->CheckRequirements();
-        if (!update)
-          m_sections[section->GetId()] = section;
-
-        // get all settings and add them to the settings map
-        for (SettingCategoryList::const_iterator categoryIt = section->GetCategories().begin(); categoryIt != section->GetCategories().end(); ++categoryIt)
-        {
-          (*categoryIt)->CheckRequirements();
-          for (SettingGroupList::const_iterator groupIt = (*categoryIt)->GetGroups().begin(); groupIt != (*categoryIt)->GetGroups().end(); ++groupIt)
-          {
-            (*groupIt)->CheckRequirements();
-            for (SettingList::const_iterator settingIt = (*groupIt)->GetSettings().begin(); settingIt != (*groupIt)->GetSettings().end(); ++settingIt)
-            {
-              (*settingIt)->CheckRequirements();
-
-              const std::string &settingId = (*settingIt)->GetId();
-              SettingMap::iterator setting = m_settings.find(settingId);
-              if (setting == m_settings.end())
-              {
-                Setting tmpSetting = { NULL };
-                std::pair<SettingMap::iterator, bool> tmpIt = m_settings.insert(make_pair(settingId, tmpSetting));
-                setting = tmpIt.first;
-              }
-                
-              if (setting->second.setting == NULL)
-              {
-                setting->second.setting = *settingIt;
-                (*settingIt)->m_callback = this;
-              }
-            }
-          }
-        }
-      }
+        AddSection(section);
       else
       {
         CLog::Log(LOGWARNING, "CSettingsManager: unable to read section \"%s\"", sectionId.c_str());
@@ -114,38 +81,6 @@ bool CSettingsManager::Initialize(const TiXmlElement *root)
     }
       
     sectionNode = sectionNode->NextSibling(SETTING_XML_ELM_SECTION);
-  }
-
-  for (SettingMap::iterator itSettingDep = m_settings.begin(); itSettingDep != m_settings.end(); ++itSettingDep)
-  {
-    if (itSettingDep->second.setting == NULL)
-      continue;
-
-    const SettingDependencies& deps = itSettingDep->second.setting->GetDependencies();
-    for (SettingDependencies::const_iterator depIt = deps.begin(); depIt != deps.end(); ++depIt)
-    {
-      std::set<std::string> settingIds = depIt->GetSettings();
-      for (std::set<std::string>::const_iterator itSettingId = settingIds.begin(); itSettingId != settingIds.end(); ++itSettingId)
-      {
-        SettingMap::iterator setting = m_settings.find(*itSettingId);
-        if (setting == m_settings.end())
-          continue;
-
-        bool newDep = true;
-        SettingDependencies &settingDeps = setting->second.dependencies[itSettingDep->first];
-        for (SettingDependencies::const_iterator itDeps = settingDeps.begin(); itDeps != settingDeps.end(); ++itDeps)
-        {
-          if (itDeps->GetType() == depIt->GetType())
-          {
-            newDep = false;
-            break;
-          }
-        }
-
-        if (newDep)
-          settingDeps.push_back(*depIt);
-      }
-    }
   }
 
   return true;
@@ -264,6 +199,77 @@ void CSettingsManager::SetInitialized()
     SettingMap::iterator tmpIterator = setting++;
     if (tmpIterator->second.setting == NULL)
       m_settings.erase(tmpIterator);
+  }
+
+  // figure out all the dependencies between settings
+  for (SettingMap::iterator itSettingDep = m_settings.begin(); itSettingDep != m_settings.end(); ++itSettingDep)
+  {
+    if (itSettingDep->second.setting == NULL)
+      continue;
+
+    const SettingDependencies& deps = itSettingDep->second.setting->GetDependencies();
+    for (SettingDependencies::const_iterator depIt = deps.begin(); depIt != deps.end(); ++depIt)
+    {
+      std::set<std::string> settingIds = depIt->GetSettings();
+      for (std::set<std::string>::const_iterator itSettingId = settingIds.begin(); itSettingId != settingIds.end(); ++itSettingId)
+      {
+        SettingMap::iterator setting = m_settings.find(*itSettingId);
+        if (setting == m_settings.end())
+          continue;
+
+        bool newDep = true;
+        SettingDependencies &settingDeps = setting->second.dependencies[itSettingDep->first];
+        for (SettingDependencies::const_iterator itDeps = settingDeps.begin(); itDeps != settingDeps.end(); ++itDeps)
+        {
+          if (itDeps->GetType() == depIt->GetType())
+          {
+            newDep = false;
+            break;
+          }
+        }
+
+        if (newDep)
+          settingDeps.push_back(*depIt);
+      }
+    }
+  }
+}
+
+void CSettingsManager::AddSection(CSettingSection *section)
+{
+  if (section == NULL)
+    return;
+
+  section->CheckRequirements();
+  m_sections[section->GetId()] = section;
+
+  // get all settings and add them to the settings map
+  for (SettingCategoryList::const_iterator categoryIt = section->GetCategories().begin(); categoryIt != section->GetCategories().end(); ++categoryIt)
+  {
+    (*categoryIt)->CheckRequirements();
+    for (SettingGroupList::const_iterator groupIt = (*categoryIt)->GetGroups().begin(); groupIt != (*categoryIt)->GetGroups().end(); ++groupIt)
+    {
+      (*groupIt)->CheckRequirements();
+      for (SettingList::const_iterator settingIt = (*groupIt)->GetSettings().begin(); settingIt != (*groupIt)->GetSettings().end(); ++settingIt)
+      {
+        (*settingIt)->CheckRequirements();
+
+        const std::string &settingId = (*settingIt)->GetId();
+        SettingMap::iterator setting = m_settings.find(settingId);
+        if (setting == m_settings.end())
+        {
+          Setting tmpSetting = { NULL };
+          std::pair<SettingMap::iterator, bool> tmpIt = m_settings.insert(make_pair(settingId, tmpSetting));
+          setting = tmpIt.first;
+        }
+
+        if (setting->second.setting == NULL)
+        {
+          setting->second.setting = *settingIt;
+          (*settingIt)->SetCallback(this);
+        }
+      }
+    }
   }
 }
 
@@ -392,9 +398,9 @@ void* CSettingsManager::GetSettingOptionsFiller(const CSetting *setting)
   // get the option filler's identifier
   std::string filler;
   if (setting->GetType() == SettingTypeInteger)
-    filler = ((const CSettingInt*)setting)->GetOptionsFiller();
+    filler = ((const CSettingInt*)setting)->GetOptionsFillerName();
   else if (setting->GetType() == SettingTypeString)
-    filler = ((const CSettingString*)setting)->GetOptionsFiller();
+    filler = ((const CSettingString*)setting)->GetOptionsFillerName();
 
   if (filler.empty())
     return NULL;
@@ -662,6 +668,12 @@ bool CSettingsManager::Serialize(TiXmlNode *parent) const
       CLog::Log(LOGWARNING, "CSetting: unable to write <%s> tag in <%s>", parts.at(1).c_str(), parts.at(0).c_str());
       continue;
     }
+    if (it->second.setting->IsDefault())
+    {
+      TiXmlElement *settingElem = settingNode->ToElement();
+      if (settingElem != NULL)
+        settingElem->SetAttribute(SETTING_XML_ELM_DEFAULT, "true");
+    }
       
     TiXmlText value(it->second.setting->ToString());
     settingNode->InsertEndChild(value);
@@ -860,6 +872,13 @@ bool CSettingsManager::OnSettingsLoading()
   return true;
 }
 
+void CSettingsManager::OnSettingsUnloaded()
+{
+  CSharedLock lock(m_critical);
+  for (SettingsHandlers::const_iterator it = m_settingsHandlers.begin(); it != m_settingsHandlers.end(); ++it)
+    (*it)->OnSettingsUnloaded();
+}
+
 void CSettingsManager::OnSettingsLoaded()
 {
   CSharedLock lock(m_critical);
@@ -924,11 +943,17 @@ bool CSettingsManager::LoadSetting(const TiXmlNode *node, CSetting *setting)
   if (sectionNode == NULL)
     return false;
 
-  const TiXmlNode *settingNode = sectionNode->FirstChild(parts.at(1));
-  if (settingNode == NULL)
+  const TiXmlElement *settingElement = sectionNode->FirstChildElement(parts.at(1));
+  if (settingElement == NULL)
     return false;
 
-  if (!setting->FromString(settingNode->FirstChild() != NULL ? settingNode->FirstChild()->ValueStr() : StringUtils::Empty))
+  // check if the default="true" attribute is set for the value in which case
+  // we don't have to read the actual setting value
+  const char *isDefault = settingElement->Attribute(SETTING_XML_ELM_DEFAULT);
+  if (isDefault != NULL && StringUtils::EqualsNoCase(isDefault, "true"))
+    return true;
+
+  if (!setting->FromString(settingElement->FirstChild() != NULL ? settingElement->FirstChild()->ValueStr() : StringUtils::Empty))
   {
     CLog::Log(LOGWARNING, "CSettingsManager: unable to read value of setting \"%s\"", settingId.c_str());
     return false;

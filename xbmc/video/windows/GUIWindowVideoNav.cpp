@@ -285,12 +285,12 @@ bool CGUIWindowVideoNav::GetDirectory(const CStdString &strDirectory, CFileItemL
       VIDEODATABASEDIRECTORY::NODE_TYPE node = dir.GetDirectoryChildType(items.GetPath());
 
       // perform the flattening logic for tvshows with a single (unwatched) season (+ optional special season)
-      if (node == NODE_TYPE_SEASONS)
+      if (node == NODE_TYPE_SEASONS && !items.IsEmpty())
       {
         int itemsSize = items.GetObjectCount();
         int firstIndex = items.Size() - itemsSize;
         // check if the last item is the "All seasons" item which should be ignored for flattening
-        if (items[items.Size() - 1]->GetVideoInfoTag()->m_iSeason < 0)
+        if (!items[items.Size() - 1]->HasVideoInfoTag() || items[items.Size() - 1]->GetVideoInfoTag()->m_iSeason < 0)
           itemsSize -= 1;
 
         int iFlatten = CSettings::Get().GetInt("videolibrary.flattentvshows");
@@ -335,7 +335,7 @@ bool CGUIWindowVideoNav::GetDirectory(const CStdString &strDirectory, CFileItemL
         map<string, string> art;
         if (m_database.GetArtForItem(details.m_iDbId, details.m_type, art))
         {
-          items.AppendArt(art, "tvshow");
+          items.AppendArt(art, MediaTypeTvShow);
           items.SetArtFallback("fanart", "tvshow.fanart");
           if (node == NODE_TYPE_SEASONS)
           { // set an art fallback for "thumb"
@@ -361,9 +361,9 @@ bool CGUIWindowVideoNav::GetDirectory(const CStdString &strDirectory, CFileItemL
           // grab the season thumb as the folder thumb
           int seasonID = m_database.GetSeasonId(details.m_iDbId, params.GetSeason());
           CGUIListItem::ArtMap seasonArt;
-          if (m_database.GetArtForItem(seasonID, "season", seasonArt))
+          if (m_database.GetArtForItem(seasonID, MediaTypeSeason, seasonArt))
           {
-            items.AppendArt(art, "season");
+            items.AppendArt(art, MediaTypeSeason);
             // set an art fallback for "thumb"
             if (items.HasArt("season.poster"))
               items.SetArtFallback("thumb", "season.poster");
@@ -600,7 +600,6 @@ void CGUIWindowVideoNav::DoSearch(const CStdString& strSearch, CFileItemList& it
   CStdString strGenre = g_localizeStrings.Get(515); // Genre
   CStdString strActor = g_localizeStrings.Get(20337); // Actor
   CStdString strDirector = g_localizeStrings.Get(20339); // Director
-  CStdString strMovie = g_localizeStrings.Get(20338); // Movie
 
   //get matching names
   m_database.GetMoviesByName(strSearch, tempItems);
@@ -653,7 +652,7 @@ void CGUIWindowVideoNav::DoSearch(const CStdString& strSearch, CFileItemList& it
   AppendAndClearSearchItems(tempItems, "[" + g_localizeStrings.Get(20365) + "] ", items);
 
   m_database.GetMoviesByPlot(strSearch, tempItems);
-  AppendAndClearSearchItems(tempItems, "[" + strMovie + " " + g_localizeStrings.Get(207) + "] ", items);
+  AppendAndClearSearchItems(tempItems, "[" + g_localizeStrings.Get(20323) + "] ", items);
 }
 
 void CGUIWindowVideoNav::PlayItem(int iItem)
@@ -868,12 +867,12 @@ void CGUIWindowVideoNav::GetContextButtons(int itemNumber, CContextButtons &butt
           }
         }
         if (!g_application.IsVideoScanning() && item->IsVideoDb() && item->HasVideoInfoTag() &&
-           (item->GetVideoInfoTag()->m_type == "movie" ||       // movies
-            item->GetVideoInfoTag()->m_type == "tvshow" ||      // tvshows
-            item->GetVideoInfoTag()->m_type == "episode" ||     // episodes
-            item->GetVideoInfoTag()->m_type == "musicvideo" ||  // musicvideos
-            item->GetVideoInfoTag()->m_type == "tag" ||         // tags
-            item->GetVideoInfoTag()->m_type == "set"))          // sets
+           (item->GetVideoInfoTag()->m_type == MediaTypeMovie ||          // movies
+            item->GetVideoInfoTag()->m_type == MediaTypeTvShow ||         // tvshows
+            item->GetVideoInfoTag()->m_type == MediaTypeEpisode ||        // episodes
+            item->GetVideoInfoTag()->m_type == MediaTypeMusicVideo ||     // musicvideos
+            item->GetVideoInfoTag()->m_type == "tag" ||                   // tags
+            item->GetVideoInfoTag()->m_type == MediaTypeVideoCollection)) // sets
         {
           buttons.Add(CONTEXT_BUTTON_EDIT, 16106);
         }
@@ -963,11 +962,11 @@ bool CGUIWindowVideoNav::OnContextButton(int itemNumber, CONTEXT_BUTTON button)
   case CONTEXT_BUTTON_SET_ACTOR_THUMB:
   case CONTEXT_BUTTON_SET_ARTIST_THUMB:
     {
-      std::string type = "season";
+      std::string type = MediaTypeSeason;
       if (button == CONTEXT_BUTTON_SET_ACTOR_THUMB)
         type = "actor";
       else if (button == CONTEXT_BUTTON_SET_ARTIST_THUMB)
-        type = "artist";
+        type = MediaTypeArtist;
       
       bool result = CGUIDialogVideoInfo::ManageVideoItemArtwork(m_vecItems->Get(itemNumber), type);
       Refresh();

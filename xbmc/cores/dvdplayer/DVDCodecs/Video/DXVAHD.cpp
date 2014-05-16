@@ -44,6 +44,7 @@
 #include "settings/MediaSettings.h"
 #include "cores/VideoRenderers/RenderManager.h"
 #include "win32/WIN32Util.h"
+#include "utils/Log.h"
 
 #define ALLOW_ADDING_SURFACES 0
 
@@ -331,9 +332,9 @@ bool CProcessorHD::OpenProcessor()
   DXVAHD_STREAM_STATE_INPUT_COLOR_SPACE_DATA data =
   {
     0,                                          // Type: 0=Video, 1=Graphics
-    m_flags & CONF_FLAGS_YUV_FULLRANGE ? 0 : 1, // RGB_Range: 0=Full, 1=Limited
+    0,                                          // RGB_Range: 0=Full, 1=Limited
     m_flags & CONF_FLAGS_YUVCOEF_BT709 ? 1 : 0, // YCbCr_Matrix: 0=BT.601, 1=BT.709
-    1                                           // YCbCr_xvYCC: 0=Conventional YCbCr, 1=xvYCC
+    m_flags & CONF_FLAGS_YUV_FULLRANGE ? 1 : 0  // YCbCr_xvYCC: 0=Conventional YCbCr, 1=xvYCC
   };
   LOGIFERROR(m_pDXVAVP->SetVideoProcessStreamState( 0, DXVAHD_STREAM_STATE_INPUT_COLOR_SPACE
                                                   , sizeof(data), &data ));
@@ -528,13 +529,6 @@ bool CProcessorHD::Render(CRect src, CRect dst, IDirect3DSurface9* target, REFER
 {
   CSingleLock lock(m_section);
 
-  // buffering frames
-  frame -= m_VPCaps.FutureFrames * 2;
-  if (frame <= 0)
-  {
-  	return false;
-  }
-
   // restore processor if it was lost
   if(!m_pDXVAVP && !OpenProcessor())
   {
@@ -598,8 +592,8 @@ bool CProcessorHD::Render(CRect src, CRect dst, IDirect3DSurface9* target, REFER
     {
       if (it->index < frame)
       {
-        // frames order should be { .., T-3, T-2, T-1 }
-        stream_data.ppPastSurfaces[m_VPCaps.PastFrames - (frame - it->index)/2] = it->pSurface;
+        // frames order should be { .., T-1, T-2, T-3 }
+        stream_data.ppPastSurfaces[(frame - it->index)/2 - 1] = it->pSurface;
         stream_data.PastFrames++;
       }
       else if (it->index == frame)
@@ -622,12 +616,6 @@ bool CProcessorHD::Render(CRect src, CRect dst, IDirect3DSurface9* target, REFER
   {
     CLog::Log(LOGWARNING, __FUNCTION__" - uncomplete stream data, skipping frame.");
     return false;
-  }
-
-  // rewind uncomplete array
-  if (stream_data.PastFrames < m_VPCaps.PastFrames)
-  {
-    stream_data.ppPastSurfaces += (m_VPCaps.PastFrames - stream_data.PastFrames);
   }
 
   // Override the sample format when the processor doesn't need to deinterlace or when deinterlacing is forced and flags are missing.
@@ -684,12 +672,6 @@ bool CProcessorHD::Render(CRect src, CRect dst, IDirect3DSurface9* target, REFER
   if(FAILED(hr))
   {
     CLog::Log(LOGERROR, __FUNCTION__" - failed executing VideoProcessBltHD with error %x", hr);
-  }
-
-  // rewind back before delete
-  if (stream_data.PastFrames < m_VPCaps.PastFrames)
-  {
-    stream_data.ppPastSurfaces -= (m_VPCaps.PastFrames - stream_data.PastFrames);
   }
 
   delete [] stream_data.ppPastSurfaces;

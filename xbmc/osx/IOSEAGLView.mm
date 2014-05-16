@@ -35,6 +35,7 @@
 #include "utils/log.h"
 #include "utils/TimeUtils.h"
 #include "Util.h"
+#include "XbmcContext.h"
 #undef BOOL
 
 #import <QuartzCore/QuartzCore.h>
@@ -318,14 +319,14 @@
 {
   PRINT_SIGNATURE();
   pause = TRUE;
-  g_application.SetInBackground(true);
+  g_application.SetRenderGUI(false);
 }
 //--------------------------------------------------------------
 - (void) resumeAnimation
 {
   PRINT_SIGNATURE();
   pause = FALSE;
-  g_application.SetInBackground(false);
+  g_application.SetRenderGUI(true);
 }
 //--------------------------------------------------------------
 - (void) startAnimation
@@ -367,6 +368,8 @@
 - (void) runAnimation:(id) arg
 {
   CCocoaAutoPool outerpool;
+  // set up some xbmc specific relationships
+  XBMC::Context context;
   bool readyToRun = true;
 
   // signal we are alive

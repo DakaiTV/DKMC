@@ -28,11 +28,14 @@
 #include "cores/AudioEngine/Interfaces/AESound.h"
 #include "cores/AudioEngine/AEFactory.h"
 #include "guilib/DispResource.h"
+#include <queue>
 
 // ffmpeg
-#include "DllAvFormat.h"
-#include "DllAvCodec.h"
-#include "DllAvUtil.h"
+extern "C" {
+#include "libavformat/avformat.h"
+#include "libavcodec/avcodec.h"
+#include "libavutil/avutil.h"
+}
 
 class IAESink;
 class IAEEncoder;
@@ -73,6 +76,7 @@ public:
     INIT = 0,
     RECONFIGURE,
     SUSPEND,
+    DEVICECHANGE,
     MUTE,
     VOLUME,
     PAUSESTREAM,
@@ -87,6 +91,7 @@ public:
     GETSTATE,
     DISPLAYLOST,
     DISPLAYRESET,
+    APPFOCUSED,
     KEEPCONFIG,
     TIMEOUT,
   };
@@ -178,7 +183,7 @@ protected:
   CCriticalSection m_lock;
 };
 
-#if defined(HAS_GLX) || defined(TARGET_DARWIN_OSX)
+#if defined(HAS_GLX) || defined(TARGET_DARWIN)
 class CActiveAE : public IAE, public IDispResource, private CThread
 #else
 class CActiveAE : public IAE, private CThread
@@ -219,17 +224,19 @@ public:
 
   virtual void EnumerateOutputDevices(AEDeviceList &devices, bool passthrough);
   virtual std::string GetDefaultDevice(bool passthrough);
-  virtual bool SupportsRaw(AEDataFormat format);
+  virtual bool SupportsRaw(AEDataFormat format, int samplerate);
   virtual bool SupportsSilenceTimeout();
   virtual bool SupportsQualityLevel(enum AEQuality level);
   virtual bool IsSettingVisible(const std::string &settingId);
   virtual void KeepConfiguration(unsigned int millis);
+  virtual void DeviceChange();
 
   virtual void RegisterAudioCallback(IAudioCallback* pCallback);
   virtual void UnregisterAudioCallback();
 
   virtual void OnLostDevice();
   virtual void OnResetDevice();
+  virtual void OnAppFocusChange(bool focus);
 
 protected:
   void PlaySound(CActiveAESound *sound);
@@ -292,6 +299,7 @@ protected:
   XbmcThreads::EndTime m_extDrainTimer;
   unsigned int m_extKeepConfig;
   bool m_extDeferData;
+  std::queue<time_t> m_extLastDeviceChange;
 
   enum
   {
@@ -331,7 +339,8 @@ protected:
   std::list<SoundState> m_sounds_playing;
   std::vector<CActiveAESound*> m_sounds;
 
-  float m_volume;
+  float m_volume; // volume on a 0..1 scale corresponding to a proportion along the dB scale
+  float m_volumeScaled; // multiplier to scale samples in order to achieve the volume specified in m_volume
   bool m_muted;
   bool m_sinkHasVolume;
 
@@ -339,11 +348,6 @@ protected:
   IAudioCallback *m_audioCallback;
   bool m_vizInitialized;
   CCriticalSection m_vizLock;
-
-  // ffmpeg
-  DllAvFormat m_dllAvFormat;
-  DllAvCodec  m_dllAvCodec;
-  DllAvUtil   m_dllAvUtil;
 
   // polled via the interface
   float m_aeVolume;

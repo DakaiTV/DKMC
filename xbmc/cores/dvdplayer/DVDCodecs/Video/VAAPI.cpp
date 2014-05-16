@@ -20,11 +20,12 @@
 #include "system.h"
 #ifdef HAVE_LIBVA
 #include "windowing/WindowingFactory.h"
-#include "settings/Settings.h"
 #include "VAAPI.h"
 #include "DVDVideoCodec.h"
 #include <boost/scoped_array.hpp>
 #include <boost/weak_ptr.hpp>
+#include "utils/log.h"
+#include "threads/SingleLock.h"
 
 #define CHECK(a) \
 do { \
@@ -52,6 +53,16 @@ using namespace std;
 using namespace boost;
 using namespace VAAPI;
 
+// settings codecs mapping
+DVDCodecAvailableType g_vaapi_available[] = {
+  { AV_CODEC_ID_H263, "videoplayer.usevaapimpeg4" },
+  { AV_CODEC_ID_MPEG4, "videoplayer.usevaapimpeg4" },
+  { AV_CODEC_ID_WMV3, "videoplayer.usevaapivc1" },
+  { AV_CODEC_ID_VC1, "videoplayer.usevaapivc1" },
+  { AV_CODEC_ID_MPEG2VIDEO, "videoplayer.usevaapimpeg2" },
+};
+const size_t settings_count = sizeof(g_vaapi_available) / sizeof(DVDCodecAvailableType);
+
 static int compare_version(int major_l, int minor_l, int micro_l, int major_r, int minor_r, int micro_r)
 {
   if(major_l < major_r) return -1;
@@ -63,11 +74,11 @@ static int compare_version(int major_l, int minor_l, int micro_l, int major_r, i
   return 0;
 }
 
-static void RelBufferS(AVCodecContext *avctx, AVFrame *pic)
-{ ((CDecoder*)((CDVDVideoCodecFFmpeg*)avctx->opaque)->GetHardware())->RelBuffer(avctx, pic); }
+static void RelBufferS(void *opaque, uint8_t *data)
+{ ((CDecoder*)((CDVDVideoCodecFFmpeg*)opaque)->GetHardware())->RelBuffer(data); }
 
-static int GetBufferS(AVCodecContext *avctx, AVFrame *pic) 
-{  return ((CDecoder*)((CDVDVideoCodecFFmpeg*)avctx->opaque)->GetHardware())->GetBuffer(avctx, pic); }
+static int GetBufferS(AVCodecContext *avctx, AVFrame *pic, int flags)
+{  return ((CDecoder*)((CDVDVideoCodecFFmpeg*)avctx->opaque)->GetHardware())->GetBuffer(avctx, pic, flags); }
 
 static inline VASurfaceID GetSurfaceID(AVFrame *pic)
 { return (VASurfaceID)(uintptr_t)pic->data[3]; }
@@ -165,9 +176,9 @@ CDecoder::~CDecoder()
   free(m_hwaccel);
 }
 
-void CDecoder::RelBuffer(AVCodecContext *avctx, AVFrame *pic)
+void CDecoder::RelBuffer(uint8_t *data)
 {
-  VASurfaceID surface = GetSurfaceID(pic);
+  VASurfaceID surface = (VASurfaceID)(uintptr_t)data;
 
   for(std::list<CSurfacePtr>::iterator it = m_surfaces_used.begin(); it != m_surfaces_used.end(); ++it)
   {    
@@ -178,13 +189,9 @@ void CDecoder::RelBuffer(AVCodecContext *avctx, AVFrame *pic)
       break;
     }
   }
-  pic->data[0] = NULL;
-  pic->data[1] = NULL;
-  pic->data[2] = NULL;
-  pic->data[3] = NULL;
 }
 
-int CDecoder::GetBuffer(AVCodecContext *avctx, AVFrame *pic)
+int CDecoder::GetBuffer(AVCodecContext *avctx, AVFrame *pic, int flags)
 {
   VASurfaceID surface = GetSurfaceID(pic);
   CSurface*   wrapper = NULL;
@@ -234,16 +241,23 @@ int CDecoder::GetBuffer(AVCodecContext *avctx, AVFrame *pic)
     m_surfaces_free.erase(it);
   }
 
-  pic->type           = FF_BUFFER_TYPE_USER;
   pic->data[0]        = (uint8_t*)wrapper;
   pic->data[1]        = NULL;
   pic->data[2]        = NULL;
-  pic->data[3]        = (uint8_t*)surface;
+  pic->data[3]        = (uint8_t*)(uintptr_t)surface;
   pic->linesize[0]    = 0;
   pic->linesize[1]    = 0;
   pic->linesize[2]    = 0;
   pic->linesize[3]    = 0;
   pic->reordered_opaque= avctx->reordered_opaque;
+
+  AVBufferRef *buffer = av_buffer_create(pic->data[3], 0, RelBufferS, avctx->opaque, 0);
+  if (!buffer)
+  {
+    CLog::Log(LOGERROR, "VAAPI::%s - error creating buffer", __FUNCTION__);
+    return -1;
+  }
+  pic->buf[0] = buffer;
   return 0;
 }
 
@@ -269,6 +283,10 @@ void CDecoder::Close()
 
 bool CDecoder::Open(AVCodecContext *avctx, enum PixelFormat fmt, unsigned int surfaces)
 {
+  // check if user wants to decode this format with VAAPI
+  if (CDVDVideoCodec::IsCodecDisabled(g_vaapi_available, settings_count, avctx->codec_id))
+    return false;
+
   VAEntrypoint entrypoint = VAEntrypointVLD;
   VAProfile    profile;
 
@@ -379,9 +397,7 @@ bool CDecoder::Open(AVCodecContext *avctx, enum PixelFormat fmt, unsigned int su
 
   avctx->hwaccel_context = m_hwaccel;
   avctx->thread_count    = 1;
-  avctx->get_buffer      = GetBufferS;
-  avctx->reget_buffer    = GetBufferS;
-  avctx->release_buffer  = RelBufferS;
+  avctx->get_buffer2     = GetBufferS;
   avctx->draw_horiz_band = NULL;
   avctx->slice_flags     = SLICE_FLAG_CODED_ORDER|SLICE_FLAG_ALLOW_FIELD;
   return true;

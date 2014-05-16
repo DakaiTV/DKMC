@@ -160,7 +160,7 @@ namespace XBMCAddon
       if (!shares) 
         throw WindowException("Error: GetSources given %s is NULL.",s_shares.c_str());
 
-      if (useFileDirectories && (!maskparam.empty() && !maskparam.size() == 0))
+      if (useFileDirectories && !maskparam.empty())
         mask += "|.rar|.zip";
 
       value = defaultt;
@@ -184,7 +184,7 @@ namespace XBMCAddon
       if (!shares) 
         throw WindowException("Error: GetSources given %s is NULL.",s_shares.c_str());
 
-      if (useFileDirectories && (!lmask.empty() && !(lmask.size() == 0)))
+      if (useFileDirectories && !lmask.empty())
         lmask += "|.rar|.zip";
 
       if (type == 1)
@@ -287,7 +287,7 @@ namespace XBMCAddon
       {
         case INPUT_ALPHANUM:
           {
-            bool bHiddenInput = option & ALPHANUM_HIDE_INPUT;
+            bool bHiddenInput = (option & ALPHANUM_HIDE_INPUT) == ALPHANUM_HIDE_INPUT;
             if (!CGUIKeyboardFactory::ShowAndGetInput(value, heading, true, bHiddenInput, autoclose))
               value = emptyString;
           }
@@ -345,6 +345,7 @@ namespace XBMCAddon
             if (!bResult)
               value = emptyString;
           }
+          break;
         default:
           value = emptyString;
           break;
@@ -437,7 +438,7 @@ namespace XBMCAddon
     {
       XBMC_TRACE;
 
-      if (dlg)
+      if (dlg && open)
       {
         DelayedCallGuard dg;
         dlg->Close();
@@ -457,6 +458,7 @@ namespace XBMCAddon
 
       dlg = pDialog;
       handle = pHandle;
+      open = true;
 
       pHandle->SetTitle(heading);
       if (!message.empty())
@@ -484,6 +486,7 @@ namespace XBMCAddon
     {
       DelayedCallGuard dcguard(languageHook);
       handle->MarkFinished();
+      open = false;
     }
 
     bool DialogProgressBG::isFinished()

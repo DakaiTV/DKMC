@@ -24,6 +24,7 @@
 #include "utils/StringUtils.h"
 #include "settings/AdvancedSettings.h"
 #include "utils/Variant.h"
+#include "utils/Archive.h"
 
 using namespace MUSIC_INFO;
 
@@ -53,6 +54,20 @@ bool EmbeddedArtInfo::matches(const EmbeddedArtInfo &right) const
 {
   return (size == right.size &&
           mime == right.mime);
+}
+
+void EmbeddedArtInfo::Archive(CArchive &ar)
+{
+  if (ar.IsStoring())
+  {
+    ar << size;
+    ar << mime;
+  }
+  else
+  {
+    ar >> size;
+    ar >> mime;
+  }
 }
 
 EmbeddedArt::EmbeddedArt(const uint8_t *dat, size_t siz, const std::string &mim)
@@ -509,7 +524,7 @@ void CMusicInfoTag::SetArtist(const CArtist& artist)
   SetAlbumArtist(artist.strArtist);
   SetGenre(artist.genre);
   m_iDbId = artist.idArtist;
-  m_type = "artist";
+  m_type = MediaTypeArtist;
   m_bLoaded = true;
 }
 
@@ -528,7 +543,7 @@ void CMusicInfoTag::SetAlbum(const CAlbum& album)
   SetReleaseDate(stTime);
   m_iTimesPlayed = album.iTimesPlayed;
   m_iDbId = album.idAlbum;
-  m_type = "album";
+  m_type = MediaTypeAlbum;
   m_bLoaded = true;
 }
 
@@ -543,6 +558,7 @@ void CMusicInfoTag::SetSong(const CSong& song)
   SetComment(song.strComment);
   SetPlayCount(song.iTimesPlayed);
   SetLastPlayed(song.lastPlayed);
+  SetCoverArtInfo(song.embeddedArt.size, song.embeddedArt.mime);
   m_rating = song.rating;
   m_strURL = song.strFileName;
   SYSTEMTIME stTime;
@@ -551,7 +567,7 @@ void CMusicInfoTag::SetSong(const CSong& song)
   m_iTrack = song.iTrack;
   m_iDuration = song.iDuration;
   m_iDbId = song.idSong;
-  m_type = "song";
+  m_type = MediaTypeSong;
   m_bLoaded = true;
   m_iTimesPlayed = song.iTimesPlayed;
   m_iAlbumId = song.idAlbum;
@@ -561,7 +577,7 @@ void CMusicInfoTag::Serialize(CVariant& value) const
 {
   value["url"] = m_strURL;
   value["title"] = m_strTitle;
-  if (m_type.compare("artist") == 0 && m_artist.size() == 1)
+  if (m_type.compare(MediaTypeArtist) == 0 && m_artist.size() == 1)
     value["artist"] = m_artist[0];
   else
     value["artist"] = m_artist;
@@ -646,6 +662,7 @@ void CMusicInfoTag::Archive(CArchive& ar)
     ar << m_strLyrics;
     ar << m_bCompilation;
     ar << m_listeners;
+    ar << m_coverArt;
   }
   else
   {
@@ -674,6 +691,7 @@ void CMusicInfoTag::Archive(CArchive& ar)
     ar >> m_strLyrics;
     ar >> m_bCompilation;
     ar >> m_listeners;
+    ar >> m_coverArt;
   }
 }
 

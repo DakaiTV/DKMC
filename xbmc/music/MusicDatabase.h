@@ -371,7 +371,7 @@ public:
   /////////////////////////////////////////////////
   // Karaoke
   /////////////////////////////////////////////////
-  void AddKaraokeData(int idSong, int iKaraokeNumber, DWORD crc);
+  void AddKaraokeData(int idSong, int iKaraokeNumber);
   bool GetSongByKaraokeNumber( int number, CSong& song );
   bool SetKaraokeSongDelay( int idSong, int delay );
   int GetKaraokeSongsCount();
@@ -468,8 +468,10 @@ protected:
   std::map<CStdString, int> m_thumbCache;
   std::map<CStdString, CAlbum> m_albumCache;
 
-  virtual bool CreateTables();
-  virtual int GetMinVersion() const;
+  virtual void CreateTables();
+  virtual void CreateAnalytics();
+  virtual int GetMinSchemaVersion() const { return 18; }
+  virtual int GetSchemaVersion() const;
 
   const char *GetBaseDBName() const { return "MyMusic"; };
 
@@ -479,7 +481,6 @@ private:
    */
   virtual void CreateViews();
 
-  void SplitString(const CStdString &multiString, std::vector<std::string> &vecStrings, CStdString &extraStrings);
   CSong GetSongFromDataset();
   CSong GetSongFromDataset(const dbiplus::sql_record* const record, int offset = 0);
   CArtist GetArtistFromDataset(dbiplus::Dataset* pDS, int offset = 0, bool needThumb = true);
@@ -496,7 +497,7 @@ private:
   bool CleanupAlbums();
   bool CleanupArtists();
   bool CleanupGenres();
-  virtual bool UpdateOldVersion(int version);
+  virtual void UpdateTables(int version);
   bool SearchArtists(const CStdString& search, CFileItemList &artists);
   bool SearchAlbums(const CStdString& search, CFileItemList &albums);
   bool SearchSongs(const CStdString& strSearch, CFileItemList &songs);
@@ -513,7 +514,6 @@ private:
     song_iTrack,
     song_iDuration,
     song_iYear,
-    song_dwFileNameCRC,
     song_strFileName,
     song_strMusicBrainzTrackID,
     song_iTimesPlayed,

@@ -44,6 +44,7 @@
 #include "settings/MediaSettings.h"
 #include "cores/VideoRenderers/RenderManager.h"
 #include "win32/WIN32Util.h"
+#include "utils/Log.h"
 
 #define ALLOW_ADDING_SURFACES 0
 
@@ -72,11 +73,11 @@ static bool LoadDXVA()
 
 
 
-static void RelBufferS(AVCodecContext *avctx, AVFrame *pic)
-{ ((CDecoder*)((CDVDVideoCodecFFmpeg*)avctx->opaque)->GetHardware())->RelBuffer(avctx, pic); }
+static void RelBufferS(void *opaque, uint8_t *data)
+{ ((CDecoder*)((CDVDVideoCodecFFmpeg*)opaque)->GetHardware())->RelBuffer(data); }
 
-static int GetBufferS(AVCodecContext *avctx, AVFrame *pic) 
-{  return ((CDecoder*)((CDVDVideoCodecFFmpeg*)avctx->opaque)->GetHardware())->GetBuffer(avctx, pic); }
+static int GetBufferS(AVCodecContext *avctx, AVFrame *pic, int flags) 
+{  return ((CDecoder*)((CDVDVideoCodecFFmpeg*)avctx->opaque)->GetHardware())->GetBuffer(avctx, pic, flags); }
 
 
 DEFINE_GUID(DXVADDI_Intel_ModeH264_A, 0x604F8E64,0x4951,0x4c54,0x88,0xFE,0xAB,0xD2,0x5C,0x15,0xB3,0xD6);
@@ -103,11 +104,13 @@ static const dxva2_mode_t dxva2_modes[] = {
     { "MPEG2 MoComp", &DXVA2_ModeMPEG2_MoComp,  0 },
     { "MPEG2 IDCT",   &DXVA2_ModeMPEG2_IDCT,    0 },
 
-    // Intel drivers return standard modes in addition to the Intel specific ones. Try the Intel specific first, they work better for Sandy Bridges.
+#ifndef FF_DXVA2_WORKAROUND_INTEL_CLEARVIDEO
+    /* We must prefer Intel specific ones if the flag doesn't exists */
     { "Intel H.264 VLD, no FGT",                                      &DXVADDI_Intel_ModeH264_E, AV_CODEC_ID_H264 },
     { "Intel H.264 inverse discrete cosine transform (IDCT), no FGT", &DXVADDI_Intel_ModeH264_C, 0 },
     { "Intel H.264 motion compensation (MoComp), no FGT",             &DXVADDI_Intel_ModeH264_A, 0 },
     { "Intel VC-1 VLD",                                               &DXVADDI_Intel_ModeVC1_E,  0 },
+#endif
 
     { "H.264 variable-length decoder (VLD), FGT",               &DXVA2_ModeH264_F, AV_CODEC_ID_H264 },
     { "H.264 VLD, no FGT",                                      &DXVA2_ModeH264_E, AV_CODEC_ID_H264 },
@@ -130,6 +133,14 @@ static const dxva2_mode_t dxva2_modes[] = {
     { "VC-1 IDCT",            &DXVA2_ModeVC1_C,    0 },
     { "VC-1 MoComp",          &DXVA2_ModeVC1_B,    0 },
     { "VC-1 post processing", &DXVA2_ModeVC1_A,    0 },
+
+#ifdef FF_DXVA2_WORKAROUND_INTEL_CLEARVIDEO
+    /* Intel specific modes (only useful on older GPUs) */
+    { "Intel H.264 VLD, no FGT",                                      &DXVADDI_Intel_ModeH264_E, AV_CODEC_ID_H264 },
+    { "Intel H.264 inverse discrete cosine transform (IDCT), no FGT", &DXVADDI_Intel_ModeH264_C, 0 },
+    { "Intel H.264 motion compensation (MoComp), no FGT",             &DXVADDI_Intel_ModeH264_A, 0 },
+    { "Intel VC-1 VLD",                                               &DXVADDI_Intel_ModeVC1_E,  0 },
+#endif
 
     { NULL, NULL, 0 }
 };
@@ -685,11 +696,19 @@ bool CDecoder::Open(AVCodecContext *avctx, enum PixelFormat fmt, unsigned int su
   if(!OpenDecoder())
     return false;
 
-  avctx->get_buffer      = GetBufferS;
-  avctx->release_buffer  = RelBufferS;
+  avctx->get_buffer2     = GetBufferS;
   avctx->hwaccel_context = m_context;
 
-  if (IsL41LimitedATI())
+  D3DADAPTER_IDENTIFIER9 AIdentifier = g_Windowing.GetAIdentifier();
+  if (AIdentifier.VendorId == PCIV_Intel && m_input == DXVADDI_Intel_ModeH264_E)
+  {
+#ifdef FF_DXVA2_WORKAROUND_INTEL_CLEARVIDEO
+    m_context->workaround |= FF_DXVA2_WORKAROUND_INTEL_CLEARVIDEO;
+#else
+    CLog::Log(LOGWARNING, "DXVA - used Intel ClearVideo decoder, but no support workaround for it in libavcodec");
+#endif
+  }
+  else if (AIdentifier.VendorId == PCIV_ATI && IsL41LimitedATI())
   {
 #ifdef FF_DXVA2_WORKAROUND_SCALING_LIST_ZIGZAG
     m_context->workaround |= FF_DXVA2_WORKAROUND_SCALING_LIST_ZIGZAG;
@@ -883,10 +902,10 @@ bool CDecoder::Supports(enum PixelFormat fmt)
   return false;
 }
 
-void CDecoder::RelBuffer(AVCodecContext *avctx, AVFrame *pic)
+void CDecoder::RelBuffer(uint8_t *data)
 {
   CSingleLock lock(m_section);
-  IDirect3DSurface9* surface = (IDirect3DSurface9*)pic->data[3];
+  IDirect3DSurface9* surface = (IDirect3DSurface9*)data;
 
   for(unsigned i = 0; i < m_buffer_count; i++)
   {
@@ -897,11 +916,9 @@ void CDecoder::RelBuffer(AVCodecContext *avctx, AVFrame *pic)
       break;
     }
   }
-  for(unsigned i = 0; i < 4; i++)
-    pic->data[i] = NULL;
 }
 
-int CDecoder::GetBuffer(AVCodecContext *avctx, AVFrame *pic)
+int CDecoder::GetBuffer(AVCodecContext *avctx, AVFrame *pic, int flags)
 {
   CSingleLock lock(m_section);
   if(avctx->coded_width  != m_format.SampleWidth
@@ -948,7 +965,6 @@ int CDecoder::GetBuffer(AVCodecContext *avctx, AVFrame *pic)
   }
 
   pic->reordered_opaque = avctx->reordered_opaque;
-  pic->type = FF_BUFFER_TYPE_USER;
 
   for(unsigned i = 0; i < 4; i++)
   {
@@ -958,6 +974,13 @@ int CDecoder::GetBuffer(AVCodecContext *avctx, AVFrame *pic)
 
   pic->data[0] = (uint8_t*)buf->surface;
   pic->data[3] = (uint8_t*)buf->surface;
+  AVBufferRef *buffer = av_buffer_create(pic->data[3], 0, RelBufferS, avctx->opaque, 0);
+  if (!buffer)
+  {
+    CLog::Log(LOGERROR, "DXVA - error creating buffer");
+    return -1;
+  }
+  pic->buf[0] = buffer;
   buf->used = true;
 
   return 0;

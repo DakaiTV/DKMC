@@ -268,11 +268,6 @@ void CPowerManager::OnWake()
 #if defined(TARGET_WINDOWS)
     ShowWindow(g_hWnd,SW_RESTORE);
     SetForegroundWindow(g_hWnd);
-#elif !defined(TARGET_DARWIN_OSX)
-    // Hack to reclaim focus, thus rehiding system mouse pointer.
-    // Surely there's a better way?
-    g_graphicsContext.ToggleFullScreenRoot();
-    g_graphicsContext.ToggleFullScreenRoot();
 #endif
   }
   g_application.ResetScreenSaver();
@@ -300,7 +295,7 @@ void CPowerManager::OnLowBattery()
   CAnnouncementManager::Announce(System, "xbmc", "OnLowBattery");
 }
 
-void CPowerManager::SettingOptionsShutdownStatesFiller(const CSetting *setting, std::vector< std::pair<std::string, int> > &list, int &current)
+void CPowerManager::SettingOptionsShutdownStatesFiller(const CSetting *setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data)
 {
   if (g_powerManager.CanPowerdown())
     list.push_back(make_pair(g_localizeStrings.Get(13005), POWERSTATE_SHUTDOWN));

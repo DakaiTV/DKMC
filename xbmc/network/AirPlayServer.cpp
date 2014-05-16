@@ -43,6 +43,9 @@
 #include "URL.h"
 #include "cores/IPlayer.h"
 #include "interfaces/AnnouncementManager.h"
+#ifdef HAS_ZEROCONF
+#include "network/Zeroconf.h"
+#endif // HAS_ZEROCONF
 
 using namespace ANNOUNCEMENT;
 
@@ -60,6 +63,7 @@ using namespace ANNOUNCEMENT;
 #define AIRPLAY_STATUS_NOT_IMPLEMENTED     501
 #define AIRPLAY_STATUS_NO_RESPONSE_NEEDED  1000
 
+CCriticalSection CAirPlayServer::ServerInstanceLock;
 CAirPlayServer *CAirPlayServer::ServerInstance = NULL;
 int CAirPlayServer::m_isPlaying = 0;
 
@@ -153,11 +157,19 @@ const char *eventStrings[] = {"playing", "paused", "loading", "stopped"};
 
 void CAirPlayServer::Announce(AnnouncementFlag flag, const char *sender, const char *message, const CVariant &data)
 {
+  CSingleLock lock(ServerInstanceLock);
+
   if ( (flag & Player) && strcmp(sender, "xbmc") == 0 && ServerInstance)
   {
     if (strcmp(message, "OnStop") == 0)
     {
-      restoreVolume();
+      bool shouldRestoreVolume = true;
+      if (data.isMember("player") && data["player"].isMember("playerid"))
+        shouldRestoreVolume = (data["player"]["playerid"] != PLAYLIST_PICTURE);
+
+      if (shouldRestoreVolume)
+        restoreVolume();
+
       ServerInstance->AnnounceToClients(EVENT_STOPPED);
     }
     else if (strcmp(message, "OnPlay") == 0)
@@ -175,6 +187,8 @@ bool CAirPlayServer::StartServer(int port, bool nonlocal)
 {
   StopServer(true);
 
+  CSingleLock lock(ServerInstanceLock);
+
   ServerInstance = new CAirPlayServer(port, nonlocal);
   if (ServerInstance->Initialize())
   {
@@ -187,6 +201,7 @@ bool CAirPlayServer::StartServer(int port, bool nonlocal)
 
 bool CAirPlayServer::SetCredentials(bool usePassword, const CStdString& password)
 {
+  CSingleLock lock(ServerInstanceLock);
   bool ret = false;
 
   if (ServerInstance)
@@ -205,6 +220,7 @@ bool CAirPlayServer::SetInternalCredentials(bool usePassword, const CStdString& 
 
 void CAirPlayServer::StopServer(bool bWait)
 {
+  CSingleLock lock(ServerInstanceLock);
   if (ServerInstance)
   {
     ServerInstance->StopThread(bWait);
@@ -275,6 +291,18 @@ CAirPlayServer::CAirPlayServer(int port, bool nonlocal) : CThread("AirPlayServer
 CAirPlayServer::~CAirPlayServer()
 {
   CAnnouncementManager::RemoveAnnouncer(this);
+}
+
+void handleZeroconfAnnouncement()
+{
+#if defined(HAS_ZEROCONF)
+  static XbmcThreads::EndTime timeout(10000);
+  if(timeout.IsTimePast())
+  {
+    CZeroconf::GetInstance()->ForceReAnnounceService("servers.airplay");
+    timeout.Set(10000);
+  }
+#endif
 }
 
 void CAirPlayServer::Process()
@@ -357,6 +385,12 @@ void CAirPlayServer::Process()
         }
       }
     }
+    
+    // by reannouncing the zeroconf service
+    // we fix issues where xbmc is detected
+    // as audio-only target on devices with
+    // ios7 and later
+    handleZeroconfAnnouncement();    
   }
 
   Deinitialize();
@@ -667,13 +701,17 @@ bool CAirPlayServer::CTCPClient::checkAuthorization(const CStdString& authStr,
 
 void CAirPlayServer::backupVolume()
 {
-  if (ServerInstance->m_origVolume == -1)
+  CSingleLock lock(ServerInstanceLock);
+  
+  if (ServerInstance && ServerInstance->m_origVolume == -1)
     ServerInstance->m_origVolume = (int)g_application.GetVolume();
 }
 
 void CAirPlayServer::restoreVolume()
 {
-  if (ServerInstance->m_origVolume != -1 && CSettings::Get().GetBool("services.airplayvolumecontrol"))
+  CSingleLock lock(ServerInstanceLock);
+
+  if (ServerInstance && ServerInstance->m_origVolume != -1 && CSettings::Get().GetBool("services.airplayvolumecontrol"))
   {
     g_application.SetVolume((float)ServerInstance->m_origVolume);
     ServerInstance->m_origVolume = -1;

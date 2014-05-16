@@ -36,8 +36,12 @@ typedef map<int, set<CFileItemPtr> > SetMap;
 
 bool GroupUtils::Group(GroupBy groupBy, const std::string &baseDir, const CFileItemList &items, CFileItemList &groupedItems, GroupAttribute groupAttributes /* = GroupAttributeNone */)
 {
-  if (items.Size() <= 0 || groupBy == GroupByNone)
+  if (groupBy == GroupByNone)
     return false;
+
+  // nothing to do if there are no items to group
+  if (items.Size() <= 0)
+    return true;
 
   SetMap setMap;
   for (int index = 0; index < items.Size(); index++)
@@ -74,7 +78,7 @@ bool GroupUtils::Group(GroupBy groupBy, const std::string &baseDir, const CFileI
 
       CFileItemPtr pItem(new CFileItem((*set->second.begin())->GetVideoInfoTag()->m_strSet));
       pItem->GetVideoInfoTag()->m_iDbId = set->first;
-      pItem->GetVideoInfoTag()->m_type = "set";
+      pItem->GetVideoInfoTag()->m_type = MediaTypeVideoCollection;
 
       std::string basePath = StringUtils::Format("videodb://movies/sets/%ld/", set->first);
       CVideoDbUrl videoUrl;

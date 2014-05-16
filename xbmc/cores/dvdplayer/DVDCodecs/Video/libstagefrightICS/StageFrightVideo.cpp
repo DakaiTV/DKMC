@@ -396,11 +396,6 @@ bool CStageFrightVideo::Open(CDVDStreamInfo &hints)
   CLog::Log(LOGDEBUG, "%s::Open\n", CLASSNAME);
 #endif
 
-  CLog::Log(LOGDEBUG,
-        "CStageFrightVideo - p:%s, d:%s, b:%s - m:%s, b:%s, m:%s, h:%s",
-        CJNIBuild::PRODUCT.c_str(), CJNIBuild::DEVICE.c_str(), CJNIBuild::BOARD.c_str(),
-        CJNIBuild::MANUFACTURER.c_str(), CJNIBuild::BRAND.c_str(), CJNIBuild::MODEL.c_str(), CJNIBuild::HARDWARE.c_str());
-
   CSingleLock lock(g_graphicsContext);
 
   // stagefright crashes with null size. Trap this...
@@ -626,6 +621,7 @@ int  CStageFrightVideo::Decode(uint8_t *pData, int iSize, double dts, double pts
     }
 
     fast_memcpy(frame->medbuf->data(), demuxer_content, demuxer_bytes);
+    frame->medbuf->set_range(0, demuxer_bytes);
     frame->medbuf->meta_data()->clear();
     frame->medbuf->meta_data()->setInt64(kKeyTime, frame->pts);
 

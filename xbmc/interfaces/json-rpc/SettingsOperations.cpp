@@ -24,6 +24,7 @@
 #include "settings/SettingControl.h"
 #include "settings/SettingPath.h"
 #include "settings/Settings.h"
+#include "settings/SettingUtils.h"
 #include "settings/lib/Setting.h"
 #include "settings/lib/SettingSection.h"
 #include "guilib/LocalizeStrings.h"
@@ -115,11 +116,14 @@ JSONRPC_STATUS CSettingsOperations::GetCategories(const CStdString &method, ITra
           SettingList settings = (*itGroup)->GetSettings(level);
           for (SettingList::const_iterator itSetting = settings.begin(); itSetting != settings.end(); ++itSetting)
           {
-            CVariant varSetting(CVariant::VariantTypeObject);
-            if (!SerializeSetting(*itSetting, varSetting))
-              continue;
+            if ((*itSetting)->IsVisible())
+            {
+              CVariant varSetting(CVariant::VariantTypeObject);
+              if (!SerializeSetting(*itSetting, varSetting))
+                continue;
 
-            varGroup["settings"].push_back(varSetting);
+              varGroup["settings"].push_back(varSetting);
+            }
           }
 
           varCategory["groups"].push_back(varGroup);
@@ -174,11 +178,14 @@ JSONRPC_STATUS CSettingsOperations::GetSettings(const CStdString &method, ITrans
           SettingList settings = (*itGroup)->GetSettings(level);
           for (SettingList::const_iterator itSetting = settings.begin(); itSetting != settings.end(); ++itSetting)
           {
-            CVariant varSetting(CVariant::VariantTypeObject);
-            if (!SerializeSetting(*itSetting, varSetting))
-              continue;
+            if ((*itSetting)->IsVisible())
+            {
+              CVariant varSetting(CVariant::VariantTypeObject);
+              if (!SerializeSetting(*itSetting, varSetting))
+                continue;
 
-            result["settings"].push_back(varSetting);
+              result["settings"].push_back(varSetting);
+            }
           }
         }
         found = true;
@@ -200,7 +207,8 @@ JSONRPC_STATUS CSettingsOperations::GetSettingValue(const CStdString &method, IT
   string settingId = parameterObject["setting"].asString();
 
   CSetting* setting = CSettings::Get().GetSetting(settingId);
-  if (setting == NULL)
+  if (setting == NULL ||
+      !setting->IsVisible())
     return InvalidParams;
 
   CVariant value;
@@ -245,7 +253,8 @@ JSONRPC_STATUS CSettingsOperations::SetSettingValue(const CStdString &method, IT
   CVariant value = parameterObject["value"];
 
   CSetting* setting = CSettings::Get().GetSetting(settingId);
-  if (setting == NULL)
+  if (setting == NULL ||
+      !setting->IsVisible())
     return InvalidParams;
 
   switch (setting->GetType())
@@ -305,7 +314,8 @@ JSONRPC_STATUS CSettingsOperations::ResetSettingValue(const CStdString &method, 
   string settingId = parameterObject["setting"].asString();
 
   CSetting* setting = CSettings::Get().GetSetting(settingId);
-  if (setting == NULL)
+  if (setting == NULL ||
+      !setting->IsVisible())
     return InvalidParams;
 
   switch (setting->GetType())
@@ -588,13 +598,13 @@ bool CSettingsOperations::SerializeSettingList(const CSettingList* setting, CVar
       !SerializeSetting(setting->GetDefinition(), obj["definition"]))
     return false;
 
-  SerializeSettingListValues(CSettings::Get().GetList(setting->GetId()), obj["value"]);
-  SerializeSettingListValues(CSettings::ListToValues(setting, setting->GetDefault()), obj["default"]);
+  SerializeSettingListValues(CSettingUtils::GetList(setting), obj["value"]);
+  SerializeSettingListValues(CSettingUtils::ListToValues(setting, setting->GetDefault()), obj["default"]);
 
   obj["elementtype"] = obj["definition"]["type"];
   obj["delimiter"] = setting->GetDelimiter();
-  obj["minimum"] = setting->GetMinimum();
-  obj["maximum"] = setting->GetMaximum();
+  obj["minimumItems"] = setting->GetMinimumItems();
+  obj["maximumItems"] = setting->GetMaximumItems();
 
   return true;
 }
@@ -674,6 +684,35 @@ bool CSettingsOperations::SerializeSettingControl(const ISettingControl* control
     if (list->GetHeading() >= 0)
       obj["heading"] = g_localizeStrings.Get(list->GetHeading());
     obj["multiselect"] = list->CanMultiSelect();
+  }
+  else if (type == "slider")
+  {
+    const CSettingControlSlider* slider = static_cast<const CSettingControlSlider*>(control);
+    if (slider == NULL)
+      return false;
+
+    if (slider->GetHeading() >= 0)
+      obj["heading"] = g_localizeStrings.Get(slider->GetHeading());
+    obj["popup"] = slider->UsePopup();
+    if (slider->GetFormatLabel() >= 0)
+      obj["formatlabel"] = g_localizeStrings.Get(slider->GetFormatLabel());
+    else
+      obj["formatlabel"] = slider->GetFormatString();
+  }
+  else if (type == "range")
+  {
+    const CSettingControlRange* range = static_cast<const CSettingControlRange*>(control);
+    if (range == NULL)
+      return false;
+
+    if (range->GetFormatLabel() >= 0)
+      obj["formatlabel"] = g_localizeStrings.Get(range->GetFormatLabel());
+    else
+      obj["formatlabel"] = "";
+    if (range->GetValueFormatLabel() >= 0)
+      obj["formatvalue"] = g_localizeStrings.Get(range->GetValueFormatLabel());
+    else
+      obj["formatvalue"] = range->GetValueFormat();
   }
   else if (type != "toggle")
     return false;

@@ -49,6 +49,7 @@
 #include "utils/XMLUtils.h"
 #if defined(TARGET_ANDROID)
 #include "android/jni/Build.h"
+#include "utils/AMLUtils.h"
 #endif
 
 /* Target identification */
@@ -98,8 +99,6 @@ CSysData::INTERNET_STATE CSysInfoJob::GetInternetState()
   XFILE::CCurlFile http;
   if (http.IsInternet())
     return CSysData::CONNECTED;
-  if (http.IsInternet(false))
-    return CSysData::NO_DNS;
   return CSysData::DISCONNECTED;
 }
 
@@ -206,8 +205,6 @@ CStdString CSysInfo::TranslateInfo(int info) const
   case SYSTEM_INTERNET_STATE:
     if (m_info.internetState == CSysData::CONNECTED)
       return g_localizeStrings.Get(13296);
-    else if (m_info.internetState == CSysData::NO_DNS)
-      return g_localizeStrings.Get(13274);
     else
       return g_localizeStrings.Get(13297);
   case SYSTEM_BATTERY_LEVEL:
@@ -401,6 +398,15 @@ bool CSysInfo::IsAeroDisabled()
   return false;
 }
 
+bool CSysInfo::HasHW3DInterlaced()
+{
+#if defined(TARGET_ANDROID)
+  if (aml_hw3d_present())
+    return true;
+#endif
+  return false;
+}
+
 CSysInfo::WindowsVersion CSysInfo::m_WinVer = WindowsVersionUnknown;
 
 bool CSysInfo::IsWindowsVersion(WindowsVersion ver)
@@ -466,7 +472,8 @@ int CSysInfo::GetKernelBitness(void)
   if (uname(&un) == 0)
   {
     std::string machine(un.machine);
-    if (machine == "x86_64" || machine == "amd64" || machine == "arm64" || machine == "aarch64" || machine == "ppc64" || machine == "ia64")
+    if (machine == "x86_64" || machine == "amd64" || machine == "arm64" || machine == "aarch64" || machine == "ppc64" ||
+        machine == "ia64" || machine == "mips64")
       return 64;
     return 32;
   }
@@ -476,9 +483,39 @@ int CSysInfo::GetKernelBitness(void)
 #endif
 }
 
+std::string CSysInfo::GetKernelCpuFamily(void)
+{
+#ifdef TARGET_WINDOWS
+  SYSTEM_INFO si;
+  GetSystemInfo(&si);
+  if (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL ||
+      si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64)
+    return "x86";
+
+  if (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_ARM)
+    return "ARM";
+#elif defined(TARGET_POSIX)
+  struct utsname un;
+  if (uname(&un) == 0)
+  {
+    std::string machine(un.machine);
+    if (machine.compare(0, 3, "arm", 3) == 0)
+      return "ARM";
+    if (machine.compare(0, 4, "mips", 4) == 0)
+      return "MIPS";
+    if (machine.compare(0, 4, "i686", 4) == 0 || machine == "i386" || machine == "amd64" ||  machine.compare(0, 3, "x86", 3) == 0)
+      return "x86";
+    if (machine.compare(0, 3, "ppc", 3) == 0 || machine.compare(0, 5, "power", 5) == 0)
+      return "PowerPC";
+  }
+#endif
+  return "unknown CPU family";
+}
+
 int CSysInfo::GetXbmcBitness(void)
 {
-#if defined (__aarch64__) || defined(__arm64__) || defined(__amd64__) || defined(__amd64) || defined(__x86_64__) || defined(__x86_64) || defined(_M_X64) || defined(_M_AMD64) || defined(__ppc64__)
+#if defined (__aarch64__) || defined(__arm64__) || defined(__amd64__) || defined(__amd64) || defined(__x86_64__) || defined(__x86_64) || defined(_M_X64) || \
+  defined(_M_AMD64) || defined(__ppc64__) || defined(__mips64)
   return 64;
 #elif defined(__thumb__) || defined(_M_ARMT) || defined(__arm__) || defined(_M_ARM) || defined(__mips__) || defined(mips) || defined(__mips) || defined(i386) || \
   defined(__i386) || defined(__i386__) || defined(__i486__) || defined(__i586__) || defined(__i686__) || defined(_M_IX86) || defined(_X86_) || defined(__powerpc) || \
@@ -553,6 +590,8 @@ CStdString CSysInfo::GetKernelVersion()
       }
     }
 
+    strKernel.append(" ");
+    strKernel.append(GetKernelCpuFamily());
     strKernel.append(StringUtils::Format(" %d-bit", GetKernelBitness()));
 
     strKernel.append(StringUtils::Format(", build %d", osvi.dwBuildNumber));

@@ -35,7 +35,7 @@
 class CSysData
 {
 public:
-  enum INTERNET_STATE { UNKNOWN, CONNECTED, NO_DNS, DISCONNECTED };
+  enum INTERNET_STATE { UNKNOWN, CONNECTED, DISCONNECTED };
   CSysData()
   {
     Reset();
@@ -117,11 +117,13 @@ public:
   bool IsAppleTV2();
   bool HasVideoToolBoxDecoder();
   bool IsAeroDisabled();
+  bool HasHW3DInterlaced();
   static bool IsWindowsVersion(WindowsVersion ver);
   static bool IsWindowsVersionAtLeast(WindowsVersion ver);
   static WindowsVersion GetWindowsVersion();
   static int GetKernelBitness(void);
   static int GetXbmcBitness(void);
+  static std::string GetKernelCpuFamily(void);
   static CStdString GetKernelVersion();
   CStdString GetCPUModel();
   CStdString GetCPUBogoMips();
