@@ -87,7 +87,7 @@ PAPlayer::~PAPlayer()
   delete m_FileItem;
 }
 
-bool PAPlayer::HandlesType(const CStdString &type)
+bool PAPlayer::HandlesType(const std::string &type)
 {
   ICodec* codec = CodecFactory::CreateCodec(type);
   if (codec && codec->CanInit())
@@ -384,6 +384,9 @@ bool PAPlayer::QueueNextFileEx(const CFileItem &file, bool fadeIn/* = true */, b
     CThread::Sleep(1);
   }
 
+  // set m_upcomingCrossfadeMS depending on type of file and user settings
+  UpdateCrossfadeTime(file);
+
   /* init the streaminfo struct */
   si->m_decoder.GetDataFormat(&si->m_channelInfo, &si->m_sampleRate, &si->m_encodedSampleRate, &si->m_dataFormat);
   si->m_startOffset        = file.m_lStartOffset * 1000 / 75;
@@ -421,8 +424,6 @@ bool PAPlayer::QueueNextFileEx(const CFileItem &file, bool fadeIn/* = true */, b
     delete si;
     return false;
   }
-
-  UpdateCrossfadeTime(file);
 
   si->m_prepareTriggered = false;
   si->m_playNextAtFrame = 0;
@@ -828,15 +829,18 @@ bool PAPlayer::QueueData(StreamInfo *si)
   if (!samples)
     return true;
 
-  void* data = si->m_decoder.GetData(samples);
+  // we want complete frames
+  samples -= samples % si->m_channelInfo.Count();
+
+  uint8_t* data = (uint8_t*)si->m_decoder.GetData(samples);
   if (!data)
   {
     CLog::Log(LOGERROR, "PAPlayer::QueueData - Failed to get data from the decoder");
     return false;
   }
 
-  unsigned int added = si->m_stream->AddData(data, samples * si->m_bytesPerSample);
-  si->m_framesSent += added / si->m_bytesPerFrame;
+  unsigned int added = si->m_stream->AddData(&data, 0, samples/si->m_channelInfo.Count(), 0);
+  si->m_framesSent += added;
 
   const ICodec* codec = si->m_decoder.GetCodec();
   m_playerGUIData.m_cacheLevel = codec ? codec->GetCacheLevel() : 0; //update for GUI
@@ -1051,7 +1055,7 @@ void PAPlayer::UpdateGUIData(StreamInfo *si)
   const ICodec* codec = si->m_decoder.GetCodec();
 
   m_playerGUIData.m_audioBitrate = codec ? codec->m_Bitrate : 0;
-  strncpy(m_playerGUIData.m_codec,codec ? codec->m_CodecName : "",20);
+  strncpy(m_playerGUIData.m_codec,codec ? codec->m_CodecName.c_str() : "",20);
   m_playerGUIData.m_cacheLevel   = codec ? codec->GetCacheLevel() : 0;
   m_playerGUIData.m_bitsPerSample = (codec && codec->m_BitsPerCodedSample) ? codec->m_BitsPerCodedSample : si->m_bytesPerSample << 3;
 

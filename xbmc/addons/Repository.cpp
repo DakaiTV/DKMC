@@ -26,9 +26,9 @@
 #include "dialogs/GUIDialogKaiToast.h"
 #include "filesystem/File.h"
 #include "filesystem/PluginDirectory.h"
-#include "pvr/PVRManager.h"
 #include "settings/Settings.h"
 #include "utils/log.h"
+#include "utils/JobManager.h"
 #include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
 #include "utils/XBMCTinyXML.h"
@@ -71,11 +71,11 @@ CRepository::CRepository(const cp_extension_t *ext)
           DirInfo dir;
           dir.version    = min_version;
           dir.checksum   = CAddonMgr::Get().GetExtValue(&ext->configuration->children[i], "checksum");
-          dir.compressed = CAddonMgr::Get().GetExtValue(&ext->configuration->children[i], "info@compressed").Equals("true");
+          dir.compressed = CAddonMgr::Get().GetExtValue(&ext->configuration->children[i], "info@compressed") == "true";
           dir.info       = CAddonMgr::Get().GetExtValue(&ext->configuration->children[i], "info");
           dir.datadir    = CAddonMgr::Get().GetExtValue(&ext->configuration->children[i], "datadir");
-          dir.zipped     = CAddonMgr::Get().GetExtValue(&ext->configuration->children[i], "datadir@zip").Equals("true");
-          dir.hashes     = CAddonMgr::Get().GetExtValue(&ext->configuration->children[i], "hashes").Equals("true");
+          dir.zipped     = CAddonMgr::Get().GetExtValue(&ext->configuration->children[i], "datadir@zip") == "true";
+          dir.hashes     = CAddonMgr::Get().GetExtValue(&ext->configuration->children[i], "hashes") == "true";
           m_dirs.push_back(dir);
         }
       }
@@ -85,11 +85,11 @@ CRepository::CRepository(const cp_extension_t *ext)
     {
       DirInfo info;
       info.checksum   = CAddonMgr::Get().GetExtValue(ext->configuration, "checksum");
-      info.compressed = CAddonMgr::Get().GetExtValue(ext->configuration, "info@compressed").Equals("true");
+      info.compressed = CAddonMgr::Get().GetExtValue(ext->configuration, "info@compressed") == "true";
       info.info       = CAddonMgr::Get().GetExtValue(ext->configuration, "info");
       info.datadir    = CAddonMgr::Get().GetExtValue(ext->configuration, "datadir");
-      info.zipped     = CAddonMgr::Get().GetExtValue(ext->configuration, "datadir@zip").Equals("true");
-      info.hashes     = CAddonMgr::Get().GetExtValue(ext->configuration, "hashes").Equals("true");
+      info.zipped     = CAddonMgr::Get().GetExtValue(ext->configuration, "datadir@zip") == "true";
+      info.hashes     = CAddonMgr::Get().GetExtValue(ext->configuration, "hashes") == "true";
       m_dirs.push_back(info);
     }
   }
@@ -190,10 +190,10 @@ VECADDONS CRepository::Parse(const DirInfo& dir)
       AddonPtr addon = *i;
       if (dir.zipped)
       {
-        string file = StringUtils::Format("%s/%s-%s.zip", addon->ID().c_str(), addon->ID().c_str(), addon->Version().c_str());
+        string file = StringUtils::Format("%s/%s-%s.zip", addon->ID().c_str(), addon->ID().c_str(), addon->Version().asString().c_str());
         addon->Props().path = URIUtils::AddFileToFolder(dir.datadir,file);
         SET_IF_NOT_EMPTY(addon->Props().icon,URIUtils::AddFileToFolder(dir.datadir,addon->ID()+"/icon.png"))
-        file = StringUtils::Format("%s/changelog-%s.txt", addon->ID().c_str(), addon->Version().c_str());
+        file = StringUtils::Format("%s/changelog-%s.txt", addon->ID().c_str(), addon->Version().asString().c_str());
         SET_IF_NOT_EMPTY(addon->Props().changelog,URIUtils::AddFileToFolder(dir.datadir,file))
         SET_IF_NOT_EMPTY(addon->Props().fanart,URIUtils::AddFileToFolder(dir.datadir,addon->ID()+"/fanart.jpg"))
       }
@@ -208,6 +208,21 @@ VECADDONS CRepository::Parse(const DirInfo& dir)
   }
 
   return result;
+}
+
+void CRepository::OnPostInstall(bool restart, bool update)
+{
+  VECADDONS addons;
+  AddonPtr repo(new CRepository(*this));
+  addons.push_back(repo);
+  CJobManager::GetInstance().AddJob(new CRepositoryUpdateJob(addons), &CAddonInstaller::Get());
+}
+
+void CRepository::OnPostUnInstall()
+{
+  CAddonDatabase database;
+  database.Open();
+  database.DeleteRepository(ID());
 }
 
 CRepositoryUpdateJob::CRepositoryUpdateJob(const VECADDONS &repos)
@@ -273,19 +288,16 @@ bool CRepositoryUpdateJob::DoWork()
     AddonPtr addon;
     CAddonMgr::Get().GetAddon(newAddon->ID(),addon);
     if (addon && newAddon->Version() > addon->Version() &&
-        !database.IsAddonBlacklisted(newAddon->ID(),newAddon->Version().c_str()) &&
+        !database.IsAddonBlacklisted(newAddon->ID(),newAddon->Version().asString()) &&
         deps_met)
     {
-      if (CSettings::Get().GetBool("general.addonautoupdate") || addon->Type() >= ADDON_VIZ_LIBRARY)
+      if (CSettings::Get().GetInt("general.addonupdates") == AUTO_UPDATES_ON)
       {
         string referer;
         if (URIUtils::IsInternetStream(newAddon->Path()))
-          referer = StringUtils::Format("Referer=%s-%s.zip",addon->ID().c_str(),addon->Version().c_str());
+          referer = StringUtils::Format("Referer=%s-%s.zip",addon->ID().c_str(),addon->Version().asString().c_str());
 
-        if (newAddon->Type() == ADDON_PVRDLL &&
-            !PVR::CPVRManager::Get().InstallAddonAllowed(newAddon->ID()))
-          PVR::CPVRManager::Get().MarkAsOutdated(addon->ID(), referer);
-        else
+        if (newAddon->CanInstall(referer))
           CAddonInstaller::Get().Install(addon->ID(), true, referer);
       }
       else

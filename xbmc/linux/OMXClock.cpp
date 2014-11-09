@@ -33,18 +33,18 @@
 #include "utils/MathUtils.h"
 
 #define OMX_PRE_ROLL 200
-#define TP(speed) ((speed) < 0 || (speed) > 4*DVD_PLAYSPEED_NORMAL)
 
 OMXClock::OMXClock()
 {
   m_pause       = false;
 
-  m_fps = 25.0f;
   m_omx_speed = DVD_PLAYSPEED_NORMAL;
   m_WaitMask = 0;
   m_eState = OMX_TIME_ClockStateStopped;
   m_eClock = OMX_TIME_RefClockNone;
   m_clock        = NULL;
+  m_last_media_time = 0.0f;
+  m_last_media_time_read = 0.0f;
 
   pthread_mutex_init(&m_lock, NULL);
 }
@@ -113,6 +113,7 @@ bool OMXClock::OMXSetReferenceClock(bool has_audio, bool lock /* = true */)
     }
     m_eClock = refClock.eClock;
   }
+  m_last_media_time = 0.0f;
   if(lock)
     UnLock();
 
@@ -142,6 +143,7 @@ void OMXClock::OMXDeinitialize()
   m_omx_clock.Deinitialize();
 
   m_omx_speed = DVD_PLAYSPEED_NORMAL;
+  m_last_media_time = 0.0f;
 }
 
 bool OMXClock::OMXStateExecute(bool lock /* = true */)
@@ -169,6 +171,7 @@ bool OMXClock::OMXStateExecute(bool lock /* = true */)
     }
   }
 
+  m_last_media_time = 0.0f;
   if(lock)
     UnLock();
 
@@ -186,6 +189,7 @@ void OMXClock::OMXStateIdle(bool lock /* = true */)
   if(m_omx_clock.GetState() != OMX_StateIdle)
     m_omx_clock.SetStateForComponent(OMX_StateIdle);
 
+  m_last_media_time = 0.0f;
   if(lock)
     UnLock();
 }
@@ -222,6 +226,7 @@ bool  OMXClock::OMXStop(bool lock /* = true */)
   }
   m_eState = clock.eState;
 
+  m_last_media_time = 0.0f;
   if(lock)
     UnLock();
 
@@ -252,6 +257,7 @@ bool OMXClock::OMXStep(int steps /* = 1 */, bool lock /* = true */)
     return false;
   }
 
+  m_last_media_time = 0.0f;
   if(lock)
     UnLock();
 
@@ -302,6 +308,7 @@ bool OMXClock::OMXReset(bool has_video, bool has_audio, bool lock /* = true */)
     }
   }
 
+  m_last_media_time = 0.0f;
   if(lock)
     UnLock();
 
@@ -310,33 +317,45 @@ bool OMXClock::OMXReset(bool has_video, bool has_audio, bool lock /* = true */)
 
 double OMXClock::OMXMediaTime(bool lock /* = true */)
 {
+  double pts = 0.0;
   if(m_omx_clock.GetComponent() == NULL)
     return 0;
 
-  if(lock)
-    Lock();
-
-  OMX_ERRORTYPE omx_err = OMX_ErrorNone;
-  double pts = 0;
-
-  OMX_TIME_CONFIG_TIMESTAMPTYPE timeStamp;
-  OMX_INIT_STRUCTURE(timeStamp);
-  timeStamp.nPortIndex = m_omx_clock.GetInputPort();
-
-  omx_err = m_omx_clock.GetConfig(OMX_IndexConfigTimeCurrentMediaTime, &timeStamp);
-  if(omx_err != OMX_ErrorNone)
+  double now = GetAbsoluteClock();
+  if (now - m_last_media_time_read > DVD_MSEC_TO_TIME(100) || m_last_media_time == 0.0)
   {
-    CLog::Log(LOGERROR, "OMXClock::MediaTime error getting OMX_IndexConfigTimeCurrentMediaTime\n");
+    if(lock)
+      Lock();
+
+    OMX_ERRORTYPE omx_err = OMX_ErrorNone;
+
+    OMX_TIME_CONFIG_TIMESTAMPTYPE timeStamp;
+    OMX_INIT_STRUCTURE(timeStamp);
+    timeStamp.nPortIndex = m_omx_clock.GetInputPort();
+
+    omx_err = m_omx_clock.GetConfig(OMX_IndexConfigTimeCurrentMediaTime, &timeStamp);
+    if(omx_err != OMX_ErrorNone)
+    {
+      CLog::Log(LOGERROR, "OMXClock::MediaTime error getting OMX_IndexConfigTimeCurrentMediaTime\n");
+      if(lock)
+        UnLock();
+      return 0;
+    }
+
+    pts = FromOMXTime(timeStamp.nTimestamp);
+    //CLog::Log(LOGINFO, "OMXClock::MediaTime %.2f (%.2f, %.2f)", pts, m_last_media_time, now - m_last_media_time_read);
+    m_last_media_time = pts;
+    m_last_media_time_read = now;
+
     if(lock)
       UnLock();
-    return 0;
   }
-
-  pts = FromOMXTime(timeStamp.nTimestamp);
-
-  if(lock)
-    UnLock();
-  
+  else
+  {
+    double speed = m_pause ? 0.0 : (double)m_omx_speed / DVD_PLAYSPEED_NORMAL;
+    pts = m_last_media_time + (now - m_last_media_time_read) * speed;
+    //CLog::Log(LOGINFO, "OMXClock::MediaTime cached %.2f (%.2f, %.2f)", pts, m_last_media_time, now - m_last_media_time_read);
+  }
   return pts;
 }
 
@@ -409,6 +428,7 @@ bool OMXClock::OMXMediaTime(double pts, bool lock /* = true*/)
   CLog::Log(LOGDEBUG, "OMXClock::OMXMediaTime set config %s = %.2f", index == OMX_IndexConfigTimeCurrentAudioReference ?
        "OMX_IndexConfigTimeCurrentAudioReference":"OMX_IndexConfigTimeCurrentVideoReference", pts);
 
+  m_last_media_time = 0.0f;
   if(lock)
     UnLock();
 
@@ -428,6 +448,7 @@ bool OMXClock::OMXPause(bool lock /* = true */)
     if (OMXSetSpeed(0, false, true))
       m_pause = true;
 
+    m_last_media_time = 0.0f;
     if(lock)
       UnLock();
   }
@@ -447,6 +468,7 @@ bool OMXClock::OMXResume(bool lock /* = true */)
     if (OMXSetSpeed(m_omx_speed, false, true))
       m_pause = false;
 
+    m_last_media_time = 0.0f;
     if(lock)
       UnLock();
   }
@@ -469,10 +491,7 @@ bool OMXClock::OMXSetSpeed(int speed, bool lock /* = true */, bool pause_resume 
     OMX_TIME_CONFIG_SCALETYPE scaleType;
     OMX_INIT_STRUCTURE(scaleType);
 
-    if (TP(speed))
-      scaleType.xScale = 0; // for trickplay we just pause, and single step
-    else
-      scaleType.xScale = (speed << 16) / DVD_PLAYSPEED_NORMAL;
+    scaleType.xScale = (speed << 16) / DVD_PLAYSPEED_NORMAL;
     omx_err = m_omx_clock.SetConfig(OMX_IndexConfigTimeScale, &scaleType);
     if(omx_err != OMX_ErrorNone)
     {
@@ -484,6 +503,25 @@ bool OMXClock::OMXSetSpeed(int speed, bool lock /* = true */, bool pause_resume 
   }
   if (!pause_resume)
     m_omx_speed = speed;
+
+  m_last_media_time = 0.0f;
+  if(lock)
+    UnLock();
+
+  return true;
+}
+
+bool OMXClock::OMXFlush(bool lock)
+{
+  if(m_omx_clock.GetComponent() == NULL)
+    return false;
+
+  if(lock)
+    Lock();
+
+  CLog::Log(LOGDEBUG, "OMXClock::OMXFlush");
+
+  m_omx_clock.FlushAll();
 
   if(lock)
     UnLock();
@@ -521,6 +559,7 @@ bool OMXClock::HDMIClockSync(bool lock /* = true */)
     return false;
   }
 
+  m_last_media_time = 0.0f;
   if(lock)
     UnLock();
 
@@ -537,40 +576,6 @@ int64_t OMXClock::CurrentHostCounter(void)
 int64_t OMXClock::CurrentHostFrequency(void)
 {
   return( (int64_t)1000000000L );
-}
-
-int OMXClock::GetRefreshRate(double* interval)
-{
-  if(!interval)
-    return false;
-
-  *interval = m_fps;
-  return true;
-}
-
-double OMXClock::NormalizeFrameduration(double frameduration)
-{
-  //if the duration is within 20 microseconds of a common duration, use that
-  const double durations[] = {DVD_TIME_BASE * 1.001 / 24.0, DVD_TIME_BASE / 24.0, DVD_TIME_BASE / 25.0,
-                              DVD_TIME_BASE * 1.001 / 30.0, DVD_TIME_BASE / 30.0, DVD_TIME_BASE / 50.0,
-                              DVD_TIME_BASE * 1.001 / 60.0, DVD_TIME_BASE / 60.0};
-
-  double lowestdiff = DVD_TIME_BASE;
-  int    selected   = -1;
-  for (size_t i = 0; i < sizeof(durations) / sizeof(durations[0]); i++)
-  {
-    double diff = fabs(frameduration - durations[i]);
-    if (diff < DVD_MSEC_TO_TIME(0.02) && diff < lowestdiff)
-    {
-      selected = i;
-      lowestdiff = diff;
-    }
-  }
-
-  if (selected != -1)
-    return durations[selected];
-  else
-    return frameduration;
 }
 
 #endif

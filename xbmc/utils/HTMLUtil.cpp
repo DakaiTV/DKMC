@@ -20,6 +20,7 @@
 
 #include "HTMLUtil.h"
 #include "utils/StringUtils.h"
+#include <wctype.h>
 
 using namespace std;
 using namespace HTML;
@@ -31,10 +32,10 @@ CHTMLUtil::CHTMLUtil(void)
 CHTMLUtil::~CHTMLUtil(void)
 {}
 
-int CHTMLUtil::FindTag(const CStdString& strHTML, const CStdString& strTag, CStdString& strtagFound, int iPos) const
+int CHTMLUtil::FindTag(const std::string& strHTML, const std::string& strTag, std::string& strtagFound, int iPos)
 {
-  CStdString strHTMLLow = strHTML;
-  CStdString strTagLow = strTag;
+  std::string strHTMLLow = strHTML;
+  std::string strTagLow = strTag;
   StringUtils::ToLower(strHTMLLow);
   StringUtils::ToLower(strTagLow);
   strtagFound = "";
@@ -51,10 +52,10 @@ int CHTMLUtil::FindTag(const CStdString& strHTML, const CStdString& strTag, CStd
   return iStart;
 }
 
-int CHTMLUtil::FindClosingTag(const CStdString& strHTML, const CStdString& strTag, CStdString& strtagFound, int iPos) const
+int CHTMLUtil::FindClosingTag(const std::string& strHTML, const std::string& strTag, std::string& strtagFound, int iPos)
 {
-  CStdString strHTMLLow = strHTML;
-  CStdString strTagLow = strTag;
+  std::string strHTMLLow = strHTML;
+  std::string strTagLow = strTag;
   StringUtils::ToLower(strHTMLLow);
   StringUtils::ToLower(strTagLow);
   strtagFound = "";
@@ -78,7 +79,7 @@ int CHTMLUtil::FindClosingTag(const CStdString& strHTML, const CStdString& strTa
   return iStart;
 }
 
-void CHTMLUtil::getValueOfTag(const CStdString& strTagAndValue, CStdString& strValue)
+void CHTMLUtil::getValueOfTag(const std::string& strTagAndValue, std::string& strValue)
 {
   // strTagAndValue contains:
   // like <a href=blablabla.....>value</a>
@@ -93,7 +94,7 @@ void CHTMLUtil::getValueOfTag(const CStdString& strTagAndValue, CStdString& strV
   }
 }
 
-void CHTMLUtil::getAttributeOfTag(const CStdString& strTagAndValue, const CStdString& strTag, CStdString& strValue)
+void CHTMLUtil::getAttributeOfTag(const std::string& strTagAndValue, const std::string& strTag, std::string& strValue)
 {
   // strTagAndValue contains:
   // like <a href=""value".....
@@ -122,10 +123,10 @@ void CHTMLUtil::getAttributeOfTag(const CStdString& strTagAndValue, const CStdSt
   }
 }
 
-void CHTMLUtil::RemoveTags(CStdString& strHTML)
+void CHTMLUtil::RemoveTags(std::string& strHTML)
 {
   int iNested = 0;
-  CStdString strReturn = "";
+  std::string strReturn = "";
   for (int i = 0; i < (int) strHTML.size(); ++i)
   {
     if (strHTML[i] == '<') iNested++;
@@ -285,7 +286,7 @@ static const HTMLMapping mappings[] =
    {L"&zwnj;",    0x200C},
    {NULL,         L'\0'}};
 
-void CHTMLUtil::ConvertHTMLToW(const CStdStringW& strHTML, CStdStringW& strStripped)
+void CHTMLUtil::ConvertHTMLToW(const std::wstring& strHTML, std::wstring& strStripped)
 {
   /* TODO:STRING_CLEANUP */
   if (strHTML.size() == 0)
@@ -297,7 +298,7 @@ void CHTMLUtil::ConvertHTMLToW(const CStdStringW& strHTML, CStdStringW& strStrip
   strStripped = strHTML;
   while (mappings[iPos].html)
   {
-    StringUtils::Replace(strStripped, mappings[iPos].html,CStdStringW(1, mappings[iPos].w));
+    StringUtils::Replace(strStripped, mappings[iPos].html,std::wstring(1, mappings[iPos].w));
     iPos++;
   }
 
@@ -306,9 +307,9 @@ void CHTMLUtil::ConvertHTMLToW(const CStdStringW& strHTML, CStdStringW& strStrip
   {
     size_t iStart = iPos + 1;
     iPos += 2;
-    CStdStringW num;
+    std::wstring num;
     int base = 10;
-    if (strStripped[iPos+1] == L'x')
+    if (strStripped[iPos] == L'x')
     {
       base = 16;
       iPos++;
@@ -316,7 +317,7 @@ void CHTMLUtil::ConvertHTMLToW(const CStdStringW& strHTML, CStdStringW& strStrip
 
     size_t i = iPos;
     while (iPos < strStripped.size() &&
-           (base==16?iswxdigit(strStripped[iPos]):iswdigit(strStripped[iPos])))
+          (base == 16 ? iswxdigit(strStripped[iPos]) : iswdigit(strStripped[iPos])))
       iPos++; 
 
     num = strStripped.substr(i, iPos-i);
@@ -326,7 +327,7 @@ void CHTMLUtil::ConvertHTMLToW(const CStdStringW& strHTML, CStdStringW& strStrip
     else
       num = StringUtils::Format(L"&#x%ls;", num.c_str());
 
-    StringUtils::Replace(strStripped, num,CStdStringW(1,val));
+    StringUtils::Replace(strStripped, num,std::wstring(1,val));
     iPos = strStripped.find(L"&#", iStart);
   }
 }

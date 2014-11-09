@@ -25,7 +25,6 @@
 
 #include "cores/AudioEngine/Sinks/AESinkProfiler.h"
 #include "cores/AudioEngine/Utils/AEUtil.h"
-#include "utils/StdString.h"
 #include "utils/log.h"
 #include "utils/TimeUtils.h"
 
@@ -55,12 +54,12 @@ void CAESinkProfiler::Deinitialize()
 {
 }
 
-double CAESinkProfiler::GetDelay()
+void CAESinkProfiler::GetDelay(AEDelayStatus& status)
 {
-  return 0.0f;
+  status.SetDelay(0);
 }
 
-unsigned int CAESinkProfiler::AddPackets(uint8_t *data, unsigned int frames, bool hasAudio, bool blocking)
+unsigned int CAESinkProfiler::AddPackets(uint8_t **data, unsigned int frames, unsigned int offset)
 {
   int64_t ts = CurrentHostCounter();
   CLog::Log(LOGDEBUG, "CAESinkProfiler::AddPackets - latency %f ms", (float)(ts - m_ts) / 1000000.0f);

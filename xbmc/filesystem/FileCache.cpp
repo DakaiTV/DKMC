@@ -226,7 +226,7 @@ void CFileCache::Process()
         m_nSeekResult = m_source.Seek(cacheMaxPos, SEEK_SET);
         if (m_nSeekResult != cacheMaxPos)
         {
-          CLog::Log(LOGERROR,"CFileCache::Process - Error %d seeking. Seek returned %"PRId64, (int)GetLastError(), m_nSeekResult);
+          CLog::Log(LOGERROR,"CFileCache::Process - Error %d seeking. Seek returned %" PRId64, (int)GetLastError(), m_nSeekResult);
           m_seekPossible = m_source.IoControl(IOCTRL_SEEK_POSSIBLE, NULL);
           sourceSeekFailed = true;
         }
@@ -264,7 +264,7 @@ void CFileCache::Process()
       }
     }
 
-    int iRead = 0;
+    ssize_t iRead = 0;
     if (!cacheReachEOF)
       iRead = m_source.Read(buffer.get(), m_chunkSize);
     if (iRead == 0)
@@ -348,15 +348,18 @@ int CFileCache::Stat(const CURL& url, struct __stat64* buffer)
   return CFile::Stat(url.Get(), buffer);
 }
 
-unsigned int CFileCache::Read(void* lpBuf, int64_t uiBufSize)
+ssize_t CFileCache::Read(void* lpBuf, size_t uiBufSize)
 {
   CSingleLock lock(m_sync);
   if (!m_pCache)
   {
     CLog::Log(LOGERROR,"%s - sanity failed. no cache strategy!", __FUNCTION__);
-    return 0;
+    return -1;
   }
   int64_t iRc;
+
+  if (uiBufSize > SSIZE_MAX)
+    uiBufSize = SSIZE_MAX;
 
 retry:
   // attempt to read
@@ -378,7 +381,7 @@ retry:
   if (iRc == CACHE_RC_TIMEOUT)
   {
     CLog::Log(LOGWARNING, "%s - timeout waiting for data", __FUNCTION__);
-    return 0;
+    return -1;
   }
 
   if (iRc == 0)
@@ -386,7 +389,7 @@ retry:
 
   // unknown error code
   CLog::Log(LOGERROR, "%s - cache strategy returned unknown error code %d", __FUNCTION__, (int)iRc);
-  return 0;
+  return -1;
 }
 
 int64_t CFileCache::Seek(int64_t iFilePosition, int iWhence)
@@ -422,14 +425,14 @@ int64_t CFileCache::Seek(int64_t iFilePosition, int iWhence)
     m_seekEvent.Set();
     if (!m_seekEnded.Wait())
     {
-      CLog::Log(LOGWARNING,"%s - seek to %"PRId64" failed.", __FUNCTION__, m_seekPos);
+      CLog::Log(LOGWARNING,"%s - seek to %" PRId64" failed.", __FUNCTION__, m_seekPos);
       return -1;
     }
 
     /* wait for any remainin data */
     if(m_seekPos < iTarget)
     {
-      CLog::Log(LOGDEBUG,"%s - waiting for position %"PRId64".", __FUNCTION__, iTarget);
+      CLog::Log(LOGDEBUG,"%s - waiting for position %" PRId64".", __FUNCTION__, iTarget);
       if(m_pCache->WaitForData((unsigned)(iTarget - m_seekPos), 10000) < iTarget - m_seekPos)
       {
         CLog::Log(LOGWARNING,"%s - failed to get remaining data", __FUNCTION__);
@@ -475,7 +478,7 @@ void CFileCache::StopThread(bool bWait /*= true*/)
   CThread::StopThread(bWait);
 }
 
-CStdString CFileCache::GetContent()
+std::string CFileCache::GetContent()
 {
   if (!m_source.GetImplemenation())
     return IFile::GetContent();

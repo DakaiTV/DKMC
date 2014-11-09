@@ -1,13 +1,11 @@
 CXXFLAGS += -D__STDC_FORMAT_MACROS
 
-SRCS  = OMXPlayer.cpp
-SRCS += OMXAudio.cpp
+SRCS  = OMXAudio.cpp
 SRCS += OMXVideo.cpp
 SRCS += OMXAudioCodecOMX.cpp
 SRCS += OMXPlayerAudio.cpp
 SRCS += OMXPlayerVideo.cpp
 SRCS += OMXImage.cpp
-SRCS += PCMRemap.cpp
 
 LIB = omxplayer.a
 

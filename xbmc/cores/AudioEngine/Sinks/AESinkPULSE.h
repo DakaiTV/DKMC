@@ -39,9 +39,10 @@ public:
   virtual bool Initialize(AEAudioFormat &format, std::string &device);
   virtual void Deinitialize();
 
-  virtual double       GetDelay        ();
+  virtual double       GetDelay        () { return 0.0; }
+  virtual void         GetDelay        (AEDelayStatus& status);
   virtual double       GetCacheTotal   ();
-  virtual unsigned int AddPackets      (uint8_t *data, unsigned int frames, bool hasAudio, bool blocking = false);
+  virtual unsigned int AddPackets      (uint8_t **data, unsigned int frames, unsigned int offset);
   virtual void         Drain           ();
 
   virtual bool HasVolume() { return true; };
@@ -49,6 +50,8 @@ public:
 
   static void EnumerateDevicesEx(AEDeviceInfoList &list, bool force = false);
   bool IsInitialized();
+  void UpdateInternalVolume(pa_cvolume nVol);
+  pa_stream* GetInternalStream();
   CCriticalSection m_sec;
 private:
   void Pause(bool pause);
@@ -63,9 +66,10 @@ private:
   unsigned int m_BytesPerSecond;
   unsigned int m_BufferSize;
   unsigned int m_Channels;
-  
-  pa_stream *m_Stream;
+
+  pa_stream *m_Stream; 
   pa_cvolume m_Volume;
+  bool m_volume_needs_update;
 
   pa_context *m_Context;
   pa_threaded_mainloop *m_MainLoop;

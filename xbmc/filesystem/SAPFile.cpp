@@ -27,6 +27,7 @@
 
 #include <sys/stat.h>
 #include <vector>
+#include <limits>
 
 using namespace std;
 using namespace XFILE;
@@ -44,7 +45,7 @@ CSAPFile::~CSAPFile()
 
 bool CSAPFile::Open(const CURL& url)
 {
-  CStdString path = url.Get();
+  std::string path = url.Get();
 
   CSingleLock lock(g_sapsessions.m_section);
   for(vector<CSAPSessions::CSession>::iterator it = g_sapsessions.m_sessions.begin(); it != g_sapsessions.m_sessions.end(); it++)
@@ -65,7 +66,7 @@ bool CSAPFile::Open(const CURL& url)
 
 bool CSAPFile::Exists(const CURL& url)
 {
-  CStdString path = url.Get();
+  std::string path = url.Get();
 
   CSingleLock lock(g_sapsessions.m_section);
   for(vector<CSAPSessions::CSession>::iterator it = g_sapsessions.m_sessions.begin(); it != g_sapsessions.m_sessions.end(); it++)
@@ -78,7 +79,7 @@ bool CSAPFile::Exists(const CURL& url)
 
 int CSAPFile::Stat(const CURL& url, struct __stat64* buffer)
 {
-  CStdString path = url.Get();
+  std::string path = url.Get();
 
   if(path == "smb://")
   {
@@ -111,9 +112,14 @@ int CSAPFile::Stat(const CURL& url, struct __stat64* buffer)
 }
 
 
-unsigned int CSAPFile::Read(void *lpBuf, int64_t uiBufSize)
+ssize_t CSAPFile::Read(void *lpBuf, size_t uiBufSize)
 {
-  return (unsigned int)m_stream.readsome((char*)lpBuf, (streamsize)uiBufSize);
+  if (uiBufSize > SSIZE_MAX)
+    uiBufSize = SSIZE_MAX;
+  if (uiBufSize > std::numeric_limits<std::streamsize>::max())
+    uiBufSize = (size_t)std::numeric_limits<std::streamsize>::max();
+
+  return (ssize_t)m_stream.readsome((char*)lpBuf, (streamsize)uiBufSize);
 }
 
 void CSAPFile::Close()
@@ -154,7 +160,7 @@ int64_t CSAPFile::GetPosition()
 
 bool CSAPFile::Delete(const CURL& url)
 {
-  CStdString path = url.Get();
+  std::string path = url.Get();
 
   CSingleLock lock(g_sapsessions.m_section);
   for(vector<CSAPSessions::CSession>::iterator it = g_sapsessions.m_sessions.begin(); it != g_sapsessions.m_sessions.end(); it++)

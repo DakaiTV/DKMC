@@ -24,7 +24,6 @@
 
 #include "utils/LangCodeExpander.h"
 #include "utils/log.h"
-#include "utils/StdString.h"
 
 #include "swighelper.h"
 #include <vector>
@@ -87,17 +86,12 @@ namespace XBMCAddon
      * 
      * function       : string - builtin function to execute.
      * 
-     * List of functions - http://wiki.xbmc.org/?title=List_of_Built_In_Functions 
+     * List of functions - http://kodi.wiki/view/List_of_Built_In_Functions
      * 
      * example:
-     *   - xbmc.executebuiltin('XBMC.RunXBE(c:\\avalaunch.xbe)')
+     *   - xbmc.executebuiltin('RunXBE(c:\\avalaunch.xbe)')
      */
     void executebuiltin(const char* function, bool wait = false);
-
-    /**
-     * executehttpapi(httpcommand) -- Not implemented anymore.
-     */
-    String executehttpapi(const char* httpcommand);
 
     /**
      * executeJSONRPC(jsonrpccommand) -- Execute an JSONRPC command.
@@ -200,7 +194,7 @@ namespace XBMCAddon
      * 
      * infotag        : string - infoTag for value you want returned.
      * 
-     * List of InfoTags - http://wiki.xbmc.org/?title=InfoLabels 
+     * List of InfoTags - http://kodi.wiki/view/InfoLabels
      * 
      * example:
      *   - label = xbmc.getInfoLabel('Weather.Conditions')
@@ -213,7 +207,7 @@ namespace XBMCAddon
      * 
      * infotag        : string - infotag for value you want returned.
      * 
-     * List of InfoTags - http://wiki.xbmc.org/?title=InfoLabels 
+     * List of InfoTags - http://kodi.wiki/view/InfoLabels
      * 
      * example:
      *   - filename = xbmc.getInfoImage('Weather.Conditions')
@@ -255,7 +249,7 @@ namespace XBMCAddon
      * 
      * condition      : string - condition to check.
      * 
-     * List of Conditions - http://wiki.xbmc.org/?title=List_of_Boolean_Conditions 
+     * List of Conditions - http://kodi.wiki/view/List_of_Boolean_Conditions
      * 
      * *Note, You can combine two (or more) of the above settings by using "+" as an AND operator,\n
      * "|" as an OR operator, "!" as a NOT operator, and "[" and "]" to bracket expressions.\n

@@ -52,16 +52,12 @@ public:
 };
 
 class CSingleLock;
-class IAudioCallback;
 
 class CDVDAudio
 {
 public:
   CDVDAudio(volatile bool& bStop);
   ~CDVDAudio();
-
-  void RegisterAudioCallback(IAudioCallback* pCallback);
-  void UnRegisterAudioCallback();
 
   void SetVolume(float fVolume);
   void SetDynamicRangeCompression(long drc);
@@ -87,10 +83,6 @@ public:
   IAEStream *m_pAudioStream;
 protected:
   CPTSOutputQueue m_time;
-  unsigned int AddPacketsRenderer(unsigned char* data, unsigned int len, CSingleLock &lock);
-  uint8_t*     m_pBuffer; // should be [m_dwPacketSize]
-  unsigned int m_iBufferSize;
-  unsigned int m_dwPacketSize;
   CCriticalSection m_critSection;
 
   int m_iBitrate;
@@ -101,7 +93,6 @@ protected:
   bool m_bPaused;
 
   volatile bool& m_bStop;
-  IAudioCallback* m_pAudioCallback; //the viz audio callback
   //counter that will go from 0 to m_iSpeed-1 and reset, data will only be output when speedstep is 0
   //int m_iSpeedStep;
 };

@@ -65,17 +65,11 @@ bool CPicture::CreateThumbnailFromSurface(const unsigned char *buffer, int width
   }
 
   XFILE::CFile file;
-  if (file.OpenForWrite(thumbFile, true))
-  {
-    file.Write(thumb, thumbsize);
-    file.Close();
-    pImage->ReleaseThumbnailBuffer();
-    delete pImage;
-    return true;
-  }
+  const bool ret = file.OpenForWrite(thumbFile, true) && file.Write(thumb, thumbsize) == thumbsize;
   pImage->ReleaseThumbnailBuffer();
   delete pImage;
-  return false;
+
+  return ret;
 }
 
 CThumbnailWriter::CThumbnailWriter(unsigned char* buffer, int width, int height, int stride, const CStdString& thumbFile)
@@ -85,6 +79,11 @@ CThumbnailWriter::CThumbnailWriter(unsigned char* buffer, int width, int height,
   m_height    = height;
   m_stride    = stride;
   m_thumbFile = thumbFile;
+}
+
+CThumbnailWriter::~CThumbnailWriter()
+{
+  delete m_buffer;
 }
 
 bool CThumbnailWriter::DoWork()
@@ -98,6 +97,7 @@ bool CThumbnailWriter::DoWork()
   }
 
   delete [] m_buffer;
+  m_buffer = NULL;
 
   return success;
 }

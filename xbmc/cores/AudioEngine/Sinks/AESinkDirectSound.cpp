@@ -90,7 +90,7 @@ static const winEndpointsToAEDeviceType winEndpoints[EndpointFormFactor_enum_cou
 };
 
 // implemented in AESinkWASAPI.cpp
-extern CStdStringA localWideToUtf(LPCWSTR wstr);
+extern std::string localWideToUtf(LPCWSTR wstr);
 
 static BOOL CALLBACK DSEnumCallback(LPGUID lpGuid, LPCTSTR lpcstrDescription, LPCTSTR lpcstrModule, LPVOID lpContext)
 {
@@ -98,12 +98,14 @@ static BOOL CALLBACK DSEnumCallback(LPGUID lpGuid, LPCTSTR lpcstrDescription, LP
   std::list<DSDevice> &enumerator = *static_cast<std::list<DSDevice>*>(lpContext);
 
   int bufSize = MultiByteToWideChar(CP_ACP, 0, lpcstrDescription, -1, NULL, 0);
-  CStdStringW strW (L"", bufSize);
-  if ( bufSize == 0 || MultiByteToWideChar(CP_ACP, 0, lpcstrDescription, -1, strW.GetBuf(bufSize), bufSize) != bufSize )
-    strW.clear();
-  strW.RelBuf();
+  wchar_t *strW = new wchar_t[bufSize+1];
+  if ( bufSize == 0 || MultiByteToWideChar(CP_ACP, 0, lpcstrDescription, -1, strW, bufSize) != bufSize )
+    strW[0] = 0;
+  else
+    strW[bufSize] = 0;
 
   dev.name = localWideToUtf(strW);
+  delete[] strW;
 
   dev.lpGuid = lpGuid;
 
@@ -242,6 +244,7 @@ bool CAESinkDirectSound::Initialize(AEAudioFormat &format, std::string &device)
   memset(&dsbdesc, 0, sizeof(DSBUFFERDESC));
   dsbdesc.dwSize = sizeof(DSBUFFERDESC);
   dsbdesc.dwFlags = DSBCAPS_GETCURRENTPOSITION2 /** Better position accuracy */
+                  | DSBCAPS_TRUEPLAYPOSITION    /** Vista+ accurate position */
                   | DSBCAPS_GLOBALFOCUS;         /** Allows background playing */
 
   dsbdesc.dwBufferBytes = m_dwBufferLen;
@@ -334,14 +337,14 @@ void CAESinkDirectSound::Deinitialize()
   m_dwBufferLen = 0;
 }
 
-unsigned int CAESinkDirectSound::AddPackets(uint8_t *data, unsigned int frames, bool hasAudio, bool blocking)
+unsigned int CAESinkDirectSound::AddPackets(uint8_t **data, unsigned int frames, unsigned int offset)
 {
   if (!m_initialized)
     return 0;
 
   DWORD total = m_dwFrameSize * frames;
   DWORD len = total;
-  unsigned char* pBuffer = (unsigned char*)data;
+  unsigned char* pBuffer = (unsigned char*)data[0]+offset*m_format.m_frameSize;
 
   DWORD bufferStatus = 0;
   m_pBuffer->GetStatus(&bufferStatus);
@@ -357,10 +360,7 @@ unsigned int CAESinkDirectSound::AddPackets(uint8_t *data, unsigned int frames, 
       return INT_MAX;
     else
     {
-      if(blocking)
-        Sleep(total * 1000 / m_AvgBytesPerSec);
-      else
-        return 0;
+      Sleep(total * 1000 / m_AvgBytesPerSec);
     }
   }
 
@@ -426,18 +426,20 @@ void CAESinkDirectSound::Drain()
   UpdateCacheStatus();
 }
 
-double CAESinkDirectSound::GetDelay()
+void CAESinkDirectSound::GetDelay(AEDelayStatus& status)
 {
   if (!m_initialized)
-    return 0.0;
+  {
+    status.SetDelay(0);
+    return;
+  }
 
   /* Make sure we know how much data is in the cache */
   if (!UpdateCacheStatus())
     m_isDirtyDS = true;
 
   /** returns current cached data duration in seconds */
-  double delay = (double)m_CacheLen / (double)m_AvgBytesPerSec;
-  return delay;
+  status.SetDelay((double)m_CacheLen / (double)m_AvgBytesPerSec);
 }
 
 double CAESinkDirectSound::GetCacheTotal()

@@ -23,6 +23,7 @@
 #include "GUIInfoManager.h"
 #include "utils/log.h"
 #include "utils/XBMCTinyXML.h"
+#include "utils/XMLUtils.h"
 #include "utils/StringUtils.h"
 #include "interfaces/info/SkinVariable.h"
 
@@ -46,6 +47,7 @@ CGUIIncludes::CGUIIncludes()
   m_constantAttributes.insert("end");
   m_constantAttributes.insert("center");
   m_constantAttributes.insert("border");
+  m_constantAttributes.insert("repeat");
   
   m_constantNodes.insert("posx");
   m_constantNodes.insert("posy");
@@ -206,7 +208,7 @@ void CGUIIncludes::ResolveIncludesForNode(TiXmlElement *node, std::map<INFO::Inf
   CStdString type;
   if (node->ValueStr() == "control")
   {
-    type = node->Attribute("type");
+    type = XMLUtils::GetAttribute(node, "type");
     map<CStdString, TiXmlElement>::const_iterator it = m_defaults.find(type);
     if (it != m_defaults.end())
     {
@@ -295,17 +297,14 @@ void CGUIIncludes::ResolveIncludesForNode(TiXmlElement *node, std::map<INFO::Inf
 
 CStdString CGUIIncludes::ResolveConstant(const CStdString &constant) const
 {
-  CStdStringArray values;
-  StringUtils::SplitString(constant, ",", values);
-  for (unsigned int i = 0; i < values.size(); ++i)
+  vector<string> values = StringUtils::Split(constant, ",");
+  for (vector<string>::iterator i = values.begin(); i != values.end(); ++i)
   {
-    map<CStdString, CStdString>::const_iterator it = m_constants.find(values[i]);
+    map<CStdString, CStdString>::const_iterator it = m_constants.find(*i);
     if (it != m_constants.end())
-      values[i] = it->second;
+      *i = it->second;
   }
-  CStdString value;
-  StringUtils::JoinString(values, ",", value);
-  return value;
+  return StringUtils::Join(values, ",");
 }
 
 const INFO::CSkinVariableString* CGUIIncludes::CreateSkinVariable(const CStdString& name, int context)

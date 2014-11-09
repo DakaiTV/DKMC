@@ -26,6 +26,7 @@
 
 #include <sys/stat.h>
 #include <errno.h>
+#include <limits.h>
 
 using namespace std;
 using namespace XFILE;
@@ -50,10 +51,10 @@ CUDFFile::~CUDFFile()
 //*********************************************************************************************
 bool CUDFFile::Open(const CURL& url)
 {
-  if(!m_udfIsoReaderLocal.Open(url.GetHostName()) || url.GetFileName().empty())
+  if(!m_udfIsoReaderLocal.Open(url.GetHostName().c_str()) || url.GetFileName().empty())
      return false;
 
-  m_hFile = m_udfIsoReaderLocal.OpenFile(url.GetFileName());
+  m_hFile = m_udfIsoReaderLocal.OpenFile(url.GetFileName().c_str());
   if (m_hFile == INVALID_HANDLE_VALUE)
   {
     m_bOpened = false;
@@ -65,15 +66,18 @@ bool CUDFFile::Open(const CURL& url)
 }
 
 //*********************************************************************************************
-unsigned int CUDFFile::Read(void *lpBuf, int64_t uiBufSize)
+ssize_t CUDFFile::Read(void *lpBuf, size_t uiBufSize)
 {
-  if (!m_bOpened) return 0;
+  if (uiBufSize > SSIZE_MAX)
+    uiBufSize = SSIZE_MAX;
+  if (uiBufSize > LONG_MAX)
+    uiBufSize = LONG_MAX;
+
+  if (!m_bOpened)
+    return -1;
   char *pData = (char *)lpBuf;
 
-  int iResult = m_udfIsoReaderLocal.ReadFile( m_hFile, (unsigned char*)pData, (long)uiBufSize);
-  if (iResult == -1)
-    return 0;
-  return iResult;
+  return m_udfIsoReaderLocal.ReadFile( m_hFile, (unsigned char*)pData, (long)uiBufSize);
 }
 
 //*********************************************************************************************
@@ -108,10 +112,10 @@ int64_t CUDFFile::GetPosition()
 
 bool CUDFFile::Exists(const CURL& url)
 {
-  if(!m_udfIsoReaderLocal.Open(url.GetHostName()))
+  if(!m_udfIsoReaderLocal.Open(url.GetHostName().c_str()))
      return false;
 
-  m_hFile = m_udfIsoReaderLocal.OpenFile(url.GetFileName());
+  m_hFile = m_udfIsoReaderLocal.OpenFile(url.GetFileName().c_str());
   if (m_hFile == INVALID_HANDLE_VALUE)
     return false;
 
@@ -122,7 +126,7 @@ bool CUDFFile::Exists(const CURL& url)
 
 int CUDFFile::Stat(const CURL& url, struct __stat64* buffer)
 {
-  if(!m_udfIsoReaderLocal.Open(url.GetHostName()))
+  if(!m_udfIsoReaderLocal.Open(url.GetHostName().c_str()))
      return -1;
 
   if (url.GetFileName().empty())
@@ -131,7 +135,7 @@ int CUDFFile::Stat(const CURL& url, struct __stat64* buffer)
     return 0;
   }
 
-  m_hFile = m_udfIsoReaderLocal.OpenFile(url.GetFileName());
+  m_hFile = m_udfIsoReaderLocal.OpenFile(url.GetFileName().c_str());
   if (m_hFile != INVALID_HANDLE_VALUE)
   {
     buffer->st_size = m_udfIsoReaderLocal.GetFileSize(m_hFile);

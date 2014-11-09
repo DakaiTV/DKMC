@@ -39,9 +39,9 @@ public:
 
   virtual void         Stop               ();
   virtual void         Drain              ();
-  virtual double       GetDelay           ();
+  virtual void         GetDelay           (AEDelayStatus& status);
   virtual double       GetCacheTotal      ();
-  virtual unsigned int AddPackets         (uint8_t *data, unsigned int frames, bool hasAudio, bool blocking = false);
+  virtual unsigned int AddPackets         (uint8_t **data, unsigned int frames, unsigned int offset);
   static  std::string  GetDefaultDevice   ();
   static  void         EnumerateDevicesEx (AEDeviceInfoList &deviceInfoList, bool force = false);
 private:

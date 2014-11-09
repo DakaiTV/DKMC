@@ -101,13 +101,29 @@ DLNA_ORG_FLAGS_VAL = '01500000000000000000000000000000'
 void
 NPT_Console::Output(const char* msg) { }
 
+int ConvertLogLevel(int nptLogLevel)
+{
+    if (nptLogLevel >= NPT_LOG_LEVEL_FATAL)
+        return LOGFATAL;
+    if (nptLogLevel >= NPT_LOG_LEVEL_SEVERE)
+        return LOGERROR;
+    if (nptLogLevel >= NPT_LOG_LEVEL_WARNING)
+        return LOGWARNING;
+    if (nptLogLevel >= NPT_LOG_LEVEL_INFO)
+        return LOGNOTICE;
+    if (nptLogLevel >= NPT_LOG_LEVEL_FINE)
+        return LOGINFO;
+
+    return LOGDEBUG;
+}
+
 void
 UPnPLogger(const NPT_LogRecord* record)
 {
     if (!g_advancedSettings.CanLogComponent(LOGUPNP))
         return;
 
-    CLog::Log((record->m_Level / 100) - 1, "Platinum [%s]: %s", record->m_LoggerName, record->m_Message);
+    CLog::Log(ConvertLogLevel(record->m_Level), "Platinum [%s]: %s", record->m_LoggerName, record->m_Message);
 }
 
 namespace UPNP
@@ -572,12 +588,12 @@ CUPnP::CreateServer(int port /* = 0 */)
                     CSettings::Get().GetInt("services.webserverport"),
                     "/").ToString();
 
-    device->m_ModelName        = "XBMC Media Center";
+    device->m_ModelName        = "Kodi";
     device->m_ModelNumber      = g_infoManager.GetVersion().c_str();
-    device->m_ModelDescription = "XBMC Media Center - Media Server";
-    device->m_ModelURL         = "http://xbmc.org/";
-    device->m_Manufacturer     = "Team XBMC";
-    device->m_ManufacturerURL  = "http://xbmc.org/";
+    device->m_ModelDescription = "Kodi - Media Server";
+    device->m_ModelURL         = "http://kodi.tv/";
+    device->m_Manufacturer     = "XBMC Foundation";
+    device->m_ManufacturerURL  = "http://kodi.tv/";
 
     device->SetDelegate(device);
     return device;
@@ -654,12 +670,12 @@ CUPnP::CreateRenderer(int port /* = 0 */)
         NPT_HttpUrl(m_IP,
                     CSettings::Get().GetInt("services.webserverport"),
                     "/").ToString();
-    device->m_ModelName        = "XBMC Media Center";
+    device->m_ModelName        = "Kodi";
     device->m_ModelNumber      = g_infoManager.GetVersion().c_str();
-    device->m_ModelDescription = "XBMC Media Center - Media Renderer";
-    device->m_ModelURL         = "http://xbmc.org/";
-    device->m_Manufacturer     = "Team XBMC";
-    device->m_ManufacturerURL  = "http://xbmc.org/";
+    device->m_ModelDescription = "Kodi - Media Renderer";
+    device->m_ModelURL         = "http://kodi.tv/";
+    device->m_Manufacturer     = "XBMC Foundation";
+    device->m_ManufacturerURL  = "http://kodi.tv/";
 
     return device;
 }

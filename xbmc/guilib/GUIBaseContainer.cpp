@@ -32,6 +32,7 @@
 #include "utils/MathUtils.h"
 #include "utils/XBMCTinyXML.h"
 #include "listproviders/IListProvider.h"
+#include "settings/Settings.h"
 
 using namespace std;
 
@@ -73,7 +74,7 @@ void CGUIBaseContainer::DoProcess(unsigned int currentTime, CDirtyRegionList &di
 {
   CGUIControl::DoProcess(currentTime, dirtyregions);
 
-  if (m_pageChangeTimer.GetElapsedMilliseconds() > 200)
+  if (m_pageChangeTimer.IsRunning() && m_pageChangeTimer.GetElapsedMilliseconds() > 200)
     m_pageChangeTimer.Stop();
   m_wasReset = false;
 
@@ -561,7 +562,10 @@ void CGUIBaseContainer::OnJumpLetter(char letter, bool skip /*=false*/)
   do
   {
     CGUIListItemPtr item = m_items[i];
-    if (0 == strnicmp(SortUtils::RemoveArticles(item->GetLabel()).c_str(), m_match.c_str(), m_match.size()))
+    std::string label = item->GetLabel();
+    if (CSettings::Get().GetBool("filelists.ignorethewhensorting"))
+      label = SortUtils::RemoveArticles(label);
+    if (0 == strnicmp(label.c_str(), m_match.c_str(), m_match.size()))
     {
       SelectItem(i);
       return;
@@ -753,9 +757,9 @@ bool CGUIBaseContainer::OnClick(int actionID)
   return SendWindowMessage(msg);
 }
 
-CStdString CGUIBaseContainer::GetDescription() const
+std::string CGUIBaseContainer::GetDescription() const
 {
-  CStdString strLabel;
+  std::string strLabel;
   int item = GetSelectedItem();
   if (item >= 0 && item < (int)m_items.size())
   {
@@ -1044,7 +1048,7 @@ void CGUIBaseContainer::UpdateScrollOffset(unsigned int currentTime)
 {
   if (m_scroller.Update(currentTime))
     MarkDirtyRegion();
-  else if (m_lastScrollStartTimer.GetElapsedMilliseconds() >= SCROLLING_GAP)
+  else if (m_lastScrollStartTimer.IsRunning() && m_lastScrollStartTimer.GetElapsedMilliseconds() >= SCROLLING_GAP)
   {
     m_scrollTimer.Stop();
     m_lastScrollStartTimer.Stop();
@@ -1162,7 +1166,7 @@ bool CGUIBaseContainer::GetCondition(int condition, int data) const
       return layout ? (layout->GetFocusedItem() == (unsigned int)data) : false;
     }
   case CONTAINER_SCROLLING:
-    return (m_scrollTimer.GetElapsedMilliseconds() > std::max(m_scroller.GetDuration(), SCROLLING_THRESHOLD) || m_pageChangeTimer.IsRunning());
+    return ((m_scrollTimer.IsRunning() && m_scrollTimer.GetElapsedMilliseconds() > std::max(m_scroller.GetDuration(), SCROLLING_THRESHOLD)) || m_pageChangeTimer.IsRunning());
   case CONTAINER_ISUPDATING:
     return (m_listProvider) ? m_listProvider->IsUpdating() : false;
   default:
@@ -1207,9 +1211,9 @@ bool CGUIBaseContainer::HasPreviousPage() const
   return false;
 }
 
-CStdString CGUIBaseContainer::GetLabel(int info) const
+std::string CGUIBaseContainer::GetLabel(int info) const
 {
-  CStdString label;
+  std::string label;
   switch (info)
   {
   case CONTAINER_NUM_PAGES:

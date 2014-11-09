@@ -23,6 +23,7 @@
 #include "md5.h"
 #include "InfoLoader.h"
 #include "settings/lib/ISubSettings.h"
+#include <string>
 
 #define KB  (1024)          // 1 KiloByte (1KB)   1024 Byte (2^10 Byte)
 #define MB  (1024*KB)       // 1 MegaByte (1MB)   1024 KB (2^10 KB)
@@ -46,14 +47,14 @@ public:
     internetState = UNKNOWN;
   };
 
-  CStdString systemUptime;
-  CStdString systemTotalUptime;
+  std::string systemUptime;
+  std::string systemTotalUptime;
   INTERNET_STATE internetState;
-  CStdString videoEncoder;
-  CStdString cpuFrequency;
-  CStdString kernelVersion;
-  CStdString macAddress;
-  CStdString batteryLevel;
+  std::string videoEncoder;
+  std::string cpuFrequency;
+  std::string osVersionInfo;
+  std::string macAddress;
+  std::string batteryLevel;
 };
 
 class CSysInfoJob : public CJob
@@ -66,13 +67,13 @@ public:
 
   static CSysData::INTERNET_STATE GetInternetState();
 private:
-  bool SystemUpTime(int iInputMinutes, int &iMinutes, int &iHours, int &iDays);
-  double GetCPUFrequency();
-  CStdString GetSystemUpTime(bool bTotalUptime);
-  CStdString GetCPUFreqInfo();
-  CStdString GetMACAddress();
-  CStdString GetVideoEncoder();
-  CStdString GetBatteryLevel();
+  static bool SystemUpTime(int iInputMinutes, int &iMinutes, int &iHours, int &iDays);
+  static double GetCPUFrequency();
+  static std::string GetSystemUpTime(bool bTotalUptime);
+  static std::string GetCPUFreqInfo();
+  static std::string GetMACAddress();
+  static std::string GetVideoEncoder();
+  static std::string GetBatteryLevel();
 
   CSysData m_info;
 };
@@ -99,20 +100,15 @@ public:
 
   char MD5_Sign[32 + 1];
 
-  bool GetDVDInfo(CStdString& strDVDModel, CStdString& strDVDFirmware);
-  bool GetHDDInfo(CStdString& strHDDModel, CStdString& strHDDSerial,CStdString& strHDDFirmware,CStdString& strHDDpw,CStdString& strHDDLockState);
-  bool GetRefurbInfo(CStdString& rfi_FirstBootTime, CStdString& rfi_PowerCycleCount);
+  static const std::string& GetAppName(void); // the same name as CCompileInfo::GetAppName(), but const ref to std::string
 
-#if defined(TARGET_LINUX)
-  CStdString GetLinuxDistro();
-#endif
-#ifdef TARGET_POSIX
-  CStdString GetUnameVersion();
-#endif
-#if defined(TARGET_WINDOWS)
-  CStdString GetUAWindowsVersion();
-#endif
-  CStdString GetUserAgent();
+  static std::string GetKernelName(bool emptyIfUnknown = false);
+  static std::string GetKernelVersionFull(void); // full version string, including "-generic", "-RELEASE" etc.
+  static std::string GetKernelVersion(void); // only digits with dots
+  static std::string GetOsName(bool emptyIfUnknown = false);
+  static std::string GetOsVersion(void);
+  static std::string GetOsPrettyNameWithVersion(void);
+  static std::string GetUserAgent();
   bool HasInternet();
   bool IsAppleTV2();
   bool HasVideoToolBoxDecoder();
@@ -123,30 +119,31 @@ public:
   static WindowsVersion GetWindowsVersion();
   static int GetKernelBitness(void);
   static int GetXbmcBitness(void);
-  static std::string GetKernelCpuFamily(void);
-  static CStdString GetKernelVersion();
-  CStdString GetCPUModel();
-  CStdString GetCPUBogoMips();
-  CStdString GetCPUHardware();
-  CStdString GetCPURevision();
-  CStdString GetCPUSerial();
-  CStdString GetManufacturer();
-  CStdString GetProduct();
-  CStdString GetModel();
-  bool GetDiskSpace(const CStdString& drive,int& iTotal, int& iTotalFree, int& iTotalUsed, int& iPercentFree, int& iPercentUsed);
-  CStdString GetHddSpaceInfo(int& percent, int drive, bool shortText=false);
-  CStdString GetHddSpaceInfo(int drive, bool shortText=false);
+  static const std::string& GetKernelCpuFamily(void);
+  std::string GetCPUModel();
+  std::string GetCPUBogoMips();
+  std::string GetCPUHardware();
+  std::string GetCPURevision();
+  std::string GetCPUSerial();
+  static std::string GetManufacturerName(void);
+  static std::string GetModelName(void);
+  bool GetDiskSpace(const std::string& drive,int& iTotal, int& iTotalFree, int& iTotalUsed, int& iPercentFree, int& iPercentUsed);
+  std::string GetHddSpaceInfo(int& percent, int drive, bool shortText=false);
+  std::string GetHddSpaceInfo(int drive, bool shortText=false);
 
   int GetTotalUptime() const { return m_iSystemTimeTotalUp; }
   void SetTotalUptime(int uptime) { m_iSystemTimeTotalUp = uptime; }
 
   static std::string GetBuildTargetPlatformName(void);
   static std::string GetBuildTargetPlatformVersion(void);
+  static std::string GetBuildTargetPlatformVersionDecoded(void);
   static std::string GetBuildTargetCpuFamily(void);
+
+  static std::string GetUsedCompilerNameAndVer(void);
 
 protected:
   virtual CJob *GetJob() const;
-  virtual CStdString TranslateInfo(int info) const;
+  virtual std::string TranslateInfo(int info) const;
   virtual void OnJobComplete(unsigned int jobID, bool success, CJob *job);
 
 private:

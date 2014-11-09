@@ -22,12 +22,12 @@
 #include "system.h"
 #include "URL.h"
 #include "FileItem.h"
-#include "DllHDHomeRun.h"
 #include "HDHomeRunFile.h"
 #include "utils/TimeUtils.h"
 #include "utils/log.h"
 #include "utils/URIUtils.h"
 #include "Util.h"
+#include "DllHDHomeRun.h"
 
 using namespace XFILE;
 using namespace std;
@@ -50,7 +50,7 @@ CHomeRunFile::~CHomeRunFile()
 
 bool CHomeRunFile::Exists(const CURL& url)
 {
-  CStdString path(url.GetFileName());
+  std::string path(url.GetFileName());
 
   /*
    * HDHomeRun URLs are of the form hdhomerun://1014F6D1/tuner0?channel=qam:108&program=10
@@ -106,8 +106,11 @@ bool CHomeRunFile::Open(const CURL &url)
   return true;
 }
 
-unsigned int CHomeRunFile::Read(void* lpBuf, int64_t uiBufSize)
+ssize_t CHomeRunFile::Read(void* lpBuf, size_t uiBufSize)
 {
+  if (uiBufSize > SSIZE_MAX)
+    uiBufSize = SSIZE_MAX;
+
   size_t datasize;
 
   if(uiBufSize < VIDEO_DATA_PACKET_SIZE)
@@ -125,7 +128,7 @@ unsigned int CHomeRunFile::Read(void* lpBuf, int64_t uiBufSize)
     if(ptr)
     {
       memcpy(lpBuf, ptr, datasize);
-      return (unsigned int)datasize;
+      return datasize;
     }
 
     if(timestamp.IsTimePast())
@@ -133,7 +136,7 @@ unsigned int CHomeRunFile::Read(void* lpBuf, int64_t uiBufSize)
 
     Sleep(64);
   }
-  return (unsigned int)datasize;
+  return datasize;
 }
 
 void CHomeRunFile::Close()

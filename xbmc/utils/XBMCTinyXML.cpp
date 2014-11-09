@@ -69,7 +69,7 @@ bool CXBMCTinyXML::LoadFile(const std::string& _filename, TiXmlEncoding encoding
   XFILE::CFile file;
   XFILE::auto_buffer buffer;
 
-  if (!file.LoadFile(value, buffer))
+  if (file.LoadFile(value, buffer) <= 0)
   {
     SetError(TIXML_ERROR_OPENING_FILE, NULL, NULL, TIXML_ENCODING_UNKNOWN);
     return false;
@@ -122,8 +122,7 @@ bool CXBMCTinyXML::SaveFile(const std::string& filename) const
   {
     TiXmlPrinter printer;
     Accept(&printer);
-    file.Write(printer.CStr(), printer.Size());
-    return true;
+    return file.Write(printer.CStr(), printer.Size()) == printer.Size();
   }
   return false;
 }

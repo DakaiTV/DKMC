@@ -26,8 +26,8 @@
 
 #include "cores/AudioEngine/Utils/AEUtil.h"
 #include "settings/AdvancedSettings.h"
-#include "utils/StdString.h"
 #include "utils/log.h"
+#include "utils/TimeUtils.h"
 #include "threads/SingleLock.h"
 #include "threads/SystemClock.h"
 #include "utils/CharsetConverter.h"
@@ -41,6 +41,7 @@ const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
 const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
 const IID IID_IAudioClient = __uuidof(IAudioClient);
 const IID IID_IAudioRenderClient = __uuidof(IAudioRenderClient);
+const IID IID_IAudioClock = __uuidof(IAudioClock);
 
 static const unsigned int WASAPISampleRateCount = 10;
 static const unsigned int WASAPISampleRates[] = {384000, 192000, 176400, 96000, 88200, 48000, 44100, 32000, 22050, 11025};
@@ -111,7 +112,7 @@ struct sampleFormat
 /* Sample formats go from float -> 32 bit int -> 24 bit int (packed in 32) -> -> 24 bit int -> 16 bit int */
 static const sampleFormat testFormats[] = { {KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, 32, 32, AE_FMT_FLOAT},
                                             {KSDATAFORMAT_SUBTYPE_PCM, 32, 32, AE_FMT_S32NE},
-                                            {KSDATAFORMAT_SUBTYPE_PCM, 32, 24, AE_FMT_S24NE4},
+                                            {KSDATAFORMAT_SUBTYPE_PCM, 32, 24, AE_FMT_S24NE4MSB},
                                             {KSDATAFORMAT_SUBTYPE_PCM, 24, 24, AE_FMT_S24NE3},
                                             {KSDATAFORMAT_SUBTYPE_PCM, 16, 16, AE_FMT_S16NE} };
 
@@ -163,16 +164,19 @@ DWORD ChLayoutToChMask(const enum AEChannel * layout, unsigned int * numberOfCha
   return mask;
 }
 
-CStdStringA localWideToUtf(LPCWSTR wstr)
+std::string localWideToUtf(LPCWSTR wstr)
 {
   if (wstr == NULL)
     return "";
   int bufSize = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, NULL, 0, NULL, NULL);
-  CStdStringA strA ("", bufSize);
-  if ( bufSize == 0 || WideCharToMultiByte(CP_UTF8, 0, wstr, -1, strA.GetBuf(bufSize), bufSize, NULL, NULL) != bufSize )
-    strA.clear();
-  strA.RelBuf();
-  return strA;
+  char *multiStr = new char[bufSize + 1];
+  if (bufSize == 0 || WideCharToMultiByte(CP_UTF8, 0, wstr, -1, multiStr, bufSize, NULL, NULL) != bufSize)
+    multiStr[0] = 0;
+  else
+    multiStr[bufSize] = 0;
+  std::string ret(multiStr);
+  delete[] multiStr;
+  return ret;
 }
 
 CAESinkWASAPI::CAESinkWASAPI() :
@@ -180,6 +184,7 @@ CAESinkWASAPI::CAESinkWASAPI() :
   m_pDevice(NULL),
   m_pAudioClient(NULL),
   m_pRenderClient(NULL),
+  m_pAudioClock(NULL),
   m_encodedFormat(AE_FMT_INVALID),
   m_encodedChannels(0),
   m_encodedSampleRate(0),
@@ -192,7 +197,8 @@ CAESinkWASAPI::CAESinkWASAPI() :
   m_uiBufferLen(0),
   m_avgTimeWaiting(50),
   m_sinkLatency(0.0),
-  m_lastWriteToBuffer(0),
+  m_sinkFrames(0),
+  m_clockFreq(0),
   m_pBuffer(NULL),
   m_bufferPtr(0)
 {
@@ -311,6 +317,12 @@ bool CAESinkWASAPI::Initialize(AEAudioFormat &format, std::string &device)
   hr = m_pAudioClient->GetService(IID_IAudioRenderClient, (void**)&m_pRenderClient);
   EXIT_ON_FAILURE(hr, __FUNCTION__": Could not initialize the WASAPI render client interface.")
 
+  hr = m_pAudioClient->GetService(IID_IAudioClock, (void**)&m_pAudioClock);
+  EXIT_ON_FAILURE(hr, __FUNCTION__": Could not initialize the WASAPI audio clock interface.")
+
+  hr = m_pAudioClock->GetFrequency(&m_clockFreq);
+  EXIT_ON_FAILURE(hr, __FUNCTION__": Retrieval of IAudioClock::GetFrequency failed.")
+
   m_needDataEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
   hr = m_pAudioClient->SetEventHandle(m_needDataEvent);
   EXIT_ON_FAILURE(hr, __FUNCTION__": Could not set the WASAPI event handler.");
@@ -334,6 +346,7 @@ failed:
   SAFE_RELEASE(pEnumerator);
   SAFE_RELEASE(m_pRenderClient);
   SAFE_RELEASE(m_pAudioClient);
+  SAFE_RELEASE(m_pAudioClock);
   SAFE_RELEASE(m_pDevice);
   if(m_needDataEvent)
   {
@@ -355,6 +368,7 @@ void CAESinkWASAPI::Deinitialize()
     {
     m_pAudioClient->Stop();  //stop the audio output
     m_pAudioClient->Reset(); //flush buffer and reset audio clock stream position
+    m_sinkFrames = 0;
     }
     catch (...)
     {
@@ -367,6 +381,7 @@ void CAESinkWASAPI::Deinitialize()
 
   SAFE_RELEASE(m_pRenderClient);
   SAFE_RELEASE(m_pAudioClient);
+  SAFE_RELEASE(m_pAudioClock);
   SAFE_RELEASE(m_pDevice);
 
   m_initialized = false;
@@ -375,24 +390,34 @@ void CAESinkWASAPI::Deinitialize()
   m_bufferPtr = 0;
 }
 
-double CAESinkWASAPI::GetDelay()
+/**
+ * @brief rescale uint64_t without overflowing on large values
+ */
+static uint64_t rescale_u64(uint64_t val, uint64_t num, uint64_t den)
 {
+  return ((val / den) * num) + (((val % den) * num) / den);
+}
+
+
+void CAESinkWASAPI::GetDelay(AEDelayStatus& status)
+{
+  HRESULT hr;
+  uint64_t pos, tick;
+  int retries = 0;
+
   if (!m_initialized)
-    return 0.0;
+    goto failed;
 
-  double time_played = 0.0;
-  if (m_running)
-  {
-    unsigned int now = XbmcThreads::SystemClockMillis();
-    time_played = (double)(now-m_lastWriteToBuffer) / 1000;
-  }
+  do {
+    hr = m_pAudioClock->GetPosition(&pos, &tick);
+  } while (hr != S_OK && ++retries < 100);
+  EXIT_ON_FAILURE(hr, __FUNCTION__": Retrieval of IAudioClock::GetPosition failed.")
 
-  double delay = m_sinkLatency - time_played + (double)m_bufferPtr / (double)m_format.m_sampleRate;
-
-  if (delay < 0)
-    delay = 0.0;
-
-  return delay;
+  status.delay = (double)(m_sinkFrames + m_bufferPtr) / m_format.m_sampleRate - (double)pos / m_clockFreq;
+  status.tick  = rescale_u64(tick, CurrentHostFrequency(), 10000000); /* convert from 100ns back to qpc ticks */
+  return;
+failed:
+  status.SetDelay(0);
 }
 
 double CAESinkWASAPI::GetCacheTotal()
@@ -403,7 +428,7 @@ double CAESinkWASAPI::GetCacheTotal()
   return m_sinkLatency;
 }
 
-unsigned int CAESinkWASAPI::AddPackets(uint8_t *data, unsigned int frames, bool hasAudio, bool blocking)
+unsigned int CAESinkWASAPI::AddPackets(uint8_t **data, unsigned int frames, unsigned int offset)
 {
   if (!m_initialized)
     return 0;
@@ -420,9 +445,10 @@ unsigned int CAESinkWASAPI::AddPackets(uint8_t *data, unsigned int frames, bool 
 
   unsigned int NumFramesRequested = m_format.m_frames;
   unsigned int FramesToCopy = std::min(m_format.m_frames - m_bufferPtr, frames);
+  uint8_t *buffer = data[0]+offset*m_format.m_frameSize;
   if (m_bufferPtr != 0 || frames != m_format.m_frames)
   {
-    memcpy(m_pBuffer+m_bufferPtr*m_format.m_frameSize, data, FramesToCopy*m_format.m_frameSize);
+    memcpy(m_pBuffer+m_bufferPtr*m_format.m_frameSize, buffer, FramesToCopy*m_format.m_frameSize);
     m_bufferPtr += FramesToCopy;
     if (m_bufferPtr != m_format.m_frames)
       return frames;
@@ -457,6 +483,8 @@ unsigned int CAESinkWASAPI::AddPackets(uint8_t *data, unsigned int frames, bool 
       m_isDirty = true; //flag new device or re-init needed
       return INT_MAX;
     }
+    m_sinkFrames += NumFramesRequested;
+
     hr = m_pAudioClient->Start(); //start the audio driver running
     if (FAILED(hr))
       CLog::Log(LOGERROR, __FUNCTION__": AudioClient Start Failed");
@@ -472,25 +500,13 @@ unsigned int CAESinkWASAPI::AddPackets(uint8_t *data, unsigned int frames, bool 
 
   /* Wait for Audio Driver to tell us it's got a buffer available */
   DWORD eventAudioCallback;
-  if(!blocking)
-    eventAudioCallback = WaitForSingleObject(m_needDataEvent, 0);
-  else
-    eventAudioCallback = WaitForSingleObject(m_needDataEvent, 1100);
+  eventAudioCallback = WaitForSingleObject(m_needDataEvent, 1100);
 
-  if (!blocking)
+  if(eventAudioCallback != WAIT_OBJECT_0 || !&buf)
   {
-    if(eventAudioCallback != WAIT_OBJECT_0)
-	  return 0;
+    CLog::Log(LOGERROR, __FUNCTION__": Endpoint Buffer timed out");
+    return INT_MAX;
   }
-  else
-  {
-    if(eventAudioCallback != WAIT_OBJECT_0 || !&buf)
-    {
-      CLog::Log(LOGERROR, __FUNCTION__": Endpoint Buffer timed out");
-      return INT_MAX;
-    }
-  }
-
 
   if (!m_running)
     return 0;
@@ -515,7 +531,7 @@ unsigned int CAESinkWASAPI::AddPackets(uint8_t *data, unsigned int frames, bool 
     #endif
     return INT_MAX;
   }
-  memcpy(buf, m_bufferPtr == 0 ? data : m_pBuffer, NumFramesRequested * m_format.m_frameSize); //fill buffer
+  memcpy(buf, m_bufferPtr == 0 ? buffer : m_pBuffer, NumFramesRequested * m_format.m_frameSize); //fill buffer
   m_bufferPtr = 0;
   hr = m_pRenderClient->ReleaseBuffer(NumFramesRequested, flags); //pass back to audio driver
   if (FAILED(hr))
@@ -525,12 +541,12 @@ unsigned int CAESinkWASAPI::AddPackets(uint8_t *data, unsigned int frames, bool 
     #endif
     return INT_MAX;
   }
-  m_lastWriteToBuffer = XbmcThreads::SystemClockMillis();
+  m_sinkFrames += NumFramesRequested;
 
   if (FramesToCopy != frames)
   {
     m_bufferPtr = frames-FramesToCopy;
-    memcpy(m_pBuffer, data+FramesToCopy*m_format.m_frameSize, m_bufferPtr*m_format.m_frameSize);
+    memcpy(m_pBuffer, buffer+FramesToCopy*m_format.m_frameSize, m_bufferPtr*m_format.m_frameSize);
   }
 
   return frames;
@@ -758,9 +774,14 @@ void CAESinkWASAPI::EnumerateDevicesEx(AEDeviceInfoList &deviceInfoList, bool fo
         wfxex.Format.wBitsPerSample     = CAEUtil::DataFormatToBits((AEDataFormat) p);
         wfxex.Format.nBlockAlign        = wfxex.Format.nChannels * (wfxex.Format.wBitsPerSample >> 3);
         wfxex.Format.nAvgBytesPerSec    = wfxex.Format.nSamplesPerSec * wfxex.Format.nBlockAlign;
-        if (p <= AE_FMT_S24NE4 && p >= AE_FMT_S24BE4)
+        if (p == AE_FMT_S24NE4MSB)
         {
           wfxex.Samples.wValidBitsPerSample = 24;
+        }
+        else if (p <= AE_FMT_S24NE4 && p >= AE_FMT_S24BE4)
+        {
+          // not supported
+          continue;
         }
         else
         {
@@ -931,7 +952,7 @@ void CAESinkWASAPI::BuildWaveFormatExtensible(AEAudioFormat &format, WAVEFORMATE
     wfxex.Format.nChannels       = (WORD)format.m_channelLayout.Count();
     wfxex.Format.nSamplesPerSec  = format.m_sampleRate;
     wfxex.Format.wBitsPerSample  = CAEUtil::DataFormatToBits((AEDataFormat) format.m_dataFormat);
-    wfxex.SubFormat              = format.m_dataFormat <= AE_FMT_FLOAT ? KSDATAFORMAT_SUBTYPE_PCM : KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+    wfxex.SubFormat              = format.m_dataFormat < AE_FMT_FLOAT ? KSDATAFORMAT_SUBTYPE_PCM : KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
   }
   else //Raw bitstream
   {
@@ -979,7 +1000,7 @@ void CAESinkWASAPI::BuildWaveFormatExtensible(AEAudioFormat &format, WAVEFORMATE
     }
   }
 
-  if (wfxex.Format.wBitsPerSample == 32 && wfxex.SubFormat != KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)
+  if (format.m_dataFormat == AE_FMT_S24NE4MSB)
     wfxex.Samples.wValidBitsPerSample = 24;
   else
     wfxex.Samples.wValidBitsPerSample = wfxex.Format.wBitsPerSample;
@@ -1011,8 +1032,14 @@ bool CAESinkWASAPI::InitializeExclusive(AEAudioFormat &format)
 
   if (format.m_dataFormat <= AE_FMT_FLOAT)
     BuildWaveFormatExtensible(format, wfxex);
-  else
+  else if (AE_IS_RAW(format.m_dataFormat))
     BuildWaveFormatExtensibleIEC61397(format, wfxex_iec61937);
+  else
+  {
+    // planar formats are currently not supported by this sink
+    format.m_dataFormat = AE_FMT_FLOAT;
+    BuildWaveFormatExtensible(format, wfxex);
+  }
 
   /* Test for incomplete format and provide defaults */
   if (format.m_sampleRate == 0 ||
@@ -1149,7 +1176,7 @@ initialize:
       else if (wfxex.Samples.wValidBitsPerSample == 32)
         format.m_dataFormat = AE_FMT_S32NE;
       else
-        format.m_dataFormat = AE_FMT_S24NE4;
+        format.m_dataFormat = AE_FMT_S24NE4MSB;
     }
     else if (wfxex.Format.wBitsPerSample == 24)
       format.m_dataFormat = AE_FMT_S24NE3;
@@ -1311,7 +1338,10 @@ void CAESinkWASAPI::Drain()
   if(!m_pAudioClient)
     return;
 
-  Sleep( (DWORD)(GetDelay()*500) );
+  AEDelayStatus status;
+  GetDelay(status);
+
+  Sleep((DWORD)(status.GetDelay() * 500));
 
   if (m_running)
   {
@@ -1319,6 +1349,7 @@ void CAESinkWASAPI::Drain()
     {
       m_pAudioClient->Stop();  //stop the audio output
       m_pAudioClient->Reset(); //flush buffer and reset audio clock stream position
+      m_sinkFrames = 0;
     }
     catch (...)
     {

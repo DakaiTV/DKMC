@@ -21,9 +21,7 @@
 #include "ApplicationPlayer.h"
 #include "cores/IPlayer.h"
 #include "Application.h"
-
-#define VOLUME_MINIMUM 0.0f        // -60dB
-#define VOLUME_MAXIMUM 1.0f        // 0dB
+#include "settings/MediaSettings.h"
 
 CApplicationPlayer::CApplicationPlayer()
 {
@@ -66,9 +64,6 @@ void CApplicationPlayer::ClosePlayerGapless(PLAYERCOREID newCore)
     return;
 
   bool gaplessSupported = (m_eCurrentPlayer == EPC_DVDPLAYER || m_eCurrentPlayer == EPC_PAPLAYER);
-#if defined(HAS_OMXPLAYER)
-  gaplessSupported = gaplessSupported || (m_eCurrentPlayer == EPC_OMXPLAYER);
-#endif            
   gaplessSupported = gaplessSupported && (m_eCurrentPlayer == newCore);
   if (!gaplessSupported)
   {
@@ -118,20 +113,6 @@ bool CApplicationPlayer::HasPlayer() const
   return player != NULL; 
 }
 
-void CApplicationPlayer::RegisterAudioCallback(IAudioCallback* pCallback)
-{
-  boost::shared_ptr<IPlayer> player = GetInternal();
-  if (player)
-    player->RegisterAudioCallback(pCallback);
-}
-
-void CApplicationPlayer::UnRegisterAudioCallback()
-{
-  boost::shared_ptr<IPlayer> player = GetInternal();
-  if (player)
-    player->UnRegisterAudioCallback();
-}
-
 int CApplicationPlayer::GetChapter()
 {
   boost::shared_ptr<IPlayer> player = GetInternal();
@@ -150,7 +131,7 @@ int CApplicationPlayer::GetChapterCount()
     return 0;
 }
 
-void CApplicationPlayer::GetChapterName(CStdString& strChapterName)
+void CApplicationPlayer::GetChapterName(std::string& strChapterName)
 {
   boost::shared_ptr<IPlayer> player = GetInternal();
   if (player)
@@ -262,7 +243,7 @@ void CApplicationPlayer::SeekTime(int64_t iTime)
     player->SeekTime(iTime);
 }
 
-CStdString CApplicationPlayer::GetPlayingTitle()
+std::string CApplicationPlayer::GetPlayingTitle()
 {
   boost::shared_ptr<IPlayer> player = GetInternal();
   if (player)
@@ -318,18 +299,32 @@ int CApplicationPlayer::GetSubtitleCount()
 
 int CApplicationPlayer::GetAudioStream()
 {
+  if (!m_audioStreamUpdate.IsTimePast())
+    return m_iAudioStream;
+
   boost::shared_ptr<IPlayer> player = GetInternal();
   if (player)
-    return player->GetAudioStream();
+  {
+    m_iAudioStream = player->GetAudioStream();
+    m_audioStreamUpdate.Set(1000);
+    return m_iAudioStream;
+  }
   else
     return 0;
 }
 
 int CApplicationPlayer::GetSubtitle()
 {
+  if (!m_subtitleStreamUpdate.IsTimePast())
+    return m_iSubtitleStream;
+
   boost::shared_ptr<IPlayer> player = GetInternal();
   if (player)
-    return player->GetSubtitle();
+  {
+    m_iSubtitleStream = player->GetSubtitle();
+    m_subtitleStreamUpdate.Set(1000);
+    return m_iSubtitleStream;
+  }
   else
     return 0;
 }
@@ -408,7 +403,7 @@ void CApplicationPlayer::DoAudioWork()
     player->DoAudioWork();
 }
 
-CStdString CApplicationPlayer::GetPlayerState()
+std::string CApplicationPlayer::GetPlayerState()
 {
   boost::shared_ptr<IPlayer> player = GetInternal();
   if (player)
@@ -429,7 +424,7 @@ bool CApplicationPlayer::GetStreamDetails(CStreamDetails &details)
   return (player && player->GetStreamDetails(details));
 }
 
-bool CApplicationPlayer::SetPlayerState(CStdString state)
+bool CApplicationPlayer::SetPlayerState(const std::string& state)
 {
   boost::shared_ptr<IPlayer> player = GetInternal();
   return (player && player->SetPlayerState(state));
@@ -481,7 +476,12 @@ void CApplicationPlayer::SetAudioStream(int iStream)
 {
   boost::shared_ptr<IPlayer> player = GetInternal();
   if (player)
+  {
     player->SetAudioStream(iStream);
+    m_iAudioStream = iStream;
+    m_audioStreamUpdate.Set(1000);
+    CMediaSettings::Get().GetCurrentVideoSettings().m_AudioStream = iStream;
+  }
 }
 
 void CApplicationPlayer::GetSubtitleStreamInfo(int index, SPlayerSubtitleStreamInfo &info)
@@ -495,17 +495,25 @@ void CApplicationPlayer::SetSubtitle(int iStream)
 {
   boost::shared_ptr<IPlayer> player = GetInternal();
   if (player)
+  {
     player->SetSubtitle(iStream);
+    m_iSubtitleStream = iStream;
+    m_subtitleStreamUpdate.Set(1000);
+    CMediaSettings::Get().GetCurrentVideoSettings().m_SubtitleStream = iStream;
+  }
 }
 
 void CApplicationPlayer::SetSubtitleVisible(bool bVisible)
 {
   boost::shared_ptr<IPlayer> player = GetInternal();
   if (player)
+  {
     player->SetSubtitleVisible(bVisible);
+    CMediaSettings::Get().GetCurrentVideoSettings().m_SubtitleOn = bVisible;
+  }
 }
 
-int  CApplicationPlayer::AddSubtitle(const CStdString& strSubPath)
+int  CApplicationPlayer::AddSubtitle(const std::string& strSubPath)
 {
   boost::shared_ptr<IPlayer> player = GetInternal();
   if (player)
@@ -535,7 +543,7 @@ void CApplicationPlayer::SetDynamicRangeCompression(long drc)
     player->SetDynamicRangeCompression(drc);
 }
 
-bool CApplicationPlayer::SwitchChannel(const PVR::CPVRChannel &channel)
+bool CApplicationPlayer::SwitchChannel(PVR::CPVRChannel &channel)
 {
   boost::shared_ptr<IPlayer> player = GetInternal();
   return (player && player->SwitchChannel(channel));
@@ -562,21 +570,21 @@ void CApplicationPlayer::GetSubtitleCapabilities(std::vector<int> &subCaps)
     player->GetSubtitleCapabilities(subCaps);
 }
 
-void CApplicationPlayer::GetAudioInfo( CStdString& strAudioInfo)
+void CApplicationPlayer::GetAudioInfo(std::string& strAudioInfo)
 {
   boost::shared_ptr<IPlayer> player = GetInternal();
   if (player)
     player->GetAudioInfo(strAudioInfo);
 }
 
-void CApplicationPlayer::GetVideoInfo( CStdString& strVideoInfo)
+void CApplicationPlayer::GetVideoInfo(std::string& strVideoInfo)
 {
   boost::shared_ptr<IPlayer> player = GetInternal();
   if (player)
     player->GetVideoInfo(strVideoInfo);
 }
 
-void CApplicationPlayer::GetGeneralInfo( CStdString& strVideoInfo)
+void CApplicationPlayer::GetGeneralInfo(std::string& strVideoInfo)
 {
   boost::shared_ptr<IPlayer> player = GetInternal();
   if (player)
@@ -596,28 +604,28 @@ void CApplicationPlayer::GetRenderFeatures(std::vector<int> &renderFeatures)
 {
   boost::shared_ptr<IPlayer> player = GetInternal();
   if (player)
-    player->GetRenderFeatures(renderFeatures);
+    player->OMXGetRenderFeatures(renderFeatures);
 }
 
 void CApplicationPlayer::GetDeinterlaceMethods(std::vector<int> &deinterlaceMethods)
 {
   boost::shared_ptr<IPlayer> player = GetInternal();
   if (player)
-    player->GetDeinterlaceMethods(deinterlaceMethods);
+    player->OMXGetDeinterlaceMethods(deinterlaceMethods);
 }
 
 void CApplicationPlayer::GetDeinterlaceModes(std::vector<int> &deinterlaceModes)
 {
   boost::shared_ptr<IPlayer> player = GetInternal();
   if (player)
-    player->GetDeinterlaceModes(deinterlaceModes);
+    player->OMXGetDeinterlaceModes(deinterlaceModes);
 }
 
 void CApplicationPlayer::GetScalingMethods(std::vector<int> &scalingMethods)
 {
   boost::shared_ptr<IPlayer> player = GetInternal();
   if (player)
-    player->GetScalingMethods(scalingMethods);
+    player->OMXGetScalingMethods(scalingMethods);
 }
 
 void CApplicationPlayer::SetPlaySpeed(int iSpeed, bool bApplicationMuted)

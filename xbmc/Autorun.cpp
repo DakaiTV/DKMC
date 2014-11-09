@@ -41,6 +41,7 @@
 #include "dialogs/GUIDialogYesNo.h"
 #include "utils/URIUtils.h"
 #include "utils/log.h"
+#include "video/windows/GUIWindowVideoBase.h"
 #ifdef HAS_CDDA_RIPPER
 #include "cdrip/CDDARipper.h"
 #endif
@@ -109,7 +110,8 @@ bool CAutorun::PlayDisc(const CStdString& path, bool bypassSettings, bool startF
     mediaPath = g_mediaManager.TranslateDevicePath("");
 #endif
 
-  auto_ptr<IDirectory> pDir ( CDirectoryFactory::Create( mediaPath ));
+  const CURL pathToUrl(mediaPath);
+  auto_ptr<IDirectory> pDir ( CDirectoryFactory::Create( pathToUrl ));
   bool bPlaying = RunDisc(pDir.get(), mediaPath, nAddedToPlaylist, true, bypassSettings, startFromBeginning);
 
   if ( !bPlaying && nAddedToPlaylist > 0 )
@@ -132,7 +134,8 @@ bool CAutorun::RunDisc(IDirectory* pDir, const CStdString& strDrive, int& nAdded
   bool bPlaying(false);
   CFileItemList vecItems;
 
-  if ( !pDir->GetDirectory( strDrive, vecItems ) )
+  const CURL pathToUrl(strDrive);
+  if ( !pDir->GetDirectory( pathToUrl, vecItems ) )
   {
     return false;
   }
@@ -205,6 +208,8 @@ bool CAutorun::RunDisc(IDirectory* pDir, const CStdString& strDrive, int& nAdded
 
           g_playlistPlayer.ClearPlaylist(PLAYLIST_VIDEO);
           g_playlistPlayer.SetShuffle (PLAYLIST_VIDEO, false);
+          if (!CGUIWindowVideoBase::ShowPlaySelection(item))
+            return false;
           g_playlistPlayer.Add(PLAYLIST_VIDEO, item);
           g_playlistPlayer.SetCurrentPlaylist(PLAYLIST_VIDEO);
           g_playlistPlayer.Play(0);
@@ -346,7 +351,7 @@ bool CAutorun::RunDisc(IDirectory* pDir, const CStdString& strDrive, int& nAdded
               && (bypassSettings))
         {
           bPlaying = true;
-          CStdString strExec = StringUtils::Format("XBMC.RecursiveSlideShow(%s)", pItem->GetPath().c_str());
+          CStdString strExec = StringUtils::Format("RecursiveSlideShow(%s)", pItem->GetPath().c_str());
           CBuiltins::Execute(strExec);
           return true;
         }
@@ -376,7 +381,7 @@ bool CAutorun::RunDisc(IDirectory* pDir, const CStdString& strDrive, int& nAdded
           // TODO: remove this once the app/player is capable of handling stacks immediately
           CStackDirectory dir;
           CFileItemList items;
-          dir.GetDirectory(pItem->GetPath(), items);
+          dir.GetDirectory(pItem->GetURL(), items);
           itemlist.Append(items);
         }
         else
@@ -423,7 +428,7 @@ bool CAutorun::RunDisc(IDirectory* pDir, const CStdString& strDrive, int& nAdded
       if (!pItem->m_bIsFolder && pItem->IsPicture())
       {
         bPlaying = true;
-        CStdString strExec = StringUtils::Format("XBMC.RecursiveSlideShow(%s)", strDrive.c_str());
+        CStdString strExec = StringUtils::Format("RecursiveSlideShow(%s)", strDrive.c_str());
         CBuiltins::Execute(strExec);
         break;
       }
@@ -512,20 +517,6 @@ void CAutorun::SettingOptionAudioCdActionsFiller(const CSetting *setting, std::v
 #ifdef HAS_CDDA_RIPPER
   list.push_back(make_pair(g_localizeStrings.Get(14096), AUTOCD_RIP));
 #endif
-}
-
-void CAutorun::SettingOptionAudioCdEncodersFiller(const CSetting *setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data)
-{
-#ifdef HAVE_LIBMP3LAME
-  list.push_back(make_pair(g_localizeStrings.Get(34000), CDDARIP_ENCODER_LAME));
-#endif
-#ifdef HAVE_LIBVORBISENC
-  list.push_back(make_pair(g_localizeStrings.Get(34001), CDDARIP_ENCODER_VORBIS));
-#endif
-  list.push_back(make_pair(g_localizeStrings.Get(34002), CDDARIP_ENCODER_WAV));
-  list.push_back(make_pair(g_localizeStrings.Get(34005), CDDARIP_ENCODER_FLAC));
-  list.push_back(make_pair(g_localizeStrings.Get(34006), CDDARIP_ENCODER_FFMPEG_M4A));
-  list.push_back(make_pair(g_localizeStrings.Get(34007), CDDARIP_ENCODER_FFMPEG_WMA));
 }
 
 #endif

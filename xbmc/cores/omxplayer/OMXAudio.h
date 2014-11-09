@@ -29,14 +29,11 @@
 
 #include "cores/AudioEngine/Utils/AEAudioFormat.h"
 #include "cores/AudioEngine/Utils/AEUtil.h"
-#include "cores/AudioEngine/Utils/AERemap.h"
-#include "cores/IAudioCallback.h"
 #include "linux/PlatformDefs.h"
 #include "DVDStreamInfo.h"
 
 #include "OMXClock.h"
 #include "OMXCore.h"
-#include "PCMRemap.h"
 
 #include "threads/CriticalSection.h"
 
@@ -57,26 +54,24 @@ extern "C" {
 class COMXAudio
 {
 public:
-  void UnRegisterAudioCallback();
-  void RegisterAudioCallback(IAudioCallback* pCallback);
   unsigned int GetChunkLen();
   float GetDelay();
   float GetCacheTime();
   float GetCacheTotal();
   COMXAudio();
-  bool Initialize(AEAudioFormat format, OMXClock *clock, CDVDStreamInfo &hints, uint64_t channelMap, bool bUsePassthrough, bool bUseHWDecode);
+  bool Initialize(AEAudioFormat format, OMXClock *clock, CDVDStreamInfo &hints, CAEChannelInfo channelMap, bool bUsePassthrough, bool bUseHWDecode);
   bool PortSettingsChanged();
   ~COMXAudio();
 
   unsigned int AddPackets(const void* data, unsigned int len);
-  unsigned int AddPackets(const void* data, unsigned int len, double dts, double pts);
+  unsigned int AddPackets(const void* data, unsigned int len, double dts, double pts, unsigned int frame_size);
   unsigned int GetSpace();
   bool Deinitialize();
 
   void SetVolume(float nVolume);
   void SetMute(bool bOnOff);
   void SetDynamicRangeCompression(long drc);
-  float GetDynamicRangeAmplification() { return 20.0f * log10f(m_amplification * m_attenuation); }
+  float GetDynamicRangeAmplification() const { return 20.0f * log10f(m_amplification * m_attenuation); }
   bool ApplyVolume();
   int SetPlaySpeed(int iSpeed);
   void SubmitEOS();
@@ -98,18 +93,11 @@ public:
   unsigned int SyncAC3(BYTE* pData, unsigned int iSize);
   void UpdateAttenuation();
 
-  bool BadState() { return !m_Initialized; };
-  unsigned int GetAudioRenderingLatency();
+  bool BadState() const { return !m_Initialized; };
+  unsigned int GetAudioRenderingLatency() const;
   float GetMaxLevel(double &pts);
 
-  void BuildChannelMap(enum PCMChannels *channelMap, uint64_t layout);
-  int BuildChannelMapCEA(enum PCMChannels *channelMap, uint64_t layout);
-  void BuildChannelMapOMX(enum OMX_AUDIO_CHANNELTYPE *channelMap, uint64_t layout);
-  uint64_t GetChannelLayout(enum PCMLayout layout);
-  CAEChannelInfo GetAEChannelLayout(uint64_t layout);
-
 private:
-  IAudioCallback* m_pCallback;
   bool          m_Initialized;
   float         m_CurrentVolume;
   bool          m_Mute;
@@ -117,6 +105,7 @@ private:
   bool          m_Passthrough;
   bool          m_HWDecode;
   unsigned int  m_BytesPerSec;
+  unsigned int  m_InputBytesPerSec;
   unsigned int  m_BufferLen;
   unsigned int  m_ChunkLen;
   unsigned int  m_InputChannels;
@@ -168,7 +157,6 @@ protected:
   COMXCoreTunel     m_omx_tunnel_splitter_analog;
   COMXCoreTunel     m_omx_tunnel_splitter_hdmi;
 
-  static void CheckOutputBufferSize(void **buffer, int *oldSize, int newSize);
   CCriticalSection m_critSection;
 };
 #endif

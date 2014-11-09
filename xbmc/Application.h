@@ -24,8 +24,8 @@
 #include "XBApplicationEx.h"
 
 #include "guilib/IMsgTargetCallback.h"
-#include "threads/Condition.h"
 #include "utils/GlobalsHandling.h"
+#include "utils/StdString.h"
 
 #include <map>
 
@@ -146,7 +146,11 @@ public:
 
   bool StartServer(enum ESERVERS eServer, bool bStart, bool bWait = false);
 
-  void StartPVRManager(bool bOpenPVRWindow = false);
+  /*!
+   * @brief Starts the PVR manager and decide if the manager should handle the startup window activation.
+   * @return true, if the startup window activation is handled by the pvr manager, otherwise false
+   */
+  bool StartPVRManager();
   void StopPVRManager();
   bool IsCurrentThread() const;
   void Stop(int exitCode);
@@ -154,7 +158,7 @@ public:
   void UnloadSkin(bool forReload = false);
   bool LoadUserWindows();
   void ReloadSkin(bool confirm = false);
-  const CStdString& CurrentFile();
+  const std::string& CurrentFile();
   CFileItem& CurrentFileItem();
   CFileItem& CurrentUnstackedItem();
   virtual bool OnMessage(CGUIMessage& message);
@@ -174,6 +178,7 @@ public:
   PlayBackRet PlayFile(const CFileItem& item, bool bRestart = false);
   void SaveFileState(bool bForeground = false);
   void UpdateFileState();
+  void LoadVideoSettings(const std::string &path);
   void StopPlaying();
   void Restart(bool bSamePosition = true);
   void DelayedPlayerRestart();
@@ -193,6 +198,7 @@ public:
   void ActivateScreenSaver(bool forceType = false);
   void CloseNetworkShares();
 
+  void ShowAppMigrationMessage();
   virtual void Process();
   void ProcessSlow();
   void ResetScreenSaver();
@@ -239,10 +245,27 @@ public:
   bool IsMusicScanning() const;
   bool IsVideoScanning() const;
 
-  void StartVideoCleanup();
+  /*!
+   \brief Starts a video library cleanup.
+   \param userInitiated Whether the action was initiated by the user (either via GUI or any other method) or not.  It is meant to hide or show dialogs.
+   */
+  void StartVideoCleanup(bool userInitiated = true);
 
-  void StartVideoScan(const CStdString &path, bool scanAll = false);
-  void StartMusicScan(const CStdString &path, int flags = 0);
+  /*!
+   \brief Starts a video library update.
+   \param path The path to scan or "" (empty string) for a global scan.
+   \param userInitiated Whether the action was initiated by the user (either via GUI or any other method) or not.  It is meant to hide or show dialogs.
+   \param scanAll Whether to scan everything not already scanned (regardless of whether the user normally doesn't want a folder scanned).
+   */
+  void StartVideoScan(const CStdString &path, bool userInitiated = true, bool scanAll = false);
+
+  /*!
+   \brief Starts a music library update.
+   \param path The path to scan or "" (empty string) for a global scan.
+   \param userInitiated Whether the action was initiated by the user (either via GUI or any other method) or not.  It is meant to hide or show dialogs.
+   \param flags Flags for controlling the scanning process.  See xbmc/music/infoscanner/MusicInfoScanner.h for possible values.
+   */
+  void StartMusicScan(const CStdString &path, bool userInitiated = true, int flags = 0);
   void StartMusicAlbumScan(const CStdString& strDirectory, bool refresh=false);
   void StartMusicArtistScan(const CStdString& strDirectory, bool refresh=false);
 
@@ -269,6 +292,7 @@ public:
   CApplicationPlayer* m_pPlayer;
 
   inline bool IsInScreenSaver() { return m_bScreenSave; };
+  inline bool IsDPMSActive() { return m_dpmsIsActive; };
   int m_iScreenSaveLock; // spiff: are we checking for a lock? if so, ignore the screensaver state, if -1 we have failed to input locks
 
   bool m_bPlaybackStarting;
@@ -448,8 +472,6 @@ protected:
 
   float NavigationIdleTime();
   static bool AlwaysProcess(const CAction& action);
-
-  void SaveCurrentFileSettings();
 
   bool InitDirectoriesLinux();
   bool InitDirectoriesOSX();

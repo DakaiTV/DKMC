@@ -29,10 +29,13 @@
 #include "settings/AdvancedSettings.h"
 #include "settings/Settings.h"
 #include "settings/DisplaySettings.h"
+#include "guilib/DispResource.h"
+#include "threads/SingleLock.h"
 #include "utils/log.h"
 #include "EGLWrapper.h"
 #include "EGLQuirks.h"
 #include <vector>
+#include <float.h>
 ////////////////////////////////////////////////////////////////////////////////////////////
 CWinSystemEGL::CWinSystemEGL() : CWinSystemBase()
 {
@@ -281,6 +284,11 @@ bool CWinSystemEGL::CreateNewWindow(const CStdString& name, bool fullScreen, RES
   }
   Show();
 
+  CSingleLock lock(m_resourceSection);
+  // tell any shared resources
+  for (std::vector<IDispResource *>::iterator i = m_resources.begin(); i != m_resources.end(); i++)
+    (*i)->OnResetDevice();
+
   return true;
 }
 
@@ -382,7 +390,7 @@ void CWinSystemEGL::UpdateResolutions()
        resDesktop.iScreenWidth == resolutions[i].iScreenWidth &&
        resDesktop.iScreenHeight == resolutions[i].iScreenHeight &&
        (resDesktop.dwFlags & D3DPRESENTFLAG_MODEMASK) == (resolutions[i].dwFlags & D3DPRESENTFLAG_MODEMASK) &&
-       resDesktop.fRefreshRate == resolutions[i].fRefreshRate)
+       fabs(resDesktop.fRefreshRate - resolutions[i].fRefreshRate) < FLT_EPSILON)
     {
       ResDesktop = res_index;
     }
@@ -469,6 +477,20 @@ bool CWinSystemEGL::Hide()
 bool CWinSystemEGL::Show(bool raise)
 {
   return m_egl->ShowWindow(true);
+}
+
+void CWinSystemEGL::Register(IDispResource *resource)
+{
+  CSingleLock lock(m_resourceSection);
+  m_resources.push_back(resource);
+}
+
+void CWinSystemEGL::Unregister(IDispResource* resource)
+{
+  CSingleLock lock(m_resourceSection);
+  std::vector<IDispResource*>::iterator i = find(m_resources.begin(), m_resources.end(), resource);
+  if (i != m_resources.end())
+    m_resources.erase(i);
 }
 
 EGLDisplay CWinSystemEGL::GetEGLDisplay()

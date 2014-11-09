@@ -22,7 +22,6 @@
 #include "cores/AudioEngine/Interfaces/AEStream.h"
 #include "cores/AudioEngine/Utils/AEAudioFormat.h"
 #include "cores/AudioEngine/Utils/AELimiter.h"
-#include "cores/AudioEngine/Utils/AEConvert.h"
 
 namespace ActiveAE
 {
@@ -43,8 +42,9 @@ protected:
 
 public:
   virtual unsigned int GetSpace();
-  virtual unsigned int AddData(void *data, unsigned int size);
+  virtual unsigned int AddData(uint8_t* const *data, unsigned int offset, unsigned int frames, double pts = 0.0);
   virtual double GetDelay();
+  virtual int64_t GetPlayingPTS();
   virtual bool IsBuffering();
   virtual double GetCacheTime();
   virtual double GetCacheTotal();
@@ -77,6 +77,7 @@ public:
   virtual void FadeVolume(float from, float to, unsigned int time);
   virtual bool IsFading();
   virtual void RegisterSlave(IAEStream *stream);
+  virtual void Discontinuity();
 
 protected:
 
@@ -92,13 +93,13 @@ protected:
   int m_streamFreeBuffers;
   bool m_streamIsBuffering;
   IAEStream *m_streamSlave;
-  CAEConvert::AEConvertToFn m_convertFn;
   CCriticalSection m_streamLock;
   uint8_t *m_leftoverBuffer;
   int m_leftoverBytes;
   CSampleBuffer *m_currentBuffer;
   CSoundPacket *m_remapBuffer;
-  CActiveAEResample *m_remapper;
+  IAEResample *m_remapper;
+  int m_clockId;
 
   // only accessed by engine
   CActiveAEBufferPool *m_inputBuffers;

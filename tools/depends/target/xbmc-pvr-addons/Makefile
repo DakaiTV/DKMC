@@ -2,7 +2,7 @@ include ../../Makefile.include
 #DEPS= ../../Makefile.include Makefile
 
 LIBNAME=xbmc-pvr-addons
-VERSION=2955e1dd62f4047b2782cb927f7671ae209f20d8
+VERSION=067befe6b8da81e29abca8cd394d08c84233677b
 GIT_DIR=$(TARBALLS_LOCATION)/$(LIBNAME).git
 BASE_URL=git://github.com/opdenkamp/$(LIBNAME).git
 DYLIB=$(PLATFORM)/addons/pvr.demo/.libs/libpvrdemo-addon.so
@@ -16,7 +16,9 @@ export GIT_WORK_TREE=$(PLATFORM)
 export MYSQL_CONFIG=$(PREFIX)/bin/mysql_config
 
 # configuration settings
-CONFIGURE=./configure --prefix=$(PREFIX) --enable-addons-with-dependencies
+VERSION.TXT := $(XBMCROOT)/version.txt
+APP_NAME=$(shell awk '/APP_NAME/ {print tolower($$2)}' $(VERSION.TXT))
+CONFIGURE=./configure --prefix=$(PREFIX) --libdir=$(PREFIX)/lib/$(APP_NAME)/addons --datadir=$(PREFIX)/share/$(APP_NAME)/addons --enable-addons-with-dependencies
 
 all: .installed-$(PLATFORM)
 

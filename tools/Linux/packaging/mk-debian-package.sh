@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2013 Team XBMC
-# http://xbmc.org
+# http://kodi.tv
 #
 # This Program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -73,8 +73,8 @@ function getVersion {
     getGitRev
     if [[ $RELEASEV == "auto" ]]
     then 
-        local MAJORVER=$(grep VERSION_MAJOR $REPO_DIR/xbmc/GUIInfoManager.h | awk '{ print $3 }')
-        local MINORVER=$(grep VERSION_MINOR $REPO_DIR/xbmc/GUIInfoManager.h | awk '{ print $3 }')
+        local MAJORVER=$(grep VERSION_MAJOR $REPO_DIR/version.txt | awk '{ print $2 }')
+        local MINORVER=$(grep VERSION_MINOR $REPO_DIR/version.txt | awk '{ print $2 }')
         RELEASEV=${MAJORVER}.${MINORVER}
     else
         PACKAGEVERSION="${RELEASEV}~git$(date '+%Y%m%d.%H%M')-${TAG}"
@@ -99,7 +99,7 @@ function archiveRepo {
     cd $REPO_DIR || exit 1
     git clean -xfd
     echo $REV > VERSION
-    DEST="xbmc-${RELEASEV}~git$(date '+%Y%m%d.%H%M')-${TAG}"
+    DEST="kodi-${RELEASEV}~git$(date '+%Y%m%d.%H%M')-${TAG}"
     [[ -d debian ]] && rm -rf debian
     cd ..
     tar -czf ${DEST}.tar.gz -h --exclude .git $(basename $REPO_DIR)

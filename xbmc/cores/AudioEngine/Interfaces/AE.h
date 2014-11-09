@@ -21,6 +21,7 @@
 
 #include <list>
 #include <map>
+#include <vector>
 
 #include "system.h"
 #include "threads/CriticalSection.h"
@@ -57,8 +58,9 @@ enum AEQuality
   AE_QUALITY_HIGH       = 50, /* Best sound processing quality */
 
   /* Optional quality levels */
-  AE_QUALITY_REALLYHIGH = 100 /* Uncompromised optional quality level,
+  AE_QUALITY_REALLYHIGH = 100, /* Uncompromised optional quality level,
                                usually with unmeasurable and unnoticeable improvement */ 
+  AE_QUALITY_GPU        = 101, /* GPU acceleration */
 };
 
 /**
@@ -210,6 +212,18 @@ public:
    * @returns true if the AudioEngine is capable of drain mode
    */
   virtual bool SupportsSilenceTimeout() { return false; }
+
+  /**
+   * Returns true if the AudioEngine is currently configured for stereo audio
+   * @returns true if the AudioEngine is currently configured for stereo audio
+   */
+  virtual bool HasStereoAudioChannelCount() { return false; }
+
+  /**
+   * Returns true if the AudioEngine is currently configured for HD audio (more than 5.1)
+   * @returns true if the AudioEngine is currently configured for HD audio (more than 5.1)
+   */
+  virtual bool HasHDAudioChannelCount() { return true; }
 
   virtual void RegisterAudioCallback(IAudioCallback* pCallback) {}
 

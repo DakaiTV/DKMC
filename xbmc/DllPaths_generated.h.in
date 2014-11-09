@@ -70,17 +70,8 @@
 #define DLL_PATH_LIBMPEG2      "@MPEG2_SONAME@"
 
 /* cdrip */
-#define DLL_PATH_LAME_ENC      "@LAMEENC_SONAME@"
 #define DLL_PATH_OGG           "@OGG_SONAME@"
-#define DLL_PATH_VORBIS_ENC    "@VORBISENC_SONAME@"
 #define DLL_PATH_VORBIS        "@VORBIS_SONAME@"
-
-/* broadcom crystalhd */
-#if defined(TARGET_DARWIN)
-#define DLL_PATH_LIBCRYSTALHD  "libcrystalhd.dylib"
-#else
-#define DLL_PATH_LIBCRYSTALHD  "@CRYSTALHD_SONAME@"
-#endif
 
 /* libbluray */
 #define DLL_PATH_LIBBLURAY     "@BLURAY_SONAME@"
@@ -91,5 +82,8 @@
 
 /* xkbcommon */
 #define DLL_PATH_XKBCOMMON "@XKBCOMMON_LIBRARY_SONAME@"
+
+/* sse4 */
+#define DLL_PATH_LIBSSE4      "special://xbmcbin/system/libsse4-@ARCH@.so"
 
 #endif

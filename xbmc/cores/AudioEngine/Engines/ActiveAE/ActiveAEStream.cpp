@@ -25,6 +25,7 @@
 
 #include "cores/AudioEngine/AEFactory.h"
 #include "cores/AudioEngine/Utils/AEUtil.h"
+#include "cores/AudioEngine/AEResampleFactory.h"
 
 #include "ActiveAE.h"
 #include "ActiveAEStream.h"
@@ -44,15 +45,15 @@ CActiveAEStream::CActiveAEStream(AEAudioFormat *format)
   m_paused = false;
   m_rgain = 1.0;
   m_volume = 1.0;
+  SetVolume(1.0);
   m_amplify = 1.0;
   m_streamSpace = m_format.m_frameSize * m_format.m_frames;
   m_streamDraining = false;
   m_streamDrained = false;
   m_streamFading = false;
   m_streamFreeBuffers = 0;
-  m_streamIsBuffering = true;
+  m_streamIsBuffering = false;
   m_streamSlave = NULL;
-  m_convertFn = NULL;
   m_leftoverBuffer = new uint8_t[m_format.m_frameSize];
   m_leftoverBytes = 0;
   m_forceResampler = false;
@@ -94,7 +95,7 @@ void CActiveAEStream::InitRemapper()
   for(unsigned int i=0; i<m_format.m_channelLayout.Count(); i++)
   {
     avLast = avCur;
-    avCur = CActiveAEResample::GetAVChannel(m_format.m_channelLayout[i]);
+    avCur = CAEUtil::GetAVChannel(m_format.m_channelLayout[i]);
     if(avCur < avLast)
     {
       needRemap = true;
@@ -106,8 +107,8 @@ void CActiveAEStream::InitRemapper()
   {
     CLog::Log(LOGDEBUG, "CActiveAEStream::%s - initialize remapper", __FUNCTION__);
 
-    m_remapper = new CActiveAEResample();
-    uint64_t avLayout = CActiveAEResample::GetAVChannelLayout(m_format.m_channelLayout);
+    m_remapper = CAEResampleFactory::Create();
+    uint64_t avLayout = CAEUtil::GetAVChannelLayout(m_format.m_channelLayout);
 
     // build layout according to ffmpeg channel order
     // we need this for reference
@@ -118,7 +119,7 @@ void CActiveAEStream::InitRemapper()
     {
       for(unsigned int j=0; j<m_format.m_channelLayout.Count(); j++)
       {
-        idx = m_remapper->GetAVChannelIndex(m_format.m_channelLayout[j], avLayout);
+        idx = CAEUtil::GetAVChannelIndex(m_format.m_channelLayout[j], avLayout);
         if (idx == (int)i)
         {
           ffmpegLayout += m_format.m_channelLayout[j];
@@ -134,7 +135,7 @@ void CActiveAEStream::InitRemapper()
     {
       for(unsigned int j=0; j<m_format.m_channelLayout.Count(); j++)
       {
-        idx = m_remapper->GetAVChannelIndex(m_format.m_channelLayout[j], avLayout);
+        idx = CAEUtil::GetAVChannelIndex(m_format.m_channelLayout[j], avLayout);
         if (idx == (int)i)
         {
           remapLayout += ffmpegLayout[j];
@@ -147,13 +148,15 @@ void CActiveAEStream::InitRemapper()
     m_remapper->Init(avLayout,
                      m_format.m_channelLayout.Count(),
                      m_format.m_sampleRate,
-                     CActiveAEResample::GetAVSampleFormat(m_format.m_dataFormat),
+                     CAEUtil::GetAVSampleFormat(m_format.m_dataFormat),
                      CAEUtil::DataFormatToUsedBits(m_format.m_dataFormat),
+                     CAEUtil::DataFormatToDitherBits(m_format.m_dataFormat),
                      avLayout,
                      m_format.m_channelLayout.Count(),
                      m_format.m_sampleRate,
-                     CActiveAEResample::GetAVSampleFormat(m_format.m_dataFormat),
+                     CAEUtil::GetAVSampleFormat(m_format.m_dataFormat),
                      CAEUtil::DataFormatToUsedBits(m_format.m_dataFormat),
+                     CAEUtil::DataFormatToDitherBits(m_format.m_dataFormat),
                      false,
                      false,
                      &remapLayout,
@@ -191,63 +194,48 @@ unsigned int CActiveAEStream::GetSpace()
   return m_streamFreeBuffers * m_streamSpace;
 }
 
-unsigned int CActiveAEStream::AddData(void *data, unsigned int size)
+unsigned int CActiveAEStream::AddData(uint8_t* const *data, unsigned int offset, unsigned int frames, double pts)
 {
   Message *msg;
   unsigned int copied = 0;
-  unsigned int bytesToCopy = size;
-  uint8_t *buf = (uint8_t*)data;
+  int sourceFrames = frames;
+  uint8_t* const *buf = data;
 
-  while(copied < size)
+  while(copied < frames)
   {
-    buf = ((uint8_t*)data) + copied;
-    bytesToCopy = size - copied;
+    sourceFrames = frames - copied;
 
     if (m_currentBuffer)
     {
-      // fill leftover buffer and copy it first
-      if (m_leftoverBytes && bytesToCopy >= (m_format.m_frameSize - m_leftoverBytes))
-      {
-        int fillbytes = m_format.m_frameSize - m_leftoverBytes;
-        memcpy(m_leftoverBuffer+m_leftoverBytes, buf, fillbytes);
-        copied += fillbytes;
-        // leftover buffer will be copied on next cycle
-        buf = m_leftoverBuffer;
-        bytesToCopy = m_format.m_frameSize;
-        m_leftoverBytes = 0;
-      }
-
       int start = m_currentBuffer->pkt->nb_samples *
                   m_currentBuffer->pkt->bytes_per_sample *
                   m_currentBuffer->pkt->config.channels /
                   m_currentBuffer->pkt->planes;
 
-      int freeSamples = m_currentBuffer->pkt->max_nb_samples - m_currentBuffer->pkt->nb_samples;
-      int availableSamples = bytesToCopy / m_format.m_frameSize;
+      int freeSpace = m_currentBuffer->pkt->max_nb_samples - m_currentBuffer->pkt->nb_samples;
+      int minFrames = std::min(freeSpace, sourceFrames);
+      int planes = m_currentBuffer->pkt->planes;
+      int bufOffset = (offset + copied)*m_format.m_frameSize/planes;
 
-      // if we don't have a full frame, copy to leftover buffer
-      if (!availableSamples && bytesToCopy)
+      if (!copied)
       {
-        memcpy(m_leftoverBuffer+m_leftoverBytes, buf, bytesToCopy);
-        m_leftoverBytes = bytesToCopy;
-        copied += bytesToCopy;
+        m_currentBuffer->timestamp = pts;
+        m_currentBuffer->clockId = m_clockId;
+        m_currentBuffer->pkt_start_offset = m_currentBuffer->pkt->nb_samples;
       }
 
-      int samples = std::min(freeSamples, availableSamples);
-      int bytes = samples * m_format.m_frameSize;
+      for (int i=0; i<planes; i++)
+      {
+        memcpy(m_currentBuffer->pkt->data[i]+start, buf[i]+bufOffset, minFrames*m_format.m_frameSize/planes);
+      }
+      copied += minFrames;
 
-      //TODO: handle planar formats
-      if (m_convertFn)
-        m_convertFn(buf, samples*m_currentBuffer->pkt->config.channels, (float*)(m_currentBuffer->pkt->data[0] + start));
-      else
-        memcpy(m_currentBuffer->pkt->data[0] + start, buf, bytes);
       {
         CSingleLock lock(*m_statsLock);
-        m_currentBuffer->pkt->nb_samples += samples;
-        m_bufferedTime += (double)samples / m_currentBuffer->pkt->config.sample_rate;
+        m_currentBuffer->pkt->nb_samples += minFrames;
+        m_bufferedTime += (double)minFrames / m_currentBuffer->pkt->config.sample_rate;
       }
-      if (buf != m_leftoverBuffer)
-        copied += bytes;
+
       if (m_currentBuffer->pkt->nb_samples == m_currentBuffer->pkt->max_nb_samples)
       {
         MsgStreamSample msgData;
@@ -264,6 +252,7 @@ unsigned int CActiveAEStream::AddData(void *data, unsigned int size)
       if (msg->signal == CActiveAEDataProtocol::STREAMBUFFER)
       {
         m_currentBuffer = *((CSampleBuffer**)msg->data);
+        m_currentBuffer->timestamp = 0;
         msg->Release();
         DecFreeBuffers();
         continue;
@@ -283,7 +272,19 @@ unsigned int CActiveAEStream::AddData(void *data, unsigned int size)
 
 double CActiveAEStream::GetDelay()
 {
-  return AE.GetDelay(this);
+  AEDelayStatus status;
+  AE.GetDelay(status, this);
+  return status.GetDelay();
+}
+
+int64_t CActiveAEStream::GetPlayingPTS()
+{
+  return AE.GetPlayingPTS();
+}
+
+void CActiveAEStream::Discontinuity()
+{
+  m_clockId = AE.Discontinuity();
 }
 
 bool CActiveAEStream::IsBuffering()
@@ -431,8 +432,9 @@ double CActiveAEStream::GetResampleRatio()
 
 bool CActiveAEStream::SetResampleRatio(double ratio)
 {
+  if (ratio != m_streamResampleRatio)
+    AE.SetStreamResampleRatio(this, ratio);
   m_streamResampleRatio = ratio;
-  AE.SetStreamResampleRatio(this, m_streamResampleRatio);
   return true;
 }
 

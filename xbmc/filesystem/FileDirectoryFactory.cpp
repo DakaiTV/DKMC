@@ -49,6 +49,7 @@
 #include "settings/AdvancedSettings.h"
 #include "FileItem.h"
 #include "utils/StringUtils.h"
+#include "URL.h"
 
 using namespace XFILE;
 using namespace PLAYLIST;
@@ -61,20 +62,17 @@ CFileDirectoryFactory::~CFileDirectoryFactory(void)
 {}
 
 // return NULL + set pItem->m_bIsFolder to remove it completely from list.
-IFileDirectory* CFileDirectoryFactory::Create(const CStdString& strPath, CFileItem* pItem, const CStdString& strMask)
+IFileDirectory* CFileDirectoryFactory::Create(const CURL& url, CFileItem* pItem, const std::string& strMask)
 {
-  if (URIUtils::IsStack(strPath)) // disqualify stack as we need to work with each of the parts instead
+  if (url.IsProtocol("stack")) // disqualify stack as we need to work with each of the parts instead
     return NULL;
 
-  CStdString strExtension=URIUtils::GetExtension(strPath);
-  StringUtils::ToLower(strExtension);
-
 #ifdef HAS_FILESYSTEM
-  if ((strExtension.Equals(".ogg") || strExtension.Equals(".oga")) && CFile::Exists(strPath))
+  if ((url.IsFileType("ogg") || url.IsFileType("oga")) && CFile::Exists(url))
   {
     IFileDirectory* pDir=new COGGFileDirectory;
     //  Has the ogg file more than one bitstream?
-    if (pDir->ContainsFiles(strPath))
+    if (pDir->ContainsFiles(url))
     {
       return pDir; // treat as directory
     }
@@ -82,32 +80,32 @@ IFileDirectory* CFileDirectoryFactory::Create(const CStdString& strPath, CFileIt
     delete pDir;
     return NULL;
   }
-  if (strExtension.Equals(".nsf") && CFile::Exists(strPath))
+  if (url.IsFileType("nsf") && CFile::Exists(url))
   {
     IFileDirectory* pDir=new CNSFFileDirectory;
     //  Has the nsf file more than one track?
-    if (pDir->ContainsFiles(strPath))
+    if (pDir->ContainsFiles(url))
       return pDir; // treat as directory
 
     delete pDir;
     return NULL;
   }
-  if (strExtension.Equals(".sid") && CFile::Exists(strPath))
+  if (url.IsFileType("sid") && CFile::Exists(url))
   {
     IFileDirectory* pDir=new CSIDFileDirectory;
     //  Has the sid file more than one track?
-    if (pDir->ContainsFiles(strPath))
+    if (pDir->ContainsFiles(url))
       return pDir; // treat as directory
 
     delete pDir;
     return NULL;
   }
 #ifdef HAS_ASAP_CODEC
-  if (ASAPCodec::IsSupportedFormat(strExtension) && CFile::Exists(strPath))
+  if (ASAPCodec::IsSupportedFormat(url.GetFileType()) && CFile::Exists(url))
   {
     IFileDirectory* pDir=new CASAPFileDirectory;
     //  Has the asap file more than one track?
-    if (pDir->ContainsFiles(strPath))
+    if (pDir->ContainsFiles(url))
       return pDir; // treat as directory
 
     delete pDir;
@@ -118,18 +116,17 @@ IFileDirectory* CFileDirectoryFactory::Create(const CStdString& strPath, CFileIt
   if (pItem->IsRSS())
     return new CRSSDirectory();
 
-  if (pItem->IsDVDImage())
+  if (pItem->IsDiscImage())
     return new CUDFDirectory();
 
 #endif
 #if defined(TARGET_ANDROID)
-  if (strExtension.Equals(".apk"))
+  if (url.IsFileType("apk"))
   {
-    CStdString strUrl;
-    URIUtils::CreateArchivePath(strUrl, "apk", strPath, "");
+    CURL zipURL = URIUtils::CreateArchivePath("apk", url);
 
     CFileItemList items;
-    CDirectory::GetDirectory(strUrl, items, strMask);
+    CDirectory::GetDirectory(zipURL, items, strMask);
     if (items.Size() == 0) // no files
       pItem->m_bIsFolder = true;
     else if (items.Size() == 1 && items[0]->m_idepth == 0 && !items[0]->m_bIsFolder)
@@ -139,19 +136,18 @@ IFileDirectory* CFileDirectoryFactory::Create(const CStdString& strPath, CFileIt
     }
     else
     { // compressed or more than one file -> create a apk dir
-      pItem->SetPath(strUrl);
+      pItem->SetURL(zipURL);
       return new CAPKDirectory;
     }
     return NULL;
   }
 #endif
-  if (strExtension.Equals(".zip"))
+  if (url.IsFileType("zip"))
   {
-    CStdString strUrl;
-    URIUtils::CreateArchivePath(strUrl, "zip", strPath, "");
+    CURL zipURL = URIUtils::CreateArchivePath("zip", url);
 
     CFileItemList items;
-    CDirectory::GetDirectory(strUrl, items, strMask);
+    CDirectory::GetDirectory(zipURL, items, strMask);
     if (items.Size() == 0) // no files
       pItem->m_bIsFolder = true;
     else if (items.Size() == 1 && items[0]->m_idepth == 0 && !items[0]->m_bIsFolder)
@@ -161,34 +157,32 @@ IFileDirectory* CFileDirectoryFactory::Create(const CStdString& strPath, CFileIt
     }
     else
     { // compressed or more than one file -> create a zip dir
-      pItem->SetPath(strUrl);
+      pItem->SetURL(zipURL);
       return new CZipDirectory;
     }
     return NULL;
   }
-  if (strExtension.Equals(".rar") || strExtension.Equals(".001"))
+  if (url.IsFileType("rar") || url.IsFileType("001"))
   {
-    CStdString strUrl;
-    URIUtils::CreateArchivePath(strUrl, "rar", strPath, "");
-
     vector<std::string> tokens;
+    const std::string strPath = url.Get();
     StringUtils::Tokenize(strPath,tokens,".");
     if (tokens.size() > 2)
     {
-      if (strExtension.Equals(".001"))
+      if (url.IsFileType("001"))
       {
         if (StringUtils::EqualsNoCase(tokens[tokens.size()-2], "ts")) // .ts.001 - treat as a movie file to scratch some users itch
           return NULL;
       }
-      CStdString token = tokens[tokens.size()-2];
-      if (StringUtils::StartsWithNoCase(token, "part")) // only list '.part01.rar'
+      std::string token = tokens[tokens.size()-2];
+      if (StringUtils::StartsWith(token, "part")) // only list '.part01.rar'
       {
         // need this crap to avoid making mistakes - yeyh for the new rar naming scheme :/
         struct __stat64 stat;
         int digits = token.size()-4;
-        CStdString strFormat = StringUtils::Format("part%%0%ii", digits);
-        CStdString strNumber = StringUtils::Format(strFormat.c_str(), 1);
-        CStdString strPath2 = strPath;
+        std::string strFormat = StringUtils::Format("part%%0%ii", digits);
+        std::string strNumber = StringUtils::Format(strFormat.c_str(), 1);
+        std::string strPath2 = strPath;
         StringUtils::Replace(strPath2,token,strNumber);
         if (atoi(token.substr(4).c_str()) > 1 && CFile::Stat(strPath2,&stat) == 0)
         {
@@ -198,8 +192,10 @@ IFileDirectory* CFileDirectoryFactory::Create(const CStdString& strPath, CFileIt
       }
     }
 
+    CURL rarURL = URIUtils::CreateArchivePath("rar", url);
+
     CFileItemList items;
-    CDirectory::GetDirectory(strUrl, items, strMask);
+    CDirectory::GetDirectory(rarURL, items, strMask);
     if (items.Size() == 0) // no files - hide this
       pItem->m_bIsFolder = true;
     else if (items.Size() == 1 && items[0]->m_idepth == 0x30 && !items[0]->m_bIsFolder)
@@ -211,7 +207,7 @@ IFileDirectory* CFileDirectoryFactory::Create(const CStdString& strPath, CFileIt
     {
 #ifdef HAS_FILESYSTEM_RAR
       // compressed or more than one file -> create a rar dir
-      pItem->SetPath(strUrl);
+      pItem->SetURL(rarURL);
       return new CRarDirectory;
 #else
       return NULL;
@@ -219,11 +215,11 @@ IFileDirectory* CFileDirectoryFactory::Create(const CStdString& strPath, CFileIt
     }
     return NULL;
   }
-  if (strExtension.Equals(".xsp"))
+  if (url.IsFileType("xsp"))
   { // XBMC Smart playlist - just XML renamed to XSP
     // read the name of the playlist in
     CSmartPlaylist playlist;
-    if (playlist.OpenAndReadName(strPath))
+    if (playlist.OpenAndReadName(url))
     {
       pItem->SetLabel(playlist.GetName());
       pItem->SetLabelPreformated(true);
@@ -231,14 +227,14 @@ IFileDirectory* CFileDirectoryFactory::Create(const CStdString& strPath, CFileIt
     IFileDirectory* pDir=new CSmartPlaylistDirectory;
     return pDir; // treat as directory
   }
-  if (CPlayListFactory::IsPlaylist(strPath))
+  if (CPlayListFactory::IsPlaylist(url))
   { // Playlist file
     // currently we only return the directory if it contains
     // more than one file.  Reason is that .pls and .m3u may be used
     // for links to http streams etc.
     IFileDirectory *pDir = new CPlaylistFileDirectory();
     CFileItemList items;
-    if (pDir->GetDirectory(strPath, items))
+    if (pDir->GetDirectory(url, items))
     {
       if (items.Size() > 1)
         return pDir;

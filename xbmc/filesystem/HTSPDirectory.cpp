@@ -139,7 +139,7 @@ void CHTSPDirectorySession::Release(CHTSPDirectorySession* &session)
     }
   }
   CLog::Log(LOGERROR, "CHTSPDirectorySession::Release - release of invalid session");
-  ASSERT(0);
+  assert(0);
 }
 
 void CHTSPDirectorySession::CheckIdle(DWORD idle)
@@ -418,10 +418,8 @@ bool CHTSPDirectory::GetTag(const CURL &base, CFileItemList &items)
 }
 
 
-bool CHTSPDirectory::GetDirectory(const CStdString& strPath, CFileItemList &items)
+bool CHTSPDirectory::GetDirectory(const CURL& url, CFileItemList &items)
 {
-  CURL                    url(strPath);
-
   CHTSPDirectorySession::Release(m_session);
   if(!(m_session = CHTSPDirectorySession::Acquire(url)))
     return false;
@@ -432,22 +430,24 @@ bool CHTSPDirectory::GetDirectory(const CStdString& strPath, CFileItemList &item
     CFileItemPtr item;
 
     item.reset(new CFileItem("", true));
-    url.SetFileName("tags/0/");
-    item->SetPath(url.Get());
+    CURL url2(url);
+    url2.SetFileName("tags/0/");
+    item->SetURL(url2);
     item->SetLabel(g_localizeStrings.Get(22018));
     item->SetLabelPreformated(true);
     items.Add(item);
 
     STags tags = m_session->GetTags();
-    CStdString filename, label;
+    std::string filename, label;
     for(STags::iterator it = tags.begin(); it != tags.end(); it++)
     {
       filename = StringUtils::Format("tags/%d/", it->second.id);
       label = StringUtils::Format("Tag: %s", it->second.name.c_str());
 
       item.reset(new CFileItem("", true));
-      url.SetFileName(filename);
-      item->SetPath(url.Get());
+      CURL url2(url);
+      url2.SetFileName(filename);
+      item->SetURL(url2);
       item->SetLabel(label);
       item->SetLabelPreformated(true);
       item->SetArt("thumb", it->second.icon);

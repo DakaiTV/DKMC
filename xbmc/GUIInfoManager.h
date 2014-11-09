@@ -174,6 +174,7 @@ namespace INFO
 #define SYSTEM_HAS_PVR              186
 #define SYSTEM_STARTUP_WINDOW       187
 #define SYSTEM_STEREOSCOPIC_MODE    188
+#define SYSTEM_BUILD_VERSION_SHORT  189
 
 #define NETWORK_IP_ADDRESS          190
 #define NETWORK_MAC_ADDRESS         191
@@ -214,6 +215,8 @@ namespace INFO
 #define MUSICPLAYER_CHANNEL_NAME    229
 #define MUSICPLAYER_CHANNEL_NUMBER  230
 #define MUSICPLAYER_CHANNEL_GROUP   231
+#define MUSICPLAYER_SUB_CHANNEL_NUMBER 232
+#define MUSICPLAYER_CHANNEL_NUMBER_LBL 233
 
 #define VIDEOPLAYER_TITLE             250
 #define VIDEOPLAYER_GENRE             251
@@ -278,6 +281,8 @@ namespace INFO
 #define VIDEOPLAYER_STEREOSCOPIC_MODE 311
 #define VIDEOPLAYER_SUBTITLES_LANG    312
 #define VIDEOPLAYER_AUDIO_LANG        313
+#define VIDEOPLAYER_SUB_CHANNEL_NUMBER 314
+#define VIDEOPLAYER_CHANNEL_NUMBER_LBL 315
 
 #define CONTAINER_CAN_FILTER         342
 #define CONTAINER_CAN_FILTERADVANCED 343
@@ -367,7 +372,7 @@ namespace INFO
 #define SYSTEM_CPUFREQUENCY         656
 #define SYSTEM_SCREEN_RESOLUTION    659
 #define SYSTEM_VIDEO_ENCODER_INFO   660
-#define SYSTEM_KERNEL_VERSION       667
+#define SYSTEM_OS_VERSION_INFO      667
 #define SYSTEM_FREE_SPACE           679
 #define SYSTEM_USED_SPACE           680
 #define SYSTEM_TOTAL_SPACE          681
@@ -389,6 +394,7 @@ namespace INFO
 #define SYSTEM_FRIENDLY_NAME        716
 #define SYSTEM_SCREENSAVER_ACTIVE   717
 #define SYSTEM_ADDON_VERSION        718
+#define SYSTEM_DPMS_ACTIVE          719
 
 #define LIBRARY_HAS_MUSIC           720
 #define LIBRARY_HAS_VIDEO           721
@@ -440,7 +446,9 @@ namespace INFO
 #define PVR_IS_PLAYING_RADIO        (PVR_CONDITIONS_START + 7)
 #define PVR_IS_PLAYING_RECORDING    (PVR_CONDITIONS_START + 8)
 #define PVR_ACTUAL_STREAM_ENCRYPTED (PVR_CONDITIONS_START + 9)
-#define PVR_CONDITIONS_END          PVR_ACTUAL_STREAM_ENCRYPTED
+#define PVR_HAS_TV_CHANNELS         (PVR_CONDITIONS_START + 10)
+#define PVR_HAS_RADIO_CHANNELS      (PVR_CONDITIONS_START + 11)
+#define PVR_CONDITIONS_END          PVR_HAS_RADIO_CHANNELS
 
 #define PVR_STRINGS_START           1200
 #define PVR_NEXT_RECORDING_CHANNEL  (PVR_STRINGS_START)
@@ -480,6 +488,7 @@ namespace INFO
 #define PVR_ACTUAL_STREAM_SERVICE   (PVR_STRINGS_START + 34)
 #define PVR_ACTUAL_STREAM_MUX       (PVR_STRINGS_START + 35)
 #define PVR_ACTUAL_STREAM_PROVIDER  (PVR_STRINGS_START + 36)
+#define PVR_BACKEND_DISKSPACE_PROGR (PVR_STRINGS_START + 37)
 #define PVR_STRINGS_END             PVR_ACTUAL_STREAM_PROVIDER
 
 #define WINDOW_PROPERTY             9993
@@ -495,10 +504,6 @@ namespace INFO
 #define CONTROL_IS_VISIBLE          29998
 #define CONTROL_GROUP_HAS_FOCUS     29999
 #define CONTROL_HAS_FOCUS           30000
-
-#define VERSION_MAJOR               14
-#define VERSION_MINOR               0
-#define VERSION_TAG                 "-ALPHA1"
 
 #define LISTITEM_START              35000
 #define LISTITEM_THUMB              (LISTITEM_START)
@@ -648,6 +653,9 @@ namespace INFO
 #define LISTITEM_STEREOSCOPIC_MODE  (LISTITEM_START + 140)
 #define LISTITEM_IS_STEREOSCOPIC    (LISTITEM_START + 141)
 #define LISTITEM_INPROGRESS         (LISTITEM_START + 142)
+#define LISTITEM_HASRECORDING       (LISTITEM_START + 143)
+#define LISTITEM_SUB_CHANNEL_NUMBER (LISTITEM_START + 144)
+#define LISTITEM_CHANNEL_NUMBER_LBL (LISTITEM_START + 145)
 
 #define LISTITEM_PROPERTY_START     (LISTITEM_START + 200)
 #define LISTITEM_PROPERTY_END       (LISTITEM_PROPERTY_START + 1000)
@@ -665,7 +673,6 @@ namespace INFO
 #define COMBINED_VALUES_START        100000
 
 // forward
-class CInfoLabel;
 class CGUIWindow;
 namespace EPG { class CEpgInfoTag; }
 
@@ -746,9 +753,9 @@ public:
    \sa GetItemInt, GetMultiInfoInt
    */
   bool GetInt(int &value, int info, int contextWindow = 0, const CGUIListItem *item = NULL) const;
-  CStdString GetLabel(int info, int contextWindow = 0, CStdString *fallback = NULL);
+  CStdString GetLabel(int info, int contextWindow = 0, std::string *fallback = NULL);
 
-  CStdString GetImage(int info, int contextWindow, CStdString *fallback = NULL);
+  CStdString GetImage(int info, int contextWindow, std::string *fallback = NULL);
 
   CStdString GetTime(TIME_FORMAT format = TIME_FORMAT_GUESS) const;
   CStdString GetDate(bool bNumbersOnly = false);
@@ -784,6 +791,8 @@ public:
   int GetPlayTimeRemaining() const;
   int GetTotalPlayTime() const;
   CStdString GetCurrentPlayTimeRemaining(TIME_FORMAT format) const;
+  std::string GetVersionShort(void);
+  CStdString GetAppName();
   CStdString GetVersion();
   CStdString GetBuild();
 
@@ -809,8 +818,8 @@ public:
 
   void ResetCache();
   bool GetItemInt(int &value, const CGUIListItem *item, int info) const;
-  CStdString GetItemLabel(const CFileItem *item, int info, CStdString *fallback = NULL);
-  CStdString GetItemImage(const CFileItem *item, int info, CStdString *fallback = NULL);
+  CStdString GetItemLabel(const CFileItem *item, int info, std::string *fallback = NULL);
+  CStdString GetItemImage(const CFileItem *item, int info, std::string *fallback = NULL);
 
   // Called from tuxbox service thread to update current status
   void UpdateFromTuxBox();
@@ -858,17 +867,17 @@ protected:
   public:
     Property(const CStdString &property, const CStdString &parameters);
 
-    const CStdString &param(unsigned int n = 0) const;
+    const std::string &param(unsigned int n = 0) const;
     unsigned int num_params() const;
 
     CStdString name;
   private:
-    std::vector<CStdString> params;
+    std::vector<std::string> params;
   };
 
   bool GetMultiInfoBool(const GUIInfo &info, int contextWindow = 0, const CGUIListItem *item = NULL);
   bool GetMultiInfoInt(int &value, const GUIInfo &info, int contextWindow = 0) const;
-  CStdString GetMultiInfoLabel(const GUIInfo &info, int contextWindow = 0, CStdString *fallback = NULL);
+  CStdString GetMultiInfoLabel(const GUIInfo &info, int contextWindow = 0, std::string *fallback = NULL);
   int TranslateListItem(const Property &info);
   int TranslateMusicPlayerString(const CStdString &info) const;
   TIME_FORMAT TranslateTimeFormat(const CStdString &format);
@@ -900,7 +909,7 @@ protected:
   bool GetEpgInfoTag(EPG::CEpgInfoTag& tag) const;
 
   // Conditional string parameters are stored here
-  CStdStringArray m_stringParameters;
+  std::vector<std::string> m_stringParameters;
 
   // Array of multiple information mapped to a single integer lookup
   std::vector<GUIInfo> m_multiInfo;

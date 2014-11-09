@@ -30,7 +30,6 @@
 #include "filesystem/PluginDirectory.h"
 #include "filesystem/SpecialProtocol.h"
 #include "filesystem/StackDirectory.h"
-#include "guilib/GUIImage.h"
 #include "guilib/GUIKeyboardFactory.h"
 #include "guilib/Key.h"
 #include "settings/MediaSettings.h"
@@ -287,12 +286,9 @@ bool CGUIDialogSubtitles::SetService(const std::string &service)
 
     SET_CONTROL_LABEL(CONTROL_NAMELABEL, currentService->GetLabel());
 
-    CGUIImage* image = (CGUIImage*)GetControl(CONTROL_NAMELOGO);
-    if (image)
-    {
-      std::string icon = URIUtils::AddFileToFolder(currentService->GetProperty("Addon.Path").asString(), "logo.png");
-      image->SetFileName(icon);
-    }
+    std::string icon = URIUtils::AddFileToFolder(currentService->GetProperty("Addon.Path").asString(), "logo.png");
+    SET_CONTROL_FILENAME(CONTROL_NAMELOGO, icon);
+
     if (g_application.m_pPlayer->GetSubtitleCount() == 0)
       SET_CONTROL_HIDDEN(CONTROL_SUBSEXIST);
     else
@@ -337,6 +333,26 @@ void CGUIDialogSubtitles::Search(const std::string &search/*=""*/)
   // Check for stacking
   if (g_application.CurrentFileItem().IsStack())
     url.SetOption("stack", "1");
+
+  std::string preferredLanguage = CSettings::Get().GetString("locale.subtitlelanguage");
+
+  if(StringUtils::EqualsNoCase(preferredLanguage, "original"))
+  {
+    SPlayerAudioStreamInfo info;
+    CStdString strLanguage;
+
+    int currentAudio = g_application.m_pPlayer->GetAudioStream();
+    g_application.m_pPlayer->GetAudioStreamInfo(currentAudio, info);
+
+    if (!g_LangCodeExpander.Lookup(strLanguage, info.language))
+      strLanguage = "Unknown";
+
+    preferredLanguage = strLanguage;
+  }
+  else if (StringUtils::EqualsNoCase(preferredLanguage, "default"))
+    preferredLanguage = CSettings::Get().GetString("locale.language");
+
+  url.SetOption("preferredlanguage", preferredLanguage);
 
   AddJob(new CSubtitlesJob(url, ""));
 }
@@ -409,7 +425,7 @@ void CGUIDialogSubtitles::Download(const CFileItem &subtitle)
 
   // subtitle URL should be of the form plugin://<addonid>/?param=foo&param=bar
   // we just append (if not already present) the action=download parameter.
-  CURL url(subtitle.GetAsUrl());
+  CURL url(subtitle.GetURL());
   if (url.GetOption("action").empty())
     url.SetOption("action", "download");
 
@@ -434,7 +450,7 @@ void CGUIDialogSubtitles::OnDownloadComplete(const CFileItemList *items, const s
 
   CStdString strDownloadPath = "special://temp";
   CStdString strDestPath;
-  std::vector<CStdString> vecFiles;
+  std::vector<std::string> vecFiles;
 
   CStdString strCurrentFilePath;
   if (StringUtils::StartsWith(strCurrentFilePath, "http://"))
@@ -503,7 +519,7 @@ void CGUIDialogSubtitles::OnDownloadComplete(const CFileItemList *items, const s
     CStdString strDownloadFile = URIUtils::ChangeBasePath(strCurrentFilePath, strSubName, strDownloadPath);
     CStdString strDestFile = strDownloadFile;
 
-    if (!CFile::Cache(strUrl, strDownloadFile))
+    if (!CFile::Copy(strUrl, strDownloadFile))
     {
       CGUIDialogKaiToast::QueueNotification(CGUIDialogKaiToast::Error, strSubName, g_localizeStrings.Get(24113));
       CLog::Log(LOGERROR, "%s - Saving of subtitle %s to %s failed", __FUNCTION__, strUrl.c_str(), strDownloadFile.c_str());
@@ -521,7 +537,7 @@ void CGUIDialogSubtitles::OnDownloadComplete(const CFileItemList *items, const s
          * items end up in the same folder
          */
         CLog::Log(LOGDEBUG, "%s - Saving subtitle %s to %s", __FUNCTION__, strDownloadFile.c_str(), strTryDestFile.c_str());
-        if (CFile::Cache(strDownloadFile, strTryDestFile))
+        if (CFile::Copy(strDownloadFile, strTryDestFile))
         {
           CFile::Delete(strDownloadFile);
           strDestFile = strTryDestFile;
@@ -547,7 +563,7 @@ void CGUIDialogSubtitles::OnDownloadComplete(const CFileItemList *items, const s
           CStdString strSubNameIdx = StringUtils::Format("%s.%s.idx", strFileName.c_str(), strSubLang.c_str());
           // Handle URL encoding:
           strDestFile = URIUtils::ChangeBasePath(strCurrentFilePath, strSubNameIdx, strDestPath);
-          CFile::Cache(strUrl, strDestFile);
+          CFile::Copy(strUrl, strDestFile);
         }
       }
 

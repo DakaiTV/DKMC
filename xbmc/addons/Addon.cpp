@@ -37,6 +37,7 @@
 #include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
 #include "URL.h"
+#include "Util.h"
 #include <vector>
 #include <string.h>
 #include <ostream>
@@ -68,16 +69,16 @@ static const TypeMapping types[] =
    {"xbmc.metadata.scraper.movies",      ADDON_SCRAPER_MOVIES,      24007, "DefaultAddonMovieInfo.png" },
    {"xbmc.metadata.scraper.musicvideos", ADDON_SCRAPER_MUSICVIDEOS, 24015, "DefaultAddonMusicVideoInfo.png" },
    {"xbmc.metadata.scraper.tvshows",     ADDON_SCRAPER_TVSHOWS,     24014, "DefaultAddonTvInfo.png" },
-   {"xbmc.metadata.scraper.library",     ADDON_SCRAPER_LIBRARY,         0, "" },
+   {"xbmc.metadata.scraper.library",     ADDON_SCRAPER_LIBRARY,     24083, "DefaultAddonInfoLibrary.png" },
    {"xbmc.ui.screensaver",               ADDON_SCREENSAVER,         24008, "DefaultAddonScreensaver.png" },
    {"xbmc.player.musicviz",              ADDON_VIZ,                 24010, "DefaultAddonVisualization.png" },
-   {"visualization-library",             ADDON_VIZ_LIBRARY,             0, "" },
+   {"visualization-library",             ADDON_VIZ_LIBRARY,         24084, "" },
    {"xbmc.python.pluginsource",          ADDON_PLUGIN,              24005, "" },
    {"xbmc.python.script",                ADDON_SCRIPT,              24009, "" },
    {"xbmc.python.weather",               ADDON_SCRIPT_WEATHER,      24027, "DefaultAddonWeather.png" },
    {"xbmc.python.lyrics",                ADDON_SCRIPT_LYRICS,       24013, "DefaultAddonLyrics.png" },
-   {"xbmc.python.library",               ADDON_SCRIPT_LIBRARY,      24014, "" },
-   {"xbmc.python.module",                ADDON_SCRIPT_MODULE,           0, "" },
+   {"xbmc.python.library",               ADDON_SCRIPT_LIBRARY,      24081, "DefaultAddonHelper.png" },
+   {"xbmc.python.module",                ADDON_SCRIPT_MODULE,       24082, "DefaultAddonLibrary.png" },
    {"xbmc.subtitle.module",              ADDON_SUBTITLE_MODULE,     24012, "DefaultAddonSubtitles.png" },
    {"xbmc.gui.skin",                     ADDON_SKIN,                  166, "DefaultAddonSkin.png" },
    {"xbmc.gui.webinterface",             ADDON_WEB_INTERFACE,         199, "DefaultAddonWebSkin.png" },
@@ -87,11 +88,12 @@ static const TypeMapping types[] =
    {"xbmc.addon.audio",                  ADDON_AUDIO,                1038, "DefaultAddonMusic.png" },
    {"xbmc.addon.image",                  ADDON_IMAGE,                1039, "DefaultAddonPicture.png" },
    {"xbmc.addon.executable",             ADDON_EXECUTABLE,           1043, "DefaultAddonProgram.png" },
+   {"xbmc.audioencoder",                 ADDON_AUDIOENCODER,         200,  "DefaultAddonAudioEncoder.png" },
    {"xbmc.service",                      ADDON_SERVICE,             24018, "DefaultAddonService.png" }};
 
-const CStdString TranslateType(const ADDON::TYPE &type, bool pretty/*=false*/)
+const std::string TranslateType(const ADDON::TYPE &type, bool pretty/*=false*/)
 {
-  for (unsigned int index=0; index < sizeof(types)/sizeof(types[0]); ++index)
+  for (unsigned int index=0; index < ARRAY_SIZE(types); ++index)
   {
     const TypeMapping &map = types[index];
     if (type == map.type)
@@ -105,20 +107,20 @@ const CStdString TranslateType(const ADDON::TYPE &type, bool pretty/*=false*/)
   return "";
 }
 
-TYPE TranslateType(const CStdString &string)
+TYPE TranslateType(const std::string &string)
 {
-  for (unsigned int index=0; index < sizeof(types)/sizeof(types[0]); ++index)
+  for (unsigned int index=0; index < ARRAY_SIZE(types); ++index)
   {
     const TypeMapping &map = types[index];
-    if (string.Equals(map.name))
+    if (string == map.name)
       return map.type;
   }
   return ADDON_UNKNOWN;
 }
 
-const CStdString GetIcon(const ADDON::TYPE& type)
+const std::string GetIcon(const ADDON::TYPE& type)
 {
-  for (unsigned int index=0; index < sizeof(types)/sizeof(types[0]); ++index)
+  for (unsigned int index=0; index < ARRAY_SIZE(types); ++index)
   {
     const TypeMapping &map = types[index];
     if (type == map.type)
@@ -129,18 +131,20 @@ const CStdString GetIcon(const ADDON::TYPE& type)
 
 #define EMPTY_IF(x,y) \
   { \
-    CStdString fan=CAddonMgr::Get().GetExtValue(metadata->configuration, x); \
-    if (fan.Equals("true")) \
+    std::string fan=CAddonMgr::Get().GetExtValue(metadata->configuration, x); \
+    if (fan == "true") \
       y.clear(); \
   }
 
+#define SS(x) (x) ? x : ""
+
 AddonProps::AddonProps(const cp_extension_t *ext)
-  : id(ext->plugin->identifier)
-  , version(ext->plugin->version)
-  , minversion(ext->plugin->abi_bw_compatibility)
-  , name(ext->plugin->name)
-  , path(ext->plugin->plugin_path)
-  , author(ext->plugin->provider_name)
+  : id(SS(ext->plugin->identifier))
+  , version(SS(ext->plugin->version))
+  , minversion(SS(ext->plugin->abi_bw_compatibility))
+  , name(SS(ext->plugin->name))
+  , path(SS(ext->plugin->plugin_path))
+  , author(SS(ext->plugin->provider_name))
   , stars(0)
 {
   if (ext->ext_point_id)
@@ -157,7 +161,7 @@ AddonProps::AddonProps(const cp_extension_t *ext)
     description = CAddonMgr::Get().GetTranslatedString(metadata->configuration, "description");
     disclaimer = CAddonMgr::Get().GetTranslatedString(metadata->configuration, "disclaimer");
     license = CAddonMgr::Get().GetExtValue(metadata->configuration, "license");
-    CStdString language;
+    std::string language;
     language = CAddonMgr::Get().GetExtValue(metadata->configuration, "language");
     if (!language.empty())
       extrainfo.insert(make_pair("language",language));
@@ -170,12 +174,13 @@ AddonProps::AddonProps(const cp_extension_t *ext)
 }
 
 AddonProps::AddonProps(const cp_plugin_info_t *plugin)
-  : id(plugin->identifier)
-  , version(plugin->version)
-  , minversion(plugin->abi_bw_compatibility)
-  , name(plugin->name)
-  , path(plugin->plugin_path)
-  , author(plugin->provider_name)
+  : id(SS(plugin->identifier))
+  , type(ADDON_UNKNOWN)
+  , version(SS(plugin->version))
+  , minversion(SS(plugin->abi_bw_compatibility))
+  , name(SS(plugin->name))
+  , path(SS(plugin->plugin_path))
+  , author(SS(plugin->provider_name))
   , stars(0)
 {
   BuildDependencies(plugin);
@@ -185,8 +190,8 @@ void AddonProps::Serialize(CVariant &variant) const
 {
   variant["addonid"] = id;
   variant["type"] = TranslateType(type);
-  variant["version"] = version.c_str();
-  variant["minversion"] = minversion.c_str();
+  variant["version"] = version.asString();
+  variant["minversion"] = minversion.asString();
   variant["name"] = name;
   variant["license"] = license;
   variant["summary"] = summary;
@@ -215,7 +220,7 @@ void AddonProps::Serialize(CVariant &variant) const
   {
     CVariant dep(CVariant::VariantTypeObject);
     dep["addonid"] = it->first;
-    dep["version"] = it->second.first.c_str();
+    dep["version"] = it->second.first.asString();
     dep["optional"] = it->second.second;
     variant["dependencies"].push_back(dep);
   }
@@ -239,8 +244,8 @@ void AddonProps::BuildDependencies(const cp_plugin_info_t *plugin)
   if (!plugin)
     return;
   for (unsigned int i = 0; i < plugin->num_imports; ++i)
-    dependencies.insert(make_pair(CStdString(plugin->imports[i].plugin_id),
-                        make_pair(AddonVersion(plugin->imports[i].version), plugin->imports[i].optional != 0)));
+    dependencies.insert(make_pair(std::string(plugin->imports[i].plugin_id),
+                                  make_pair(AddonVersion(SS(plugin->imports[i].version)), plugin->imports[i].optional != 0)));
 }
 
 /**
@@ -328,7 +333,7 @@ void CAddon::BuildLibName(const cp_extension_t *extension)
   if (!extension)
   {
     m_strLibName = "default";
-    CStdString ext;
+    std::string ext;
     switch (m_props.type)
     {
     case ADDON_SCRAPER_ALBUMS:
@@ -390,8 +395,9 @@ void CAddon::BuildLibName(const cp_extension_t *extension)
       case ADDON_PLUGIN:
       case ADDON_SERVICE:
       case ADDON_REPOSITORY:
+      case ADDON_AUDIOENCODER:
         {
-          CStdString temp = CAddonMgr::Get().GetExtValue(extension->configuration, "@library");
+          std::string temp = CAddonMgr::Get().GetExtValue(extension->configuration, "@library");
           m_strLibName = temp;
         }
         break;
@@ -408,7 +414,7 @@ void CAddon::BuildLibName(const cp_extension_t *extension)
 bool CAddon::LoadStrings()
 {
   // Path where the language strings reside
-  CStdString chosenPath = URIUtils::AddFileToFolder(m_props.path, "resources/language/");
+  std::string chosenPath = URIUtils::AddFileToFolder(m_props.path, "resources/language/");
 
   m_hasStrings = m_strings.Load(chosenPath, CSettings::Get().GetString("locale.language"));
   return m_checkedStrings = true;
@@ -421,7 +427,7 @@ void CAddon::ClearStrings()
   m_hasStrings = false;
 }
 
-CStdString CAddon::GetString(uint32_t id)
+std::string CAddon::GetString(uint32_t id)
 {
   if (!m_hasStrings && ! m_checkedStrings && !LoadStrings())
      return "";
@@ -443,7 +449,7 @@ bool CAddon::LoadSettings(bool bForce /* = false*/)
     return true;
   if (!m_hasSettings)
     return false;
-  CStdString addonFileName = URIUtils::AddFileToFolder(m_props.path, "resources/settings.xml");
+  std::string addonFileName = URIUtils::AddFileToFolder(m_props.path, "resources/settings.xml");
 
   if (!m_addonXmlDoc.LoadFile(addonFileName))
   {
@@ -494,9 +500,9 @@ void CAddon::SaveSettings(void)
     return; // no settings to save
 
   // break down the path into directories
-  CStdString strAddon = URIUtils::GetDirectory(m_userSettingsPath);
+  std::string strAddon = URIUtils::GetDirectory(m_userSettingsPath);
   URIUtils::RemoveSlashAtEnd(strAddon);
-  CStdString strRoot = URIUtils::GetDirectory(strAddon);
+  std::string strRoot = URIUtils::GetDirectory(strAddon);
   URIUtils::RemoveSlashAtEnd(strRoot);
 
   // create the individual folders
@@ -517,18 +523,18 @@ void CAddon::SaveSettings(void)
 #endif
 }
 
-CStdString CAddon::GetSetting(const CStdString& key)
+std::string CAddon::GetSetting(const std::string& key)
 {
   if (!LoadSettings())
     return ""; // no settings available
 
-  map<CStdString, CStdString>::const_iterator i = m_settings.find(key);
+  map<std::string, std::string>::const_iterator i = m_settings.find(key);
   if (i != m_settings.end())
     return i->second;
   return "";
 }
 
-void CAddon::UpdateSetting(const CStdString& key, const CStdString& value)
+void CAddon::UpdateSetting(const std::string& key, const std::string& value)
 {
   LoadSettings();
   if (key.empty()) return;
@@ -571,7 +577,7 @@ void CAddon::SettingsToXML(CXBMCTinyXML &doc) const
 {
   TiXmlElement node("settings");
   doc.InsertEndChild(node);
-  for (map<CStdString, CStdString>::const_iterator i = m_settings.begin(); i != m_settings.end(); ++i)
+  for (map<std::string, std::string>::const_iterator i = m_settings.begin(); i != m_settings.end(); ++i)
   {
     TiXmlElement nodeSetting("setting");
     nodeSetting.SetAttribute("id", i->first.c_str());
@@ -591,16 +597,25 @@ void CAddon::BuildProfilePath()
   m_profile = StringUtils::Format("special://profile/addon_data/%s/", ID().c_str());
 }
 
-const CStdString CAddon::Icon() const
+const std::string CAddon::Icon() const
 {
   if (CURL::IsFullPath(m_props.icon))
     return m_props.icon;
   return URIUtils::AddFileToFolder(m_props.path, m_props.icon);
 }
 
-const CStdString CAddon::LibPath() const
+const std::string CAddon::LibPath() const
 {
   return URIUtils::AddFileToFolder(m_props.path, m_strLibName);
+}
+
+AddonVersion CAddon::GetDependencyVersion(const std::string &dependencyID) const
+{
+  const ADDON::ADDONDEPS &deps = GetDeps();
+  ADDONDEPS::const_iterator it = deps.find(dependencyID);
+  if (it != deps.end())
+    return it->second.first;
+  return AddonVersion("0.0.0");
 }
 
 /**
@@ -632,26 +647,6 @@ TYPE CAddonLibrary::SetAddonType()
   else
     return ADDON_UNKNOWN;
 }
-
-CStdString GetXbmcApiVersionDependency(ADDON::AddonPtr addon)
-{
-  CStdString version("1.0");
-  if (addon.get() != NULL)
-  {
-    const ADDON::ADDONDEPS &deps = addon->GetDeps();
-    ADDON::ADDONDEPS::const_iterator it;
-    CStdString key("xbmc.python");
-    it = deps.find(key);
-    if (!(it == deps.end()))
-    {
-      const ADDON::AddonVersion * xbmcApiVersion = &(it->second.first);
-      version = xbmcApiVersion->c_str();
-    }
-  }
-
-  return version;
-}
-
 
 } /* namespace ADDON */
 

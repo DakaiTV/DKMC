@@ -129,8 +129,7 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     void Clear();
 
     static void GetCustomTVRegexps(TiXmlElement *pRootElement, SETTINGS_TVSHOWLIST& settings);
-    static void GetCustomRegexps(TiXmlElement *pRootElement, CStdStringArray& settings);
-    static void GetCustomRegexpReplacers(TiXmlElement *pRootElement, CStdStringArray& settings);
+    static void GetCustomRegexps(TiXmlElement *pRootElement, std::vector<std::string> &settings);
     static void GetCustomExtensions(TiXmlElement *pRootElement, CStdString& extensions);
 
     bool CanLogComponent(int component) const;
@@ -177,7 +176,6 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     int m_videoBlackBarColour;
     int m_videoIgnoreSecondsAtStart;
     float m_videoIgnorePercentAtEnd;
-    CStdString m_audioHost;
     bool m_audioApplyDrc;
 
     int   m_videoVDPAUScaling;
@@ -193,9 +191,9 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     bool m_DXVACheckCompatibilityPresent;
     bool m_DXVAForceProcessorRenderer;
     bool m_DXVANoDeintProcForProgressive;
+    bool m_DXVAAllowHqScaling;
     int  m_videoFpsDetect;
     int  m_videoBusyDialogDelay_ms;
-    bool m_videoDisableSWMultithreading;
     StagefrightConfig m_stagefrightConfig;
     bool m_mediacodecForceSoftwareRendring;
 
@@ -223,16 +221,16 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     bool m_fullScreenOnMovieStart;
     CStdString m_cachePath;
     CStdString m_videoCleanDateTimeRegExp;
-    CStdStringArray m_videoCleanStringRegExps;
-    CStdStringArray m_videoExcludeFromListingRegExps;
-    CStdStringArray m_moviesExcludeFromScanRegExps;
-    CStdStringArray m_tvshowExcludeFromScanRegExps;
-    CStdStringArray m_audioExcludeFromListingRegExps;
-    CStdStringArray m_audioExcludeFromScanRegExps;
-    CStdStringArray m_pictureExcludeFromListingRegExps;
-    CStdStringArray m_videoStackRegExps;
-    CStdStringArray m_folderStackRegExps;
-    CStdStringArray m_trailerMatchRegExps;
+    std::vector<std::string> m_videoCleanStringRegExps;
+    std::vector<std::string> m_videoExcludeFromListingRegExps;
+    std::vector<std::string> m_moviesExcludeFromScanRegExps;
+    std::vector<std::string> m_tvshowExcludeFromScanRegExps;
+    std::vector<std::string> m_audioExcludeFromListingRegExps;
+    std::vector<std::string> m_audioExcludeFromScanRegExps;
+    std::vector<std::string> m_pictureExcludeFromListingRegExps;
+    std::vector<std::string> m_videoStackRegExps;
+    std::vector<std::string> m_folderStackRegExps;
+    std::vector<std::string> m_trailerMatchRegExps;
     SETTINGS_TVSHOWLIST m_tvshowEnumRegExps;
     CStdString m_tvshowMultiPartEnumRegExp;
     typedef std::vector< std::pair<CStdString, CStdString> > StringMapping;
@@ -286,7 +284,7 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     bool m_bVideoScannerIgnoreErrors;
     int m_iVideoLibraryDateAdded;
 
-    std::vector<CStdString> m_vecTokens; // cleaning strings tied to language
+    std::vector<std::string> m_vecTokens; // cleaning strings tied to language
     //TuxBox
     int m_iTuxBoxStreamtsPort;
     bool m_bTuxBoxSubMenuSelection;
@@ -366,9 +364,6 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     bool m_bPVRChannelIconsAutoScan; /*!< @brief automatically scan user defined folder for channel icons when loading internal channel groups */
     bool m_bPVRAutoScanIconsUserSet; /*!< @brief mark channel icons populated by auto scan as "user set" */
     int m_iPVRNumericChannelSwitchTimeout; /*!< @brief time in ms before the numeric dialog auto closes when confirmchannelswitch is disabled */
-
-    bool m_measureRefreshrate; //when true the videoreferenceclock will measure the refreshrate when direct3d is used
-                               //otherwise it will use the windows refreshrate
 
     DatabaseSettings m_databaseMusic; // advanced music database setup
     DatabaseSettings m_databaseVideo; // advanced video database setup

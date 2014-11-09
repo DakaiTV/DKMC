@@ -141,6 +141,14 @@ namespace XBMCAddon
       g_windowManager.SendThreadMessage(msg, iParentId);
     }
 
+    String ControlTextBox::getText() throw (UnimplementedException)
+    {
+      if (!pGUIControl) return NULL;
+
+      LOCKGUI;
+      return ((CGUITextBox*) pGUIControl)->GetDescription();
+    }
+
     void ControlTextBox::reset() throw(UnimplementedException)
     {
       // create message
@@ -276,8 +284,8 @@ namespace XBMCAddon
         (float)dwPosY,
         (float)dwWidth,
         (float)dwHeight,
-        (CStdString)strTextureFocus,
-        (CStdString)strTextureNoFocus,
+        CTextureInfo(strTextureFocus),
+        CTextureInfo(strTextureNoFocus),
         label);
 
       CGUIButtonControl* pGuiButtonControl =
@@ -441,7 +449,7 @@ namespace XBMCAddon
     {
       pGUIControl = new CGUIImage(iParentId, iControlId,
             (float)dwPosX, (float)dwPosY, (float)dwWidth, (float)dwHeight,
-            (CStdString)strFileName);
+            CTextureInfo(strFileName));
 
       if (pGUIControl && aspectRatio <= CAspectRatio::AR_KEEP)
         ((CGUIImage *)pGUIControl)->SetAspectRatio((CAspectRatio::ASPECT_RATIO)aspectRatio);
@@ -497,9 +505,9 @@ namespace XBMCAddon
       pGUIControl = new CGUIProgressControl(iParentId, iControlId,
          (float)dwPosX, (float)dwPosY,
          (float)dwWidth,(float)dwHeight,
-         (CStdString)strTextureBg,(CStdString)strTextureLeft,
-         (CStdString)strTextureMid,(CStdString)strTextureRight,
-         (CStdString)strTextureOverlay);
+         CTextureInfo(strTextureBg), CTextureInfo(strTextureLeft),
+         CTextureInfo(strTextureMid), CTextureInfo(strTextureRight),
+         CTextureInfo(strTextureOverlay));
 
       if (pGUIControl && colorDiffuse)
         ((CGUIProgressControl *)pGUIControl)->SetColorDiffuse(colorDiffuse);
@@ -545,8 +553,8 @@ namespace XBMCAddon
     {
       pGUIControl = new CGUISliderControl(iParentId, iControlId,(float)dwPosX, (float)dwPosY,
                                           (float)dwWidth,(float)dwHeight,
-                                          (CStdString)strTextureBack,(CStdString)strTexture,
-                                          (CStdString)strTextureFoc,0);   
+                                          CTextureInfo(strTextureBack),CTextureInfo(strTexture),
+                                          CTextureInfo(strTextureFoc),0);
     
       return pGUIControl;
     }  
@@ -709,13 +717,13 @@ namespace XBMCAddon
         (float)dwPosY,
         (float)dwWidth,
         (float)dwHeight,
-        (CStdString)strTextureFocus,
-        (CStdString)strTextureNoFocus,
+        CTextureInfo(strTextureFocus),
+        CTextureInfo(strTextureNoFocus),
         label,
-        (CStdString)strTextureRadioOnFocus,
-        (CStdString)strTextureRadioOnNoFocus,
-        (CStdString)strTextureRadioOffFocus,
-        (CStdString)strTextureRadioOffNoFocus);
+        CTextureInfo(strTextureRadioOnFocus),
+        CTextureInfo(strTextureRadioOnNoFocus),
+        CTextureInfo(strTextureRadioOffFocus),
+        CTextureInfo(strTextureRadioOffNoFocus));
 
       CGUIRadioButtonControl* pGuiButtonControl =
         (CGUIRadioButtonControl*)pGUIControl;
@@ -799,12 +807,10 @@ namespace XBMCAddon
         const String& cAttr = pTuple.second();
 
         TiXmlElement pNode("animation");
-        CStdStringArray attrs;
-        StringUtils::SplitString(cAttr.c_str(), " ", attrs);
-        for (unsigned int i = 0; i < attrs.size(); i++)
+        std::vector<std::string> attrs = StringUtils::Split(cAttr, " ");
+        for (std::vector<std::string>::const_iterator i = attrs.begin(); i != attrs.end(); ++i)
         {
-          CStdStringArray attrs2;
-          StringUtils::SplitString(attrs[i], "=", attrs2);
+          std::vector<std::string> attrs2 = StringUtils::Split(*i, "=");
           if (attrs2.size() == 2)
             pNode.SetAttribute(attrs2[0], attrs2[1]);
         }
@@ -1066,8 +1072,8 @@ namespace XBMCAddon
         (float)dwPosY,
         (float)dwWidth,
         (float)dwHeight,
-        (CStdString)strTextureFocus,
-        (CStdString)strTextureNoFocus,
+        CTextureInfo(strTextureFocus),
+        CTextureInfo(strTextureNoFocus),
         label,
         strText);
 
@@ -1183,8 +1189,8 @@ namespace XBMCAddon
         (float)dwWidth,
         (float)dwHeight - pControlSpin->dwHeight - 5,
         label, label2,
-        (CStdString)strTextureButton,
-        (CStdString)strTextureButtonFocus,
+        CTextureInfo(strTextureButton),
+        CTextureInfo(strTextureButtonFocus),
         (float)itemHeight,
         (float)imageWidth, (float)imageHeight,
         (float)space);

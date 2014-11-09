@@ -201,7 +201,7 @@ bool CGUIWindowMusicBase::OnMessage(CGUIMessage& message)
         {
           // is delete allowed?
           // must be at the playlists directory
-          if (m_vecItems->GetPath().Equals("special://musicplaylists/"))
+          if (m_vecItems->IsPath("special://musicplaylists/"))
             OnDeleteItem(iItem);
 
           // or be at the files window and have file deletion enabled
@@ -233,6 +233,7 @@ bool CGUIWindowMusicBase::OnMessage(CGUIMessage& message)
         }
       }
     }
+    break;
   }
   return CGUIMediaWindow::OnMessage(message);
 }
@@ -327,7 +328,7 @@ void CGUIWindowMusicBase::OnInfo(CFileItem *pItem, bool bShowInfo)
     CAlbum album;
     if (!m_musicdatabase.GetAlbum(albumID, album))
       return;
-    CFileItem item(StringUtils::Format("musicdb://albums/%ld/", albumID), album);
+    CFileItem item(StringUtils::Format("musicdb://albums/%i/", albumID), album);
     if (ShowAlbumInfo(&item))
       return;
   }
@@ -910,7 +911,7 @@ void CGUIWindowMusicBase::PlayItem(int iItem)
   }
 }
 
-void CGUIWindowMusicBase::LoadPlayList(const CStdString& strPlayList)
+void CGUIWindowMusicBase::LoadPlayList(const std::string& strPlayList)
 {
   // if partymode is active, we disable it
   if (g_partyModeManager.IsEnabled())
@@ -1088,7 +1089,7 @@ void CGUIWindowMusicBase::OnRetrieveMusicInfo(CFileItemList& items)
     m_dlgProgress->Close();
 }
 
-bool CGUIWindowMusicBase::GetDirectory(const CStdString &strDirectory, CFileItemList &items)
+bool CGUIWindowMusicBase::GetDirectory(const std::string &strDirectory, CFileItemList &items)
 {
   items.SetArt("thumb", "");
   bool bResult = CGUIMediaWindow::GetDirectory(strDirectory, items);
@@ -1135,9 +1136,9 @@ bool CGUIWindowMusicBase::CheckFilterAdvanced(CFileItemList &items) const
   return false;
 }
 
-bool CGUIWindowMusicBase::CanContainFilter(const CStdString &strDirectory) const
+bool CGUIWindowMusicBase::CanContainFilter(const std::string &strDirectory) const
 {
-  return StringUtils::StartsWithNoCase(strDirectory, "musicdb://");
+  return URIUtils::IsProtocol(strDirectory, "musicdb");
 }
 
 void CGUIWindowMusicBase::OnInitWindow()
@@ -1154,18 +1155,19 @@ void CGUIWindowMusicBase::OnInitWindow()
         flags |= CMusicInfoScanner::SCAN_ONLINE;
       if (CSettings::Get().GetBool("musiclibrary.backgroundupdate"))
         flags |= CMusicInfoScanner::SCAN_BACKGROUND;
-      g_application.StartMusicScan("", flags);
+      g_application.StartMusicScan("", true, flags);
       CMediaSettings::Get().SetMusicNeedsUpdate(0); // once is enough (user may interrupt, but that's up to them)
       CSettings::Get().Save();
     }
   }
 }
 
-CStdString CGUIWindowMusicBase::GetStartFolder(const CStdString &dir)
+std::string CGUIWindowMusicBase::GetStartFolder(const std::string &dir)
 {
-  if (dir.Equals("Plugins") || dir.Equals("Addons"))
+  std::string lower(dir); StringUtils::ToLower(lower);
+  if (lower == "plugins" || lower == "addons")
     return "addons://sources/audio/";
-  else if (dir.Equals("$PLAYLISTS") || dir.Equals("Playlists"))
+  else if (lower == "$playlists" || lower == "playlists")
     return "special://musicplaylists/";
   return CGUIMediaWindow::GetStartFolder(dir);
 }

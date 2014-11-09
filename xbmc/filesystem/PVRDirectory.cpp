@@ -44,22 +44,17 @@ CPVRDirectory::~CPVRDirectory()
 {
 }
 
-bool CPVRDirectory::Exists(const char* strPath)
+bool CPVRDirectory::Exists(const CURL& url)
 {
-  CStdString directory(strPath);
-  if (directory.substr(0,17) == "pvr://recordings/")
-    return true;
-  else
-    return false;
+  return (url.IsProtocol("pvr") && url.GetHostName() == "recordings");
 }
 
-bool CPVRDirectory::GetDirectory(const CStdString& strPath, CFileItemList &items)
+bool CPVRDirectory::GetDirectory(const CURL& url, CFileItemList &items)
 {
-  CStdString base(strPath);
+  std::string base(url.Get());
   URIUtils::RemoveSlashAtEnd(base);
 
-  CURL url(strPath);
-  CStdString fileName = url.GetFileName();
+  std::string fileName = url.GetFileName();
   URIUtils::RemoveSlashAtEnd(fileName);
   CLog::Log(LOGDEBUG, "CPVRDirectory::GetDirectory(%s)", base.c_str());
   items.SetCacheToDisc(CFileItemList::CACHE_NEVER);
@@ -98,32 +93,35 @@ bool CPVRDirectory::GetDirectory(const CStdString& strPath, CFileItemList &items
   }
   else if (StringUtils::StartsWith(fileName, "recordings"))
   {
-    return g_PVRRecordings->GetDirectory(strPath, items);
+    const std::string pathToUrl(url.Get());
+    return g_PVRRecordings->GetDirectory(pathToUrl, items);
   }
   else if (StringUtils::StartsWith(fileName, "channels"))
   {
-    return g_PVRChannelGroups->GetDirectory(strPath, items);
+    const std::string pathToUrl(url.Get());
+    return g_PVRChannelGroups->GetDirectory(pathToUrl, items);
   }
   else if (StringUtils::StartsWith(fileName, "timers"))
   {
-    return g_PVRTimers->GetDirectory(strPath, items);
+    const std::string pathToUrl(url.Get());
+    return g_PVRTimers->GetDirectory(pathToUrl, items);
   }
 
   return false;
 }
 
-bool CPVRDirectory::SupportsWriteFileOperations(const CStdString& strPath)
+bool CPVRDirectory::SupportsWriteFileOperations(const std::string& strPath)
 {
   CURL url(strPath);
-  CStdString filename = url.GetFileName();
+  std::string filename = url.GetFileName();
 
   return URIUtils::IsPVRRecording(filename);
 }
 
-bool CPVRDirectory::IsLiveTV(const CStdString& strPath)
+bool CPVRDirectory::IsLiveTV(const std::string& strPath)
 {
   CURL url(strPath);
-  CStdString filename = url.GetFileName();
+  std::string filename = url.GetFileName();
 
   return URIUtils::IsLiveTV(filename);
 }

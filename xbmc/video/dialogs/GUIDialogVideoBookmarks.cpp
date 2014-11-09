@@ -185,7 +185,11 @@ void CGUIDialogVideoBookmarks::Delete(int item)
   {
     CVideoDatabase videoDatabase;
     videoDatabase.Open();
-    videoDatabase.ClearBookMarkOfFile(g_application.CurrentFile(),m_bookmarks[item],m_bookmarks[item].type);
+    std::string path(g_application.CurrentFile());
+    if (g_application.CurrentFileItem().HasProperty("original_listitem_url") &&
+       !URIUtils::IsVideoDb(g_application.CurrentFileItem().GetProperty("original_listitem_url").asString()))
+      path = g_application.CurrentFileItem().GetProperty("original_listitem_url").asString();
+    videoDatabase.ClearBookMarkOfFile(path, m_bookmarks[item], m_bookmarks[item].type);
     videoDatabase.Close();
     CUtil::DeleteVideoDatabaseDirectoryCache();
   }
@@ -220,7 +224,7 @@ void CGUIDialogVideoBookmarks::OnRefreshList()
     
     CStdString bookmarkTime;
     if (m_bookmarks[i].type == CBookmark::EPISODE)
-      bookmarkTime = StringUtils::Format("%s %i %s %i", g_localizeStrings.Get(20373).c_str(), m_bookmarks[i].seasonNumber, g_localizeStrings.Get(20359).c_str(), m_bookmarks[i].episodeNumber);
+      bookmarkTime = StringUtils::Format("%s %li %s %li", g_localizeStrings.Get(20373).c_str(), m_bookmarks[i].seasonNumber, g_localizeStrings.Get(20359).c_str(), m_bookmarks[i].episodeNumber);
     else
       bookmarkTime = StringUtils::SecondsToTimeString((long)m_bookmarks[i].timeInSeconds, TIME_FORMAT_HH_MM_SS);
     

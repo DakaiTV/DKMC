@@ -37,14 +37,13 @@ public:
   virtual void Deinitialize();
 
   virtual void         Stop            ();
-  virtual double       GetDelay        ();
+  virtual void         GetDelay        (AEDelayStatus& status);
   virtual double       GetCacheTotal   () { return 0.0; } /* FIXME */
-  virtual unsigned int AddPackets      (uint8_t *data, unsigned int frames, bool hasAudio, bool blocking = false);
+  virtual unsigned int AddPackets      (uint8_t **data, unsigned int frames, unsigned int offset);
   virtual void         Drain           ();
   static  void         EnumerateDevicesEx(AEDeviceInfoList &list, bool force = false);
 private:
   int m_fd;
-  bool m_blockingNeedsUpdate;
   std::string      m_device;
   AEAudioFormat   m_initFormat;
   AEAudioFormat   m_format;

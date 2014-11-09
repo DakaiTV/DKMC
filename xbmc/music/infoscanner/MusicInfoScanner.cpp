@@ -90,7 +90,8 @@ void CMusicInfoScanner::Process()
     {
       CGUIDialogExtendedProgressBar* dialog =
         (CGUIDialogExtendedProgressBar*)g_windowManager.GetWindow(WINDOW_DIALOG_EXT_PROGRESS);
-      m_handle = dialog->GetHandle(g_localizeStrings.Get(314));
+      if (dialog)
+        m_handle = dialog->GetHandle(g_localizeStrings.Get(314));
     }
 
     m_bCanInterrupt = true;
@@ -129,6 +130,7 @@ void CMusicInfoScanner::Process()
            * the entire source is offline we totally empty the music database in one go.
            */
           CLog::Log(LOGWARNING, "%s directory '%s' does not exist - skipping scan.", __FUNCTION__, it->c_str());
+          m_seenPaths.insert(*it);
           continue;
         }
         else if (!DoScan(*it))
@@ -180,7 +182,7 @@ void CMusicInfoScanner::Process()
         if (m_handle)
         {
           float percentage = (float) std::distance(it, m_pathsToScan.end()) / m_pathsToScan.size();
-          m_handle->SetText(StringUtils::Join(album.artist, g_advancedSettings.m_musicItemSeparator) + " - " + album.strAlbum);
+          m_handle->SetText((CStdString)StringUtils::Join(album.artist, g_advancedSettings.m_musicItemSeparator) + " - " + album.strAlbum);
           m_handle->SetPercentage(percentage);
         }
 
@@ -253,6 +255,7 @@ void CMusicInfoScanner::Start(const CStdString& strDirectory, int flags)
   m_fileCountReader.StopThread();
   StopThread();
   m_pathsToScan.clear();
+  m_seenPaths.clear();
   m_flags = flags;
 
   if (strDirectory.empty())
@@ -391,8 +394,14 @@ bool CMusicInfoScanner::DoScan(const CStdString& strDirectory)
   if (m_handle)
     m_handle->SetText(Prettify(strDirectory));
 
+  std::set<std::string>::const_iterator it = m_seenPaths.find(strDirectory);
+  if (it != m_seenPaths.end())
+    return true;
+
+  m_seenPaths.insert(strDirectory);
+
   // Discard all excluded files defined by m_musicExcludeRegExps
-  CStdStringArray regexps = g_advancedSettings.m_audioExcludeFromScanRegExps;
+  vector<string> regexps = g_advancedSettings.m_audioExcludeFromScanRegExps;
   if (CUtil::ExcludeFileOrFolder(strDirectory, regexps))
     return true;
 
@@ -467,7 +476,7 @@ bool CMusicInfoScanner::DoScan(const CStdString& strDirectory)
 
 INFO_RET CMusicInfoScanner::ScanTags(const CFileItemList& items, CFileItemList& scannedItems)
 {
-  CStdStringArray regexps = g_advancedSettings.m_audioExcludeFromScanRegExps;
+  vector<string> regexps = g_advancedSettings.m_audioExcludeFromScanRegExps;
 
   for (int i = 0; i < items.Size(); ++i)
   {
@@ -889,7 +898,7 @@ int CMusicInfoScanner::GetPathHash(const CFileItemList &items, CStdString &hash)
     if (pItem->IsAudio() && !pItem->IsPlayList() && !pItem->IsNFO())
       count++;
   }
-  md5state.getDigest(hash);
+  hash = md5state.getDigest();
   return count;
 }
 
@@ -968,8 +977,8 @@ INFO_RET CMusicInfoScanner::DownloadAlbumInfo(const CAlbum& album, const ADDON::
 {
   if (m_handle)
   {
-    m_handle->SetTitle(StringUtils::Format(g_localizeStrings.Get(20321), info->Name().c_str()));
-    m_handle->SetText(StringUtils::Join(album.artist, g_advancedSettings.m_musicItemSeparator) + " - " + album.strAlbum);
+    m_handle->SetTitle(StringUtils::Format(g_localizeStrings.Get(20321).c_str(), info->Name().c_str()));
+    m_handle->SetText((CStdString)StringUtils::Join(album.artist, g_advancedSettings.m_musicItemSeparator) + " - " + album.strAlbum);
   }
 
   // clear our scraper cache
@@ -1184,7 +1193,7 @@ INFO_RET CMusicInfoScanner::DownloadArtistInfo(const CArtist& artist, const ADDO
 {
   if (m_handle)
   {
-    m_handle->SetTitle(StringUtils::Format(g_localizeStrings.Get(20320), info->Name().c_str()));
+    m_handle->SetTitle(StringUtils::Format(g_localizeStrings.Get(20320).c_str(), info->Name().c_str()));
     m_handle->SetText(artist.strArtist);
   }
 

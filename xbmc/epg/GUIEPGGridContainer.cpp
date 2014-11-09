@@ -21,12 +21,12 @@
 #include "guilib/Key.h"
 #include "guilib/GUIControlFactory.h"
 #include "guilib/GUIListItem.h"
-#include "guilib/GUIFontManager.h"
 #include "guilib/LocalizeStrings.h"
 #include "guilib/DirtyRegion.h"
 #include <tinyxml.h>
 #include "utils/log.h"
 #include "utils/MathUtils.h"
+#include "utils/StringUtils.h"
 #include "utils/Variant.h"
 #include "threads/SystemClock.h"
 #include "GUIInfoManager.h"
@@ -624,6 +624,16 @@ bool CGUIEPGGridContainer::OnAction(const CAction &action)
       // use base class implementation
       return CGUIControl::OnAction(action);
 
+    case ACTION_NEXT_ITEM:
+      // skip +12h
+      ScrollToBlockOffset(m_blockOffset + (12 * 60  / MINSPERBLOCK));
+      return true;
+
+    case ACTION_PREV_ITEM:
+      // skip -12h
+      ScrollToBlockOffset(m_blockOffset - (12 * 60 / MINSPERBLOCK));
+      return true;
+
     case ACTION_PAGE_UP:
       if (m_channelOffset == 0)
       { // already on the first page, so move to the first item
@@ -738,26 +748,25 @@ bool CGUIEPGGridContainer::OnMessage(CGUIMessage& message)
           }
 
           /* Create Channel items */
-          int iLastChannelNumber = -1;
+          int iLastChannelID = -1;
           ItemsPtr itemsPointer;
           itemsPointer.start = 0;
           for (unsigned int i = 0; i < m_programmeItems.size(); ++i)
           {
             const CEpgInfoTag* tag = ((CFileItem*)m_programmeItems[i].get())->GetEPGInfoTag();
-            int iCurrentChannelNumber = tag->PVRChannelNumber();
-            if (iCurrentChannelNumber != iLastChannelNumber)
+            CPVRChannelPtr channel = tag->ChannelTag();
+            if (!channel)
+              continue;
+            int iCurrentChannelID = channel->ChannelID();
+            if (iCurrentChannelID != iLastChannelID)
             {
-              CPVRChannelPtr channel = tag->ChannelTag();
-              if (!channel)
-                continue;
-
               if (i > 0)
               {
                 itemsPointer.stop = i-1;
                 m_epgItemsPtr.push_back(itemsPointer);
                 itemsPointer.start = i;
               }
-              iLastChannelNumber = iCurrentChannelNumber;
+              iLastChannelID = iCurrentChannelID;
               CGUIListItemPtr item(new CFileItem(*channel));
               m_channelItems.push_back(item);
             }
@@ -1056,12 +1065,12 @@ void CGUIEPGGridContainer::OnRight()
   CGUIControl::OnRight();
 }
 
-void CGUIEPGGridContainer::SetChannel(const CStdString &channel)
+void CGUIEPGGridContainer::SetChannel(const std::string &channel)
 {
   int iChannelIndex(-1);
   for (unsigned int iIndex = 0; iIndex < m_channelItems.size(); iIndex++)
   {
-    CStdString strPath = m_channelItems[iIndex]->GetProperty("path").asString(StringUtils::EmptyString);
+    std::string strPath = m_channelItems[iIndex]->GetProperty("path").asString();
     if (strPath == channel)
     {
       iChannelIndex = iIndex;
@@ -1264,6 +1273,18 @@ bool CGUIEPGGridContainer::OnMouseWheel(char wheel, const CPoint &point)
   return true;
 }
 
+CPVRChannel* CGUIEPGGridContainer::GetChannel(int iIndex)
+{
+  if (iIndex >= 0 && (size_t) iIndex < m_channelItems.size())
+  {
+    CFileItemPtr fileItem = boost::static_pointer_cast<CFileItem>(m_channelItems[iIndex]);
+    if (fileItem->HasPVRChannelInfoTag())
+      return fileItem->GetPVRChannelInfoTag();
+  }
+  
+  return NULL;
+}
+
 void CGUIEPGGridContainer::SetSelectedChannel(int channelIndex)
 {
   if (channelIndex < 0)
@@ -1328,9 +1349,9 @@ CGUIListItemPtr CGUIEPGGridContainer::GetListItem(int offset, unsigned int flag)
   return CGUIListItemPtr();
 }
 
-CStdString CGUIEPGGridContainer::GetLabel(int info) const
+std::string CGUIEPGGridContainer::GetLabel(int info) const
 {
-  CStdString label;
+  std::string label;
   switch (info)
   {
   case CONTAINER_NUM_PAGES:
@@ -1591,9 +1612,9 @@ void CGUIEPGGridContainer::LoadLayout(TiXmlElement *layout)
   }
 }
 
-CStdString CGUIEPGGridContainer::GetDescription() const
+std::string CGUIEPGGridContainer::GetDescription() const
 {
-  CStdString strLabel;
+  std::string strLabel;
   int item = GetSelectedItem();
   if (item >= 0 && item < (int)m_programmeItems.size())
   {

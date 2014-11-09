@@ -27,6 +27,8 @@
  *
  */
 
+#include "utils/auto_buffer.h"
+
 // forward definition
 class CBaseTexture;
 
@@ -154,7 +156,6 @@ protected:
   float m_originX;
   float m_originY;
 
-  bool m_bTextureLoaded;
   unsigned int m_nTexture;
 
   SVertex* m_vertex;
@@ -167,6 +168,7 @@ protected:
   static int justification_word_weight;
 
   CStdString m_strFileName;
+  XUTILS::auto_buffer m_fontFileInMemory; // used only in some cases, see CFreeTypeLibrary::GetFont()
 
 private:
   CGUIFontTTFBase(const CGUIFontTTFBase&);

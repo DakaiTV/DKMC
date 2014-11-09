@@ -97,7 +97,7 @@ bool CTextureCacheJob::CacheTexture(CBaseTexture **out_texture)
     m_details.height = height;
     m_details.file = m_cachePath + ".jpg";
     if (out_texture)
-      *out_texture = LoadImage(CTextureCache::GetCachedPath(m_details.file), width, height, additional_info);
+      *out_texture = LoadImage(CTextureCache::GetCachedPath(m_details.file), width, height, "" /* already flipped */);
     CLog::Log(LOGDEBUG, "Fast %s image '%s' to '%s': %p", m_oldHash.empty() ? "Caching" : "Recaching", image.c_str(), m_details.file.c_str(), out_texture);
     return true;
   }
@@ -145,34 +145,11 @@ CStdString CTextureCacheJob::DecodeImageURL(const CStdString &url, unsigned int 
 
     image = thumbURL.GetHostName();
 
-    CStdString optionString = thumbURL.GetOptions().empty() ? "" : thumbURL.GetOptions().substr(1);
-    StringUtils::TrimRight(optionString, "/"); // In case XBMC adds a slash.
+    if (thumbURL.HasOption("flipped"))
+      additional_info = "flipped";
 
-    std::vector<CStdString> options;
-    StringUtils::SplitString(optionString, "&", options);
-    for (std::vector<CStdString>::iterator i = options.begin(); i != options.end(); i++)
-    {
-      CStdString option, value;
-      size_t pos = i->find('=');
-      if (pos != std::string::npos)
-      {
-        option = i->substr(0, pos);
-        value  = i->substr(pos + 1);
-      }
-      else
-      {
-        option = *i;
-        value = "";
-      }
-      if (option == "size" && value == "thumb")
-      {
-        width = height = g_advancedSettings.GetThumbSize();
-      }
-      else if (option == "flipped")
-      {
-        additional_info = "flipped";
-      }
-    }
+    if (thumbURL.GetOption("size") == "thumb")
+      width = height = g_advancedSettings.GetThumbSize();
   }
   return image;
 }
@@ -190,7 +167,7 @@ CBaseTexture *CTextureCacheJob::LoadImage(const CStdString &image, unsigned int 
   CFileItem file(image, false);
   file.FillInMimeType();
   if (!(file.IsPicture() && !(file.IsZIP() || file.IsRAR() || file.IsCBR() || file.IsCBZ() ))
-      && !StringUtils::StartsWithNoCase(file.GetMimeType(), "image/") && !file.GetMimeType().Equals("application/octet-stream")) // ignore non-pictures
+      && !StringUtils::StartsWithNoCase(file.GetMimeType(), "image/") && !StringUtils::EqualsNoCase(file.GetMimeType(), "application/octet-stream")) // ignore non-pictures
     return NULL;
 
   CBaseTexture *texture = CBaseTexture::LoadFromFile(image, width, height, CSettings::Get().GetBool("pictures.useexifrotation"), requirePixels, file.GetMimeType());
@@ -224,7 +201,7 @@ CStdString CTextureCacheJob::GetImageHash(const CStdString &url)
     if (!time)
       time = st.st_ctime;
     if (time || st.st_size)
-      return StringUtils::Format("d%"PRId64"s%"PRId64, time, st.st_size);;
+      return StringUtils::Format("d%" PRId64"s%" PRId64, time, st.st_size);;
 
   }
   CLog::Log(LOGDEBUG, "%s - unable to stat url %s", __FUNCTION__, url.c_str());

@@ -19,10 +19,10 @@
  */
 
 #include "CoreAudioStream.h"
+#include "CoreAudioDevice.h"
 
 #include "CoreAudioHelpers.h"
 #include "utils/log.h"
-#include "utils/StdString.h"
 
 CCoreAudioStream::CCoreAudioStream() :
   m_StreamId  (0    )
@@ -142,6 +142,32 @@ bool CCoreAudioStream::IsDigitalOuptut(AudioStreamID id)
           type == kIOAudioDeviceTransportTypeUSB);
 }
 
+bool CCoreAudioStream::GetStartingChannelInDevice(AudioStreamID id, UInt32 &startingChannel)
+{
+  if (!id)
+    return 0;
+  
+  UInt32 i_param_size = sizeof(UInt32);
+  UInt32 i_param;
+  startingChannel = 0;
+  bool ret = false;
+  
+  AudioObjectPropertyAddress propertyAddress; 
+  propertyAddress.mScope    = kAudioObjectPropertyScopeGlobal; 
+  propertyAddress.mElement  = kAudioObjectPropertyElementMaster;
+  propertyAddress.mSelector = kAudioStreamPropertyStartingChannel; 
+  
+  // number of frames of latency in the AudioStream
+  OSStatus status = AudioObjectGetPropertyData(id, &propertyAddress, 0, NULL, &i_param_size, &i_param); 
+  if (status == noErr)
+  {
+    startingChannel = i_param;
+    ret = true;
+  }
+  
+  return ret;
+}
+
 UInt32 CCoreAudioStream::GetTerminalType(AudioStreamID id)
 {
   if (!id)
@@ -211,6 +237,13 @@ bool CCoreAudioStream::SetVirtualFormat(AudioStreamBasicDescription* pDesc)
     return false;
 
   std::string formatString;
+
+  // suppress callbacks for the default output device change
+  // for the next 2 seconds because setting format
+  // might trigger a change (when setting/unsetting an encoded
+  // passthrough format)
+  CCoreAudioDevice::SuppressDefaultOutputDeviceCB(2000);
+
 
   if (!m_OriginalVirtualFormat.mFormatID)
   {
@@ -292,6 +325,12 @@ bool CCoreAudioStream::SetPhysicalFormat(AudioStreamBasicDescription* pDesc)
 
   std::string formatString;
 
+  // suppress callbacks for the default output device change
+  // for the next 2 seconds because setting format
+  // might trigger a change (when setting/unsetting an encoded
+  // passthrough format)
+  CCoreAudioDevice::SuppressDefaultOutputDeviceCB(2000);
+
   if (!m_OriginalPhysicalFormat.mFormatID)
   {
     // Store the original format (as we found it) so that it can be restored later
@@ -334,7 +373,8 @@ bool CCoreAudioStream::SetPhysicalFormat(AudioStreamBasicDescription* pDesc)
     }
     if (checkPhysicalFormat.mSampleRate == pDesc->mSampleRate &&
         checkPhysicalFormat.mFormatID   == pDesc->mFormatID   &&
-        checkPhysicalFormat.mFramesPerPacket == pDesc->mFramesPerPacket)
+        checkPhysicalFormat.mFramesPerPacket == pDesc->mFramesPerPacket &&
+        checkPhysicalFormat.mChannelsPerFrame == pDesc->mChannelsPerFrame)
     {
       // The right format is now active.
       CLog::Log(LOGDEBUG, "CCoreAudioStream::SetPhysicalFormat: "
@@ -426,7 +466,7 @@ OSStatus CCoreAudioStream::HardwareStreamListener(AudioObjectID inObjectID,
       // hardware physical format has changed.
       if (AudioObjectGetPropertyData(ca_stream->m_StreamId, &inAddresses[i], 0, NULL, &propertySize, &actualFormat) == noErr)
       {
-        CStdString formatString;
+        std::string formatString;
         CLog::Log(LOGINFO, "CCoreAudioStream::HardwareStreamListener: "
           "Hardware physical format changed to %s", StreamDescriptionToString(actualFormat, formatString));
         ca_stream->m_physical_format_event.Set();
@@ -439,7 +479,7 @@ OSStatus CCoreAudioStream::HardwareStreamListener(AudioObjectID inObjectID,
       UInt32 propertySize = sizeof(AudioStreamBasicDescription);
       if (AudioObjectGetPropertyData(ca_stream->m_StreamId, &inAddresses[i], 0, NULL, &propertySize, &actualFormat) == noErr)
       {
-        CStdString formatString;
+        std::string formatString;
         CLog::Log(LOGINFO, "CCoreAudioStream::HardwareStreamListener: "
           "Hardware virtual format changed to %s", StreamDescriptionToString(actualFormat, formatString));
         ca_stream->m_virtual_format_event.Set();

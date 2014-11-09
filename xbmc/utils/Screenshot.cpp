@@ -58,6 +58,11 @@ CScreenshotSurface::CScreenshotSurface()
   m_buffer = NULL;
 }
 
+CScreenshotSurface::~CScreenshotSurface()
+{
+  delete m_buffer;
+}
+
 bool CScreenshotSurface::capture()
 {
 #if defined(TARGET_RASPBERRY_PI)
@@ -166,7 +171,7 @@ bool CScreenshotSurface::capture()
   return true;
 }
 
-void CScreenShot::TakeScreenshot(const CStdString &filename, bool sync)
+void CScreenShot::TakeScreenshot(const std::string &filename, bool sync)
 {
 
   CScreenshotSurface surface;
@@ -193,6 +198,7 @@ void CScreenShot::TakeScreenshot(const CStdString &filename, bool sync)
       CLog::Log(LOGERROR, "Unable to write screenshot %s", filename.c_str());
 
     delete [] surface.m_buffer;
+    surface.m_buffer = NULL;
   }
   else
   {
@@ -207,15 +213,16 @@ void CScreenShot::TakeScreenshot(const CStdString &filename, bool sync)
     //buffer is deleted from CThumbnailWriter
     CThumbnailWriter* thumbnailwriter = new CThumbnailWriter(surface.m_buffer, surface.m_width, surface.m_height, surface.m_stride, filename);
     CJobManager::GetInstance().AddJob(thumbnailwriter, NULL);
+    surface.m_buffer = NULL;
   }
 }
 
 void CScreenShot::TakeScreenshot()
 {
   static bool savingScreenshots = false;
-  static vector<CStdString> screenShots;
+  static vector<std::string> screenShots;
   bool promptUser = false;
-  CStdString strDir;
+  std::string strDir;
 
   // check to see if we have a screenshot folder yet
   CSettingPath *screenshotSetting = (CSettingPath*)CSettings::Get().GetSetting("debug.screenshotpath");
@@ -243,7 +250,7 @@ void CScreenShot::TakeScreenshot()
 
   if (!strDir.empty())
   {
-    CStdString file = CUtil::GetNextFilename(URIUtils::AddFileToFolder(strDir, "screenshot%03d.png"), 999);
+    std::string file = CUtil::GetNextFilename(URIUtils::AddFileToFolder(strDir, "screenshot%03d.png"), 999);
 
     if (!file.empty())
     {
@@ -252,7 +259,7 @@ void CScreenShot::TakeScreenshot()
         screenShots.push_back(file);
       if (promptUser)
       { // grab the real directory
-        CStdString newDir;
+        std::string newDir;
         if (screenshotSetting != NULL)
         {
           newDir = screenshotSetting->GetValue();
@@ -267,8 +274,8 @@ void CScreenShot::TakeScreenshot()
         {
           for (unsigned int i = 0; i < screenShots.size(); i++)
           {
-            CStdString file = CUtil::GetNextFilename(URIUtils::AddFileToFolder(newDir, "screenshot%03d.png"), 999);
-            CFile::Cache(screenShots[i], file);
+            std::string file = CUtil::GetNextFilename(URIUtils::AddFileToFolder(newDir, "screenshot%03d.png"), 999);
+            CFile::Copy(screenShots[i], file);
           }
           screenShots.clear();
         }

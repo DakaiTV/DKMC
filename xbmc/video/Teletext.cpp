@@ -34,8 +34,10 @@
 #include "guilib/GraphicContext.h"
 #include "cores/IPlayer.h"
 
-#ifdef HAS_SDL
+#if SDL_VERSION == 1
 #include <SDL/SDL_stdinc.h>
+#elif SDL_VERSION == 2
+#include <SDL2/SDL_stdinc.h>
 #else
 #define SDL_memset4(dst, val, len)		\
 do {						\
@@ -433,7 +435,7 @@ CTeletextDecoder::CTeletextDecoder()
   m_Manager                      = NULL;
   m_Library                      = NULL;
   m_RenderInfo.ShowFlof          = true;
-  m_RenderInfo.Show39            = true;
+  m_RenderInfo.Show39            = false;
   m_RenderInfo.Showl25           = true;
   m_RenderInfo.Prev_100          = 0x100;
   m_RenderInfo.Prev_10           = 0x100;
@@ -1452,6 +1454,8 @@ void CTeletextDecoder::DoRenderPage(int startrow, int national_subset_bak)
       break;
     }
   }
+  m_RenderInfo.FontWidth_Normal = m_RenderInfo.Width / (m_RenderInfo.nofirst ? 39 : 40);
+  SetFontWidth(m_RenderInfo.FontWidth_Normal);
 
   if (m_RenderInfo.TranspMode || m_RenderInfo.Boxed)
   {

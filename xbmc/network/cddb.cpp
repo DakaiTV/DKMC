@@ -32,6 +32,7 @@
 
 #include <taglib/id3v1genres.h>
 #include "cddb.h"
+#include "CompileInfo.h"
 #include "network/DNSNameCache.h"
 #include "settings/AdvancedSettings.h"
 #include "utils/StringUtils.h"
@@ -194,7 +195,7 @@ string Xcddb::Recv(bool wait4point)
 
   //##########################################################
   // Write captured data information to the xbmc log file
-  CLog::Log(LOGDEBUG,"Xcddb::Recv Captured %d bytes // Buffer= %"PRIdS" bytes. Captured data follows on next line\n%s", counter, str_buffer.size(),(char *)str_buffer.c_str());
+  CLog::Log(LOGDEBUG,"Xcddb::Recv Captured %d bytes // Buffer= %" PRIdS" bytes. Captured data follows on next line\n%s", counter, str_buffer.size(),(char *)str_buffer.c_str());
 
 
   return str_buffer;
@@ -397,9 +398,7 @@ void Xcddb::addTitle(const char *buffer)
   }
 
   // track artist" / "track title
-  CStdString strValue = value;
-  CStdStringArray values;
-  StringUtils::SplitString(value, " / ", values);
+  vector<string> values = StringUtils::Split(value, " / ");
   if (values.size() > 1)
   {
     g_charsetConverter.unknownToUTF8(values[0]);
@@ -407,7 +406,7 @@ void Xcddb::addTitle(const char *buffer)
     g_charsetConverter.unknownToUTF8(values[1]);
     m_mapTitles[trk_nr] += values[1];
   }
-  else
+  else if (!values.empty())
   {
     g_charsetConverter.unknownToUTF8(values[0]);
     m_mapTitles[trk_nr] += values[0];
@@ -760,7 +759,6 @@ bool Xcddb::queryCache( uint32_t discid )
   {
     // Got a cachehit
     char buffer[4096];
-    OutputDebugString ( "cddb local cache hit.\n" );
     file.Read(buffer, 4096);
     file.Close();
     parseData( buffer );
@@ -779,10 +777,9 @@ bool Xcddb::writeCacheFile( const char* pBuffer, uint32_t discid )
   XFILE::CFile file;
   if (file.OpenForWrite(GetCacheFile(discid), true))
   {
-    OutputDebugString ( "Current cd saved to local cddb.\n" );
-    file.Write( (void*) pBuffer, strlen( pBuffer ) + 1 );
+    const bool ret = ( (size_t) file.Write((void*)pBuffer, strlen(pBuffer) + 1) == strlen(pBuffer) + 1);
     file.Close();
-    return true;
+    return ret;
   }
 
   return false;
@@ -875,10 +872,12 @@ bool Xcddb::queryCDinfo(CCdInfo* pInfo)
 
   //##########################################################
   // Send the Hello message
-  CStdString version = g_infoManager.GetLabel(SYSTEM_BUILD_VERSION);
+  std::string version = g_infoManager.GetLabel(SYSTEM_BUILD_VERSION);
+  std::string lcAppName = CCompileInfo::GetAppName();
+  StringUtils::ToLower(lcAppName);
   if (version.find(" ") != std::string::npos)
     version = version.substr(0, version.find(" "));
-  CStdString strGreeting = "cddb hello xbmc xbmc.org XBMC " + version;
+  std::string strGreeting = "cddb hello " + lcAppName + " kodi.tv " + CCompileInfo::GetAppName() + " " + version;
   if ( ! Send(strGreeting.c_str()) )
   {
     CLog::Log(LOGERROR, "Xcddb::queryCDinfo Error sending \"%s\"", strGreeting.c_str());

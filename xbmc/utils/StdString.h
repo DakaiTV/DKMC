@@ -862,16 +862,11 @@ inline const Type& SSMAX(const Type& arg1, const Type& arg2)
     {
       PCSTR pNextSrcA      = pSrcA;
       PWSTR pNextDstW      = pDstW;
-      SSCodeCvt::result res  = SSCodeCvt::ok;
       const SSCodeCvt& conv  = SS_USE_FACET(loc, SSCodeCvt);
-#if defined(TARGET_DARWIN) || defined(TARGET_FREEBSD)
-      SSCodeCvt::state_type st= { { 0 } };
-#else
-      SSCodeCvt::state_type st= { 0 };
-#endif
-      res            = conv.in(st,
-                    pSrcA, pSrcA + nSrc, pNextSrcA,
-                    pDstW, pDstW + nDst, pNextDstW);
+      SSCodeCvt::state_type st= {};
+      SSCodeCvt::result res = conv.in(st,
+                              pSrcA, pSrcA + nSrc, pNextSrcA,
+                              pDstW, pDstW + nDst, pNextDstW);
 #ifdef TARGET_POSIX
 #define ASSERT2(a) if (!(a)) {fprintf(stderr, "StdString: Assertion Failed on line %d\n", __LINE__);}
 #else
@@ -909,16 +904,11 @@ inline const Type& SSMAX(const Type& arg1, const Type& arg2)
     {
       PSTR pNextDstA      = pDstA;
       PCWSTR pNextSrcW    = pSrcW;
-      SSCodeCvt::result res  = SSCodeCvt::ok;
       const SSCodeCvt& conv  = SS_USE_FACET(loc, SSCodeCvt);
-#if defined(TARGET_DARWIN) || defined(TARGET_FREEBSD)
-      SSCodeCvt::state_type st= { { 0 } };
-#else
-      SSCodeCvt::state_type st= { 0 };
-#endif
-      res            = conv.out(st,
-                    pSrcW, pSrcW + nSrc, pNextSrcW,
-                    pDstA, pDstA + nDst, pNextDstA);
+      SSCodeCvt::state_type st= {};
+      SSCodeCvt::result res = conv.out(st,
+                              pSrcW, pSrcW + nSrc, pNextSrcW,
+                              pDstA, pDstA + nDst, pNextDstA);
 #ifdef TARGET_POSIX
 #define ASSERT2(a) if (!(a)) {fprintf(stderr, "StdString: Assertion Failed on line %d\n", __LINE__);}
 #else
@@ -2096,13 +2086,6 @@ public:
   {
   }
 
-#ifdef SS_UNSIGNED
-  CStdStr(PCUSTR pU)
-  {
-    *this = reinterpret_cast<PCSTR>(pU);
-  }
-#endif
-
   CStdStr(PCSTR pA)
   {
   #ifdef SS_ANSI
@@ -2114,26 +2097,6 @@ public:
   }
 
   CStdStr(PCWSTR pW)
-  {
-  #ifdef SS_ANSI
-    *this = pW;
-  #else
-    if ( !TryLoad(pW) )
-      *this = pW;
-  #endif
-  }
-
-  CStdStr(uint16_t* pW)
-  {
-  #ifdef SS_ANSI
-    *this = pW;
-  #else
-    if ( !TryLoad(pW) )
-      *this = pW;
-  #endif
-  }
-
-  CStdStr(uint32_t* pW)
   {
   #ifdef SS_ANSI
     *this = pW;
@@ -2192,50 +2155,6 @@ public:
     ssasn(*this, pW);
     return *this;
   }
-
-#ifdef SS_UNSIGNED
-  MYTYPE& operator=(PCUSTR pU)
-  {
-    ssasn(*this, reinterpret_cast<PCSTR>(pU));
-    return *this;
-  }
-#endif
-
-  MYTYPE& operator=(uint16_t* pA)
-  {
-    ssasn(*this, pA);
-    return *this;
-  }
-
-  MYTYPE& operator=(uint32_t* pA)
-  {
-    ssasn(*this, pA);
-    return *this;
-  }
-
-  MYTYPE& operator=(CT t)
-  {
-    Q172398(*this);
-    this->assign(1, t);
-    return *this;
-  }
-
-  #ifdef SS_INC_COMDEF
-    MYTYPE& operator=(const _bstr_t& bstr)
-    {
-      if ( bstr.length() > 0 )
-      {
-        this->assign(static_cast<PCMYSTR>(bstr), bstr.length());
-        return *this;
-      }
-      else
-      {
-        this->erase();
-        return *this;
-      }
-    }
-  #endif
-
 
   // Overloads  also needed to fix the MSVC assignment bug (KB: Q172398)
   //  *** Thanks to Pete The Plumber for catching this one ***
@@ -2374,29 +2293,11 @@ public:
     return *this;
   }
 
-  MYTYPE& operator+=(uint16_t* pW)
-  {
-    ssadd(*this, pW);
-    return *this;
-  }
-
-  MYTYPE& operator+=(uint32_t* pW)
-  {
-    ssadd(*this, pW);
-    return *this;
-  }
-
   MYTYPE& operator+=(CT t)
   {
     this->append(1, t);
     return *this;
   }
-  #ifdef SS_INC_COMDEF  // if we have _bstr_t, define a += for it too.
-    MYTYPE& operator+=(const _bstr_t& bstr)
-    {
-      return this->operator+=(static_cast<PCMYSTR>(bstr));
-    }
-  #endif
 
   // -------------------------------------------------------------------------
   // CStdStr -- Direct access to character buffer.  In the MS' implementation,
@@ -3249,7 +3150,5 @@ struct StdStringEqualsNoCaseA
     #pragma option pop  // Turn back on inline function warnings
 //  #pragma warn +inl   // Turn back on inline function warnings
 #endif
-
-typedef std::vector<CStdString> CStdStringArray;
 
 #endif  // #ifndef STDSTRING_H

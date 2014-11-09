@@ -26,11 +26,14 @@ SRCS += Sinks/AESinkProfiler.cpp
 
 SRCS += Sinks/AESinkPi.cpp
 
+SRCS += AEResampleFactory.cpp
+
 SRCS += Engines/ActiveAE/ActiveAE.cpp
 SRCS += Engines/ActiveAE/ActiveAESink.cpp
 SRCS += Engines/ActiveAE/ActiveAEStream.cpp
 SRCS += Engines/ActiveAE/ActiveAESound.cpp
-SRCS += Engines/ActiveAE/ActiveAEResample.cpp
+SRCS += Engines/ActiveAE/ActiveAEResampleFFMPEG.cpp
+SRCS += Engines/ActiveAE/ActiveAEResamplePi.cpp
 SRCS += Engines/ActiveAE/ActiveAEBuffer.cpp
 
 ifeq (@USE_ANDROID@,1)
@@ -39,6 +42,7 @@ else ifeq ($(findstring ios,@ARCH@),ios)
 SRCS += Sinks/AESinkDARWINIOS.cpp
 else ifeq ($(findstring osx,@ARCH@),osx)
 SRCS += Sinks/AESinkDARWINOSX.cpp
+SRCS += Sinks/osx/AEDeviceEnumerationOSX.cpp
 SRCS += Sinks/osx/CoreAudioChannelLayout.cpp
 SRCS += Sinks/osx/CoreAudioDevice.cpp
 SRCS += Sinks/osx/CoreAudioHardware.cpp
@@ -54,8 +58,6 @@ endif
 
 SRCS += Utils/AEChannelInfo.cpp
 SRCS += Utils/AEBuffer.cpp
-SRCS += Utils/AEConvert.cpp
-SRCS += Utils/AERemap.cpp
 SRCS += Utils/AEUtil.cpp
 SRCS += Utils/AEStreamInfo.cpp
 SRCS += Utils/AEPackIEC61937.cpp

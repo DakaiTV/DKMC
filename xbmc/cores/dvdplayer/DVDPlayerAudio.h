@@ -27,6 +27,7 @@
 #include "DVDDemuxers/DVDDemuxUtils.h"
 #include "DVDStreamInfo.h"
 #include "utils/BitstreamStats.h"
+#include "IDVDPlayer.h"
 
 #include "cores/AudioEngine/Utils/AEAudioFormat.h"
 
@@ -35,7 +36,6 @@
 
 class CDVDPlayer;
 class CDVDAudioCodec;
-class IAudioCallback;
 class CDVDAudioCodec;
 
 #define DECODE_FLAG_DROP    1
@@ -101,18 +101,14 @@ public:
   XbmcThreads::EndTime m_timer;
 };
 
-class CDVDPlayerAudio : public CThread
+class CDVDPlayerAudio : public CThread, public IDVDStreamPlayerAudio
 {
 public:
   CDVDPlayerAudio(CDVDClock* pClock, CDVDMessageQueue& parent);
   virtual ~CDVDPlayerAudio();
 
   bool OpenStream(CDVDStreamInfo &hints);
-  void OpenStream(CDVDStreamInfo &hints, CDVDAudioCodec* codec);
   void CloseStream(bool bWaitForBuffers);
-
-  void RegisterAudioCallback(IAudioCallback* pCallback) { m_dvdAudio.RegisterAudioCallback(pCallback); }
-  void UnRegisterAudioCallback()                        { m_dvdAudio.UnRegisterAudioCallback(); }
 
   void SetSpeed(int speed);
   void Flush();
@@ -125,16 +121,15 @@ public:
   bool IsInited() const                                 { return m_messageQueue.IsInited(); }
   void SendMessage(CDVDMsg* pMsg, int priority = 0)     { m_messageQueue.Put(pMsg, priority); }
 
-  //! Switch codec if needed. Called when the sample rate gotten from the
-  //! codec changes, in which case we may want to switch passthrough on/off.
-  bool SwitchCodecIfNeeded();
-
   void SetVolume(float fVolume)                         { m_dvdAudio.SetVolume(fVolume); }
+  void SetMute(bool bOnOff)                             { }
   void SetDynamicRangeCompression(long drc)             { m_dvdAudio.SetDynamicRangeCompression(drc); }
-  float GetCurrentAttenuation()                         { return m_dvdAudio.GetCurrentAttenuation(); }
+  float GetDynamicRangeAmplification() const            { return 0.0f; }
+
 
   std::string GetPlayerInfo();
   int GetAudioBitrate();
+  int GetAudioChannels();
 
   // holds stream information for current playing stream
   CDVDStreamInfo m_streaminfo;
@@ -142,10 +137,13 @@ public:
   CPTSOutputQueue m_ptsOutput;
   CPTSInputQueue  m_ptsInput;
 
-  double GetCurrentPts()                            { return m_dvdAudio.GetPlayingPts(); }
+  double GetCurrentPts()                            { CSingleLock lock(m_info_section); return m_info.pts; }
 
-  bool IsStalled()                                  { return m_stalled;  }
+  bool IsStalled() const                            { return m_stalled;  }
+  bool IsEOS()                                      { return false; }
   bool IsPassthrough() const;
+  double GetDelay() { return 0.0; }
+  double GetCacheTotal() { return 0.0; }
 protected:
 
   virtual void OnStartup();
@@ -155,6 +153,11 @@ protected:
   int DecodeFrame(DVDAudioFrame &audioframe);
 
   void UpdatePlayerInfo();
+  void OpenStream(CDVDStreamInfo &hints, CDVDAudioCodec* codec);
+  //! Switch codec if needed. Called when the sample rate gotten from the
+  //! codec changes, in which case we may want to switch passthrough on/off.
+  bool SwitchCodecIfNeeded();
+  float GetCurrentAttenuation()                         { return m_dvdAudio.GetCurrentAttenuation(); }
 
   CDVDMessageQueue m_messageQueue;
   CDVDMessageQueue& m_messageParent;
@@ -230,8 +233,19 @@ protected:
   double m_maxspeedadjust;
   double m_resampleratio; //resample ratio when using SYNC_RESAMPLE, used for the codec info
 
+  struct SInfo
+  {
+    SInfo()
+    : pts(DVD_NOPTS_VALUE)
+    , passthrough(false)
+    {}
+
+    std::string      info;
+    double           pts;
+    bool             passthrough;
+  };
 
   CCriticalSection m_info_section;
-  std::string      m_info;
+  SInfo            m_info;
 };
 

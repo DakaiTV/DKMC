@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include "cores/AudioEngine/Interfaces/AE.h" // for typedef's used in derived classes
 #include "cores/AudioEngine/Utils/AEAudioFormat.h"
+#include "cores/AudioEngine/Utils/AEUtil.h"
 
 class IAESink
 {
@@ -46,12 +47,6 @@ public:
   virtual void Deinitialize() = 0;
 
   /*
-    This method returns the time in seconds that it will take
-    for the next added packet to be heard from the speakers.
-  */
-  virtual double GetDelay() = 0;
-
-  /*
     This method returns the total time in seconds of the cache.
   */
   virtual double GetCacheTotal() = 0;
@@ -61,10 +56,21 @@ public:
   */
   virtual double GetLatency() { return 0.0; };
 
-  /*
-    Adds packets to be sent out, this routine MUST block or sleep.
+  /*!
+   * @brief Adds packets to be sent out, this routine MUST block or sleep.
+   * @param data array of pointers to planes holding audio data
+   * @param frames number of audio frames in data
+   * @param offset offset in frames where audio data starts
+   * @return number of frames consumed by the sink
   */
-  virtual unsigned int AddPackets(uint8_t *data, unsigned int frames, bool hasAudio, bool blocking = false) = 0;
+  virtual unsigned int AddPackets(uint8_t **data, unsigned int frames, unsigned int offset) = 0;
+
+
+  /*!
+   * @brief Return a timestamped status structure with delay and sink info
+   * @param status structure filled with sink status
+  */
+  virtual void GetDelay(AEDelayStatus& status) = 0;
 
   /*
     Drain the sink

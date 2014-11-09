@@ -36,13 +36,12 @@ using namespace XFILE;
 CHTTPDirectory::CHTTPDirectory(void){}
 CHTTPDirectory::~CHTTPDirectory(void){}
 
-bool CHTTPDirectory::GetDirectory(const CStdString& strPath, CFileItemList &items)
+bool CHTTPDirectory::GetDirectory(const CURL& url, CFileItemList &items)
 {
   CCurlFile http;
-  CURL url(strPath);
 
-  CStdString strName, strLink;
-  CStdString strBasePath = url.GetFileName();
+  std::string strName, strLink;
+  std::string strBasePath = url.GetFileName();
 
   if(!http.Open(url))
   {
@@ -62,6 +61,9 @@ bool CHTTPDirectory::GetDirectory(const CStdString& strPath, CFileItemList &item
   CRegExp reDateTimeNginx(true);
   reDateTimeNginx.RegComp("</a> +([0-9]{2})-([A-Z]{3})-([0-9]{4}) ([0-9]{2}):([0-9]{2}) ");
 
+  CRegExp reDateTimeApacheNewFormat(true);
+  reDateTimeApacheNewFormat.RegComp("<td align=\"right\">([0-9]{4})-([0-9]{2})-([0-9]{2}) ([0-9]{2}):([0-9]{2}) +</td>");
+
   CRegExp reSize(true);
   reSize.RegComp("> *([0-9.]+)(B|K|M|G| )</td>");
 
@@ -72,7 +74,7 @@ bool CHTTPDirectory::GetDirectory(const CStdString& strPath, CFileItemList &item
   char buffer[MAX_PATH + 1024];
   while(http.ReadString(buffer, sizeof(buffer)-1))
   {
-    CStdString strBuffer = buffer;
+    std::string strBuffer = buffer;
     std::string fileCharset(http.GetServerReportedCharset());
     if (!fileCharset.empty() && fileCharset != "UTF-8")
     {
@@ -91,9 +93,9 @@ bool CHTTPDirectory::GetDirectory(const CStdString& strPath, CFileItemList &item
       if(strLink[0] == '/')
         strLink = strLink.substr(1);
 
-      CStdString strNameTemp = StringUtils::Trim(strName);
+      std::string strNameTemp = StringUtils::Trim(strName);
 
-      CStdStringW wName, wLink, wConverted;
+      std::wstring wName, wLink, wConverted;
       if (fileCharset.empty())
         g_charsetConverter.unknownToUTF8(strNameTemp);
       g_charsetConverter.utf8ToW(strNameTemp, wName, false);
@@ -101,16 +103,17 @@ bool CHTTPDirectory::GetDirectory(const CStdString& strPath, CFileItemList &item
       g_charsetConverter.wToUTF8(wConverted, strNameTemp);
       URIUtils::RemoveSlashAtEnd(strNameTemp);
 
-      CStdString strLinkBase = strLink;
-      CStdString strLinkOptions;
+      std::string strLinkBase = strLink;
+      std::string strLinkOptions;
 
       // split link with url options
       size_t pos = strLinkBase.find('?');
-      if (pos != std::string::npos) {
+      if (pos != std::string::npos)
+      {
         strLinkOptions = strLinkBase.substr(pos);
         strLinkBase.erase(pos);
       }
-      CStdString strLinkTemp = strLinkBase;
+      std::string strLinkTemp = strLinkBase;
 
       URIUtils::RemoveSlashAtEnd(strLinkTemp);
       strLinkTemp = CURL::Decode(strLinkTemp);
@@ -130,14 +133,26 @@ bool CHTTPDirectory::GetDirectory(const CStdString& strPath, CFileItemList &item
       {
         CFileItemPtr pItem(new CFileItem(strNameTemp));
         pItem->SetProperty("IsHTTPDirectory", true);
-        url.SetFileName(strBasePath + strLinkBase);
-        url.SetOptions(strLinkOptions);
-        pItem->SetPath(url.Get());
+        CURL url2(url);
+
+        /* NOTE: Force any &...; encoding (e.g. &amp;) into % encoding else CURL objects interpret them incorrectly
+         * due to the ; also being allowed as URL option seperator
+         */
+        if (fileCharset.empty())
+          g_charsetConverter.unknownToUTF8(strLinkBase);
+        g_charsetConverter.utf8ToW(strLinkBase, wLink, false);
+        HTML::CHTMLUtil::ConvertHTMLToW(wLink, wConverted);
+        g_charsetConverter.wToUTF8(wConverted, strLinkBase);
+
+        url2.SetFileName(strBasePath + strLinkBase);
+        url2.SetOptions(strLinkOptions);
+        pItem->SetURL(url2);
 
         if(URIUtils::HasSlashAtEnd(pItem->GetPath(), true))
           pItem->m_bIsFolder = true;
 
-        CStdString day, month, year, hour, minute;
+        std::string day, month, year, hour, minute;
+        int monthNum = 0;
 
         if (reDateTime.RegFind(strBuffer.c_str()) >= 0)
         {
@@ -163,10 +178,21 @@ bool CHTTPDirectory::GetDirectory(const CStdString& strPath, CFileItemList &item
           hour = reDateTimeLighttp.GetMatch(4);
           minute = reDateTimeLighttp.GetMatch(5);
         }
-
-        if (day.length() > 0 && month.length() > 0 && year.length() > 0)
+        else if (reDateTimeApacheNewFormat.RegFind(strBuffer.c_str()) >= 0)
         {
-          pItem->m_dateTime = CDateTime(atoi(year.c_str()), CDateTime::MonthStringToMonthNum(month), atoi(day.c_str()), atoi(hour.c_str()), atoi(minute.c_str()), 0);
+          day = reDateTimeApacheNewFormat.GetMatch(3);
+          monthNum = atoi(reDateTimeApacheNewFormat.GetMatch(2).c_str());
+          year = reDateTimeApacheNewFormat.GetMatch(1);
+          hour = reDateTimeApacheNewFormat.GetMatch(4);
+          minute = reDateTimeApacheNewFormat.GetMatch(5);
+        }
+
+        if (month.length() > 0)
+          monthNum = CDateTime::MonthStringToMonthNum(month);
+
+        if (day.length() > 0 && monthNum > 0 && year.length() > 0)
+        {
+          pItem->m_dateTime = CDateTime(atoi(year.c_str()), monthNum, atoi(day.c_str()), atoi(hour.c_str()), atoi(minute.c_str()), 0);
         }
 
         if (!pItem->m_bIsFolder)
@@ -219,10 +245,9 @@ bool CHTTPDirectory::GetDirectory(const CStdString& strPath, CFileItemList &item
   return true;
 }
 
-bool CHTTPDirectory::Exists(const char* strPath)
+bool CHTTPDirectory::Exists(const CURL &url)
 {
   CCurlFile http;
-  CURL url(strPath);
   struct __stat64 buffer;
 
   if( http.Stat(url, &buffer) != 0 )

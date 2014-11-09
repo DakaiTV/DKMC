@@ -233,6 +233,8 @@ bool CWinEventsSDL::MessagePump()
       case SDL_JOYAXISMOTION:
       case SDL_JOYBALLMOTION:
       case SDL_JOYHATMOTION:
+      case SDL_JOYDEVICEADDED:
+      case SDL_JOYDEVICEREMOVED:
         g_Joystick.Update(event);
         ret = true;
         break;
@@ -421,7 +423,16 @@ bool CWinEventsSDL::ProcessOSXShortcuts(SDL_Event& event)
 
   if (cmd && event.key.type == SDL_KEYDOWN)
   {
-    switch(event.key.keysym.sym)
+    char keysymbol = event.key.keysym.sym;
+
+    // if the unicode is in the ascii range
+    // use this instead for getting the real
+    // character based on the used keyboard layout
+    // see http://lists.libsdl.org/pipermail/sdl-libsdl.org/2004-May/043716.html
+    if (!(event.key.keysym.unicode & 0xff80))
+      keysymbol = event.key.keysym.unicode;
+
+    switch(keysymbol)
     {
     case SDLK_q:  // CMD-q to quit
       if (!g_application.m_bStop)
