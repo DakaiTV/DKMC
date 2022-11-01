@@ -1,39 +1,26 @@
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
 #include "DAVDirectory.h"
 
+#include "CurlFile.h"
 #include "DAVCommon.h"
 #include "DAVFile.h"
-#include "URL.h"
-#include "CurlFile.h"
 #include "FileItem.h"
-#include "utils/RegExp.h"
+#include "URL.h"
 #include "utils/StringUtils.h"
-#include "utils/log.h"
 #include "utils/URIUtils.h"
+#include "utils/log.h"
 
 using namespace XFILE;
 
-CDAVDirectory::CDAVDirectory(void) {}
-CDAVDirectory::~CDAVDirectory(void) {}
+CDAVDirectory::CDAVDirectory(void) = default;
+CDAVDirectory::~CDAVDirectory(void) = default;
 
 /*
  * Parses a <response>
@@ -60,7 +47,7 @@ void CDAVDirectory::ParseResponse(const TiXmlElement *pElement, CFileItem &item)
     else
     if (CDAVCommon::ValueWithoutNamespace(pResponseChild, "propstat"))
     {
-      if (CDAVCommon::GetStatusTag(pResponseChild->ToElement()) == "HTTP/1.1 200 OK")
+      if (CDAVCommon::GetStatusTag(pResponseChild->ToElement()).find("200 OK") != std::string::npos)
       {
         /* Iterate propstat children elements */
         for (pPropstatChild = pResponseChild->FirstChild(); pPropstatChild != 0; pPropstatChild = pPropstatChild->NextSibling())
@@ -77,23 +64,23 @@ void CDAVDirectory::ParseResponse(const TiXmlElement *pElement, CFileItem &item)
               else
               if (CDAVCommon::ValueWithoutNamespace(pPropChild, "getlastmodified") && !pPropChild->NoChildren())
               {
-                struct tm timeDate = {0};
+                struct tm timeDate = {};
                 strptime(pPropChild->FirstChild()->Value(), "%a, %d %b %Y %T", &timeDate);
                 item.m_dateTime = mktime(&timeDate);
               }
               else
               if (CDAVCommon::ValueWithoutNamespace(pPropChild, "displayname") && !pPropChild->NoChildren())
               {
-                item.SetLabel(pPropChild->FirstChild()->ValueStr());
+                item.SetLabel(CURL::Decode(pPropChild->FirstChild()->ValueStr()));
               }
               else
               if (!item.m_dateTime.IsValid() && CDAVCommon::ValueWithoutNamespace(pPropChild, "creationdate") && !pPropChild->NoChildren())
               {
-                struct tm timeDate = {0};
+                struct tm timeDate = {};
                 strptime(pPropChild->FirstChild()->Value(), "%Y-%m-%dT%T", &timeDate);
                 item.m_dateTime = mktime(&timeDate);
               }
-              else 
+              else
               if (CDAVCommon::ValueWithoutNamespace(pPropChild, "resourcetype"))
               {
                 if (CDAVCommon::ValueWithoutNamespace(pPropChild->FirstChild(), "collection"))
@@ -131,20 +118,21 @@ bool CDAVDirectory::GetDirectory(const CURL& url, CFileItemList &items)
 
   if (!dav.Open(url))
   {
-    CLog::Log(LOGERROR, "%s - Unable to get dav directory (%s)", __FUNCTION__, url.GetRedacted().c_str());
+    CLog::Log(LOGERROR, "{} - Unable to get dav directory ({})", __FUNCTION__, url.GetRedacted());
     return false;
   }
 
   std::string strResponse;
   dav.ReadData(strResponse);
 
-  std::string fileCharset(dav.GetServerReportedCharset());
+  std::string fileCharset(dav.GetProperty(XFILE::FILE_PROPERTY_CONTENT_CHARSET));
   CXBMCTinyXML davResponse;
   davResponse.Parse(strResponse, fileCharset);
 
   if (!davResponse.Parse(strResponse))
   {
-    CLog::Log(LOGERROR, "%s - Unable to process dav directory (%s)", __FUNCTION__, url.GetRedacted().c_str());
+    CLog::Log(LOGERROR, "{} - Unable to process dav directory ({})", __FUNCTION__,
+              url.GetRedacted());
     dav.Close();
     return false;
   }
@@ -157,7 +145,7 @@ bool CDAVDirectory::GetDirectory(const CURL& url, CFileItemList &items)
     {
       CFileItem item;
       ParseResponse(pChild->ToElement(), item);
-      CURL url2(url);
+      const CURL& url2(url);
       CURL url3(item.GetPath());
 
       std::string itemPath(URIUtils::AddFileToFolder(url2.GetWithoutFilename(), url3.GetFileName()));
@@ -196,10 +184,11 @@ bool CDAVDirectory::Create(const CURL& url)
   std::string strRequest = "MKCOL";
 
   dav.SetCustomRequest(strRequest);
- 
+
   if (!dav.Execute(url))
   {
-    CLog::Log(LOGERROR, "%s - Unable to create dav directory (%s) - %d", __FUNCTION__, url.GetRedacted().c_str(), dav.GetLastResponseCode());
+    CLog::Log(LOGERROR, "{} - Unable to create dav directory ({}) - {}", __FUNCTION__,
+              url.GetRedacted(), dav.GetLastResponseCode());
     return false;
   }
 
@@ -227,10 +216,11 @@ bool CDAVDirectory::Remove(const CURL& url)
   std::string strRequest = "DELETE";
 
   dav.SetCustomRequest(strRequest);
- 
+
   if (!dav.Execute(url))
   {
-    CLog::Log(LOGERROR, "%s - Unable to delete dav directory (%s) - %d", __FUNCTION__, url.GetRedacted().c_str(), dav.GetLastResponseCode());
+    CLog::Log(LOGERROR, "{} - Unable to delete dav directory ({}) - {}", __FUNCTION__,
+              url.GetRedacted(), dav.GetLastResponseCode());
     return false;
   }
 

@@ -1,26 +1,23 @@
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
-#include "JSONRPC.h"
+#pragma once
+
 #include "FileItemHandler.h"
-#include "FileItem.h"
+#include "JSONRPC.h"
+
+class CFileItemList;
+class CVariant;
+
+namespace PLAYLIST
+{
+using Id = int;
+} // namespace PLAYLIST
 
 namespace JSONRPC
 {
@@ -32,15 +29,18 @@ namespace JSONRPC
 
     static JSONRPC_STATUS GetItems(const std::string &method, ITransportLayer *transport, IClient *client, const CVariant &parameterObject, CVariant &result);
     static JSONRPC_STATUS Add(const std::string &method, ITransportLayer *transport, IClient *client, const CVariant &parameterObject, CVariant &result);
-    static JSONRPC_STATUS Remove(const std::string &method, ITransportLayer *transport, IClient *client, const CVariant &parameterObject, CVariant &result); 
+    static JSONRPC_STATUS Remove(const std::string &method, ITransportLayer *transport, IClient *client, const CVariant &parameterObject, CVariant &result);
     static JSONRPC_STATUS Insert(const std::string &method, ITransportLayer *transport, IClient *client, const CVariant &parameterObject, CVariant &result);
     static JSONRPC_STATUS Clear(const std::string &method, ITransportLayer *transport, IClient *client, const CVariant &parameterObject, CVariant &result);
     static JSONRPC_STATUS Swap(const std::string &method, ITransportLayer *transport, IClient *client, const CVariant &parameterObject, CVariant &result);
   private:
-    static int GetPlaylist(const CVariant &playlist);
-    static inline void NotifyAll();
-    static JSONRPC_STATUS GetPropertyValue(int playlist, const std::string &property, CVariant &result);
-    static bool CheckMediaParameter(int playlist, const CVariant &itemObject);
-    static bool HandleItemsParameter(int playlistid, const CVariant &itemParam, CFileItemList &items);
+    static PLAYLIST::Id GetPlaylist(const CVariant& playlist);
+    static JSONRPC_STATUS GetPropertyValue(PLAYLIST::Id playlistId,
+                                           const std::string& property,
+                                           CVariant& result);
+    static bool CheckMediaParameter(PLAYLIST::Id playlistId, const CVariant& itemObject);
+    static bool HandleItemsParameter(PLAYLIST::Id playlistId,
+                                     const CVariant& itemParam,
+                                     CFileItemList& items);
   };
 }

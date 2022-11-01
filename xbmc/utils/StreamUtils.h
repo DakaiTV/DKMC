@@ -1,28 +1,33 @@
-#pragma once
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
+#pragma once
+
 #include <string>
+
+static constexpr int MP4_BOX_HEADER_SIZE = 8;
 
 class StreamUtils
 {
 public:
-  static int GetCodecPriority(const std::string &codec);
+  static int GetCodecPriority(const std::string& codec);
+
+  /*!
+   * \brief Make a FourCC code as unsigned integer value
+   * \param c1 The first FourCC char
+   * \param c2 The second FourCC char
+   * \param c3 The third FourCC char
+   * \param c4 The fourth FourCC char
+   * \return The FourCC as unsigned integer value
+   */
+  static constexpr uint32_t MakeFourCC(char c1, char c2, char c3, char c4)
+  {
+    return ((static_cast<uint32_t>(c1) << 24) | (static_cast<uint32_t>(c2) << 16) |
+            (static_cast<uint32_t>(c3) << 8) | (static_cast<uint32_t>(c4)));
+  }
 };

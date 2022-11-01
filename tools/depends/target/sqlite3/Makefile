@@ -1,32 +1,28 @@
-include ../../Makefile.include
-DEPS= ../../Makefile.include Makefile
-
-# lib name, version
-LIBNAME=sqlite
-VERSION=3080600
-SOURCE=$(LIBNAME)-autoconf-$(VERSION)
-ARCHIVE=$(SOURCE).tar.gz
+include ../../Makefile.include SQLITE3-VERSION ../../download-files.include
+DEPS = ../../Makefile.include SQLITE3-VERSION Makefile ../../download-files.include \
+                                001-Disable-sqlite3bin.patch \
+                                sqlite3.c.patch
 
 # configuration settings
 export CXXFLAGS+=-DSQLITE_ENABLE_COLUMN_METADATA=1
-export CFLAGS+=-DSQLITE_TEMP_STORE=3
-export TCLLIBDIR=/dev/null
+export CFLAGS+=-DSQLITE_TEMP_STORE=3 -DSQLITE_DEFAULT_MMAP_SIZE=0x10000000
 CONFIGURE=cp -f $(CONFIG_SUB) $(CONFIG_GUESS) .; \
-          ./configure --prefix=$(PREFIX) --disable-shared \
-  --enable-threadsafe --disable-tcl --disable-readline \
+          ./configure --prefix=$(PREFIX) --disable-shared --enable-threadsafe --disable-readline
 
 LIBDYLIB=$(PLATFORM)/.libs/lib$(LIBNAME)3.a
 
-CLEAN_FILES=$(ARCHIVE) $(PLATFORM)
-
 all: .installed-$(PLATFORM)
 
-$(TARBALLS_LOCATION)/$(ARCHIVE):
-	cd $(TARBALLS_LOCATION); $(RETRIEVE_TOOL) $(RETRIEVE_TOOL_FLAGS) $(BASE_URL)/$(ARCHIVE)
-
-$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE) $(DEPS)
+$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE).$(HASH_TYPE) $(DEPS)
 	rm -rf $(PLATFORM)/*; mkdir -p $(PLATFORM)
 	cd $(PLATFORM); $(ARCHIVE_TOOL) $(ARCHIVE_TOOL_FLAGS) $(TARBALLS_LOCATION)/$(ARCHIVE)
+	# do not build the program sqlite3
+	cd $(PLATFORM); patch -p1 -i ../001-Disable-sqlite3bin.patch
+# seems MAP_POPULATE is broken on aarch64
+ifneq ($(OS),android)
+	cd $(PLATFORM); patch -p1 -i ../sqlite3.c.patch
+endif
+	cd $(PLATFORM); $(AUTORECONF) -vif
 	cd $(PLATFORM); $(CONFIGURE)
 
 $(LIBDYLIB): $(PLATFORM)
@@ -42,4 +38,3 @@ clean:
 
 distclean::
 	rm -rf $(PLATFORM) .installed-$(PLATFORM)
-

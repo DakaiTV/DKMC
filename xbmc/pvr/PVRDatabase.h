@@ -1,44 +1,34 @@
-#pragma once
 /*
- *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2012-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
-#include "addons/Addon.h"
-#include "addons/AddonDll.h"
-#include "addons/DllPVRClient.h"
-#include "PVRManager.h"
-#include "dbwrappers/Database.h"
-#include "XBDateTime.h"
-#include "utils/log.h"
+#pragma once
 
-class CVideoSettings;
+#include "dbwrappers/Database.h"
+#include "threads/CriticalSection.h"
+
+#include <map>
+#include <vector>
 
 namespace PVR
 {
-  class CPVRChannelGroup;
-  class CPVRChannelGroupInternal;
-  class CPVRChannelsContainer;
   class CPVRChannel;
+  class CPVRChannelGroup;
+  class CPVRChannelGroupMember;
   class CPVRChannelGroups;
+  class CPVRProvider;
+  class CPVRProviders;
   class CPVRClient;
+  class CPVRTimerInfoTag;
+  class CPVRTimers;
 
   /** The PVR database */
+
+  static constexpr int CHANNEL_COMMIT_QUERY_COUNT_LIMIT = 10000;
 
   class CPVRDatabase : public CDatabase
   {
@@ -46,26 +36,71 @@ namespace PVR
     /*!
      * @brief Create a new instance of the PVR database.
      */
-    CPVRDatabase(void) {};
-    virtual ~CPVRDatabase(void) {};
+    CPVRDatabase() = default;
+    ~CPVRDatabase() override = default;
 
     /*!
      * @brief Open the database.
      * @return True if it was opened successfully, false otherwise.
      */
-    virtual bool Open();
+    bool Open() override;
+
+    /*!
+     * @brief Close the database.
+     */
+    void Close() override;
+
+    /*!
+     * @brief Lock the database.
+     */
+    void Lock();
+
+    /*!
+     * @brief Unlock the database.
+     */
+    void Unlock();
 
     /*!
      * @brief Get the minimal database version that is required to operate correctly.
      * @return The minimal database version.
      */
-    virtual int GetSchemaVersion() const { return 26; };
+    int GetSchemaVersion() const override { return 40; }
 
     /*!
      * @brief Get the default sqlite database filename.
      * @return The default filename.
      */
-    const char *GetBaseDBName() const { return "TV"; };
+    const char* GetBaseDBName() const override { return "TV"; }
+
+    /*! @name Client methods */
+    //@{
+
+    /*!
+     * @brief Remove all client entries from the database.
+     * @return True if all client entries were removed, false otherwise.
+     */
+    bool DeleteClients();
+
+    /*!
+     * @brief Add or update a client entry in the database
+     * @param client The client to persist.
+     * @return True when persisted, false otherwise.
+     */
+    bool Persist(const CPVRClient& client);
+
+    /*!
+     * @brief Remove a client entry from the database
+     * @param client The client to remove.
+     * @return True if the client was removed, false otherwise.
+     */
+    bool Delete(const CPVRClient& client);
+
+    /*!
+     * @brief Get the priority for a given client from the database.
+     * @param client The client.
+     * @return The priority.
+     */
+    int GetPriority(const CPVRClient& client);
 
     /*! @name Channel methods */
     //@{
@@ -74,36 +109,79 @@ namespace PVR
      * @brief Remove all channels from the database.
      * @return True if all channels were removed, false otherwise.
      */
-    bool DeleteChannels(void);
+    bool DeleteChannels();
 
     /*!
-     * @brief Remove all channels from a client from the database.
-     * @param client The client to delete the channels for.
-     * @return True if the channels were deleted, false otherwise.
+     * @brief Get channels from the database.
+     * @param bRadio Whether to fetch radio or TV channels.
+     * @param clients The PVR clients the channels should be loaded for. Leave empty for all clients.
+     * @param results The container for the channels.
+     * @return The number of channels loaded.
      */
-    bool DeleteClientChannels(const CPVRClient &client);
+    int Get(bool bRadio,
+            const std::vector<std::shared_ptr<CPVRClient>>& clients,
+            std::map<std::pair<int, int>, std::shared_ptr<CPVRChannel>>& results) const;
 
     /*!
      * @brief Add or update a channel entry in the database
      * @param channel The channel to persist.
-     * @param bQueueWrite If true, don't write immediately
+     * @param bCommit queue only or queue and commit
      * @return True when persisted or queued, false otherwise.
      */
-    bool Persist(CPVRChannel &channel, bool bQueueWrite = false);
+    bool Persist(CPVRChannel& channel, bool bCommit);
 
     /*!
      * @brief Remove a channel entry from the database
      * @param channel The channel to remove.
      * @return True if the channel was removed, false otherwise.
      */
-    bool Delete(const CPVRChannel &channel);
+    bool QueueDeleteQuery(const CPVRChannel& channel);
+
+    //@}
+
+    /*! @name Channel group member methods */
+    //@{
 
     /*!
-     * @brief Get the list of channels from the database
-     * @param results The channel group to store the results in.
-     * @return The amount of channels that were added.
+     * @brief Remove a channel group member entry from the database
+     * @param groupMember The group member to remove.
+     * @return True if the member was removed, false otherwise.
      */
-    int Get(CPVRChannelGroupInternal &results);
+    bool QueueDeleteQuery(const CPVRChannelGroupMember& groupMember);
+
+    //@}
+
+    /*! @name Channel provider methods */
+    //@{
+
+    /*!
+     * @brief Remove all providers from the database.
+     * @return True if all providers were removed, false otherwise.
+     */
+    bool DeleteProviders();
+
+    /*!
+     * @brief Add or update a provider entry in the database
+     * @param provider The provider to persist.
+     * @param updateRecord True if record to be updated, false for insert
+     * @return True when persisted, false otherwise.
+     */
+    bool Persist(CPVRProvider& provider, bool updateRecord = false);
+
+    /*!
+     * @brief Remove a provider entry from the database
+     * @param provider The provider to remove.
+     * @return True if the provider was removed, false otherwise.
+     */
+    bool Delete(const CPVRProvider& provider);
+
+    /*!
+     * @brief Get the list of providers from the database
+     * @param results The providers to store the results in.
+     * @param clients The PVR clients the providers should be loaded for. Leave empty for all clients.
+     * @return The amount of providers that were added.
+     */
+    bool Get(CPVRProviders& results, const std::vector<std::shared_ptr<CPVRClient>>& clients) const;
 
     //@}
 
@@ -114,117 +192,123 @@ namespace PVR
      * @brief Remove all channel groups from the database
      * @return True if all channel groups were removed.
      */
-    bool DeleteChannelGroups(void);
+    bool DeleteChannelGroups();
 
     /*!
-     * @brief Delete a channel group from the database.
+     * @brief Delete a channel group and all its members from the database.
      * @param group The group to delete.
      * @return True if the group was deleted successfully, false otherwise.
      */
-    bool Delete(const CPVRChannelGroup &group);
+    bool Delete(const CPVRChannelGroup& group);
 
     /*!
      * @brief Get the channel groups.
      * @param results The container to store the results in.
-     * @return True if the list was fetched successfully, false otherwise.
+     * @return The number of groups loaded.
      */
-    bool Get(CPVRChannelGroups &results);
+    int Get(CPVRChannelGroups& results) const;
 
     /*!
-     * @brief Add the group members to a group.
-     * @param group The group to get the channels for.
-     * @return The amount of channels that were added.
+     * @brief Get the members of a channel group.
+     * @param group The group to get the members for.
+     * @param clients The PVR clients the group members should be loaded for. Leave empty for all clients.
+     * @return The group members.
      */
-    int Get(CPVRChannelGroup &group);
+    std::vector<std::shared_ptr<CPVRChannelGroupMember>> Get(
+        const CPVRChannelGroup& group,
+        const std::vector<std::shared_ptr<CPVRClient>>& clients) const;
 
     /*!
      * @brief Add or update a channel group entry in the database.
      * @param group The group to persist.
      * @return True if the group was persisted successfully, false otherwise.
      */
-    bool Persist(CPVRChannelGroup &group);
+    bool Persist(CPVRChannelGroup& group);
 
     /*!
      * @brief Reset all epg ids to 0
      * @return True when reset, false otherwise.
      */
-    bool ResetEPG(void);
+    bool ResetEPG();
 
+    /*! @name Timer methods */
+    //@{
+
+    /*!
+     * @brief Get the timers.
+     * @param timers The container for the timers.
+     * @param clients The PVR clients the timers should be loaded for. Leave empty for all clients.
+     * @return The timers.
+     */
+    std::vector<std::shared_ptr<CPVRTimerInfoTag>> GetTimers(
+        CPVRTimers& timers, const std::vector<std::shared_ptr<CPVRClient>>& clients) const;
+
+    /*!
+     * @brief Add or update a timer entry in the database
+     * @param channel The timer to persist.
+     * @return True if persisted, false otherwise.
+     */
+    bool Persist(CPVRTimerInfoTag& timer);
+
+    /*!
+     * @brief Remove a timer from the database
+     * @param timer The timer to remove.
+     * @return True if the timer was removed, false otherwise.
+     */
+    bool Delete(const CPVRTimerInfoTag& timer);
+
+    /*!
+     * @brief Remove all timer entries from the database.
+     * @return True if all timer entries were removed, false otherwise.
+     */
+    bool DeleteTimers();
     //@}
 
     /*! @name Client methods */
     //@{
-    /*!
-     * @brief Remove all client information from the database.
-     * @return True if all clients were removed successfully.
-     */
-    bool DeleteClients();
 
     /*!
-     * @brief Add a client to the database if it's not already in there.
-     * @param strClientName The name of the client.
-     * @param strGuid The unique ID of the client.
-     * @return The database ID of the client.
+     * @brief Updates the last watched timestamp for the channel
+     * @param channel the channel
+     * @return whether the update was successful
      */
-    int Persist(const ADDON::AddonPtr addon);
+    bool UpdateLastWatched(const CPVRChannel& channel);
 
     /*!
-     * @brief Remove a client from the database
-     * @param strGuid The unique ID of the client.
-     * @return True if the client was removed successfully, false otherwise.
+     * @brief Updates the last watched timestamp for the channel group
+     * @param group the group
+     * @return whether the update was successful
      */
-    bool Delete(const CPVRClient &client);
+    bool UpdateLastWatched(const CPVRChannelGroup& group);
+    //@}
 
     /*!
-     * @brief Get the database ID of a client.
-     * @param strClientUid The unique ID of the client.
-     * @return The database ID of the client or -1 if it wasn't found.
+     * @brief Updates the last opened timestamp for the channel group
+     * @param group the group
+     * @return whether the update was successful
      */
-    int GetClientId(const std::string &strClientUid);
+    bool UpdateLastOpened(const CPVRChannelGroup& group);
     //@}
 
   private:
     /*!
      * @brief Create the PVR database tables.
-     * @return True if the tables were created successfully, false otherwise.
      */
-    void CreateTables();
-    void CreateAnalytics();
-
-    bool DeleteChannelsFromGroup(const CPVRChannelGroup &group);
-    bool DeleteChannelsFromGroup(const CPVRChannelGroup &group, const std::vector<int> &channelsToDelete);
-
-    bool GetCurrentGroupMembers(const CPVRChannelGroup &group, std::vector<int> &members);
-    int GetLastChannelId(void);
-    bool RemoveStaleChannelsFromGroup(const CPVRChannelGroup &group);
-
+    void CreateTables() override;
+    void CreateAnalytics() override;
     /*!
      * @brief Update an old version of the database.
      * @param version The version to update the database from.
      */
-    void UpdateTables(int version);
-    virtual int GetMinSchemaVersion() const { return 11; }
+    void UpdateTables(int version) override;
+    int GetMinSchemaVersion() const override { return 11; }
 
-    bool PersistGroupMembers(CPVRChannelGroup &group);
+    bool PersistGroupMembers(const CPVRChannelGroup& group);
 
-    bool PersistChannels(CPVRChannelGroup &group);
+    bool PersistChannels(const CPVRChannelGroup& group);
 
-    bool RemoveChannelsFromGroup(const CPVRChannelGroup &group);
+    bool RemoveChannelsFromGroup(const CPVRChannelGroup& group);
+
+    mutable CCriticalSection m_critSection;
   };
-
-  /*!
-   * @brief Try to open the PVR database.
-   * @return The opened database or NULL if the database failed to open.
-   */
-  inline CPVRDatabase *GetPVRDatabase(void)
-  {
-    CPVRDatabase *database = g_PVRManager.GetTVDatabase();
-    if (!database || !database->IsOpen())
-    {
-      CLog::Log(LOGERROR, "PVR - failed to open the database");
-      database = NULL;
-    }
-
-    return database;
-  }
 }

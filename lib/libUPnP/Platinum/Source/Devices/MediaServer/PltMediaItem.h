@@ -165,11 +165,21 @@ public:
 };
 
 typedef struct {
+  NPT_String last_playerstate;
   NPT_String date_added;
   NPT_Float rating;
-  NPT_String votes;
+  NPT_Int32 votes;
   PLT_Artworks artwork;
+  NPT_String unique_identifier;
+  NPT_List<NPT_String> countries;
+  NPT_Int32 user_rating;
 } PLT_XbmcInfo;
+
+typedef struct {
+  NPT_String name;
+  NPT_Map<NPT_String, NPT_String> attributes;
+  NPT_String value;
+} PLT_SecResource;
 
 /*----------------------------------------------------------------------
 |   PLT_MediaItemResource
@@ -191,6 +201,9 @@ public:
     NPT_UInt32       m_NbAudioChannels;
     NPT_String       m_Resolution;
     NPT_UInt32       m_ColorDepth;
+    /* to add custom data to resource, that are not standard one, or are only
+    proper for some type of devices (UPnP)*/
+    NPT_Map<NPT_String, NPT_String> m_CustomData;
 };
 
 /*----------------------------------------------------------------------
@@ -249,6 +262,9 @@ public:
     /* resources related */
     NPT_Array<PLT_MediaItemResource> m_Resources;
 
+    /* sec resources related */
+    NPT_Array<PLT_SecResource> m_SecResources;
+
     /* XBMC specific */
     PLT_XbmcInfo m_XbmcInfo;
 
@@ -269,12 +285,12 @@ public:
     NPT_IMPLEMENT_DYNAMIC_CAST_D(PLT_MediaItem, PLT_MediaObject)
 
     PLT_MediaItem();
-    virtual ~PLT_MediaItem();
+    ~PLT_MediaItem() override;
 
     // PLT_MediaObject methods
-    NPT_Result ToDidl(const NPT_String& filter, NPT_String& didl);
-    NPT_Result ToDidl(NPT_UInt64 mask, NPT_String& didl);
-    NPT_Result FromDidl(NPT_XmlElementNode* entry);
+    NPT_Result ToDidl(const NPT_String& filter, NPT_String& didl) override;
+    NPT_Result ToDidl(NPT_UInt64 mask, NPT_String& didl) override;
+    NPT_Result FromDidl(NPT_XmlElementNode* entry) override;
 };
 
 /*----------------------------------------------------------------------
@@ -291,13 +307,13 @@ public:
     NPT_IMPLEMENT_DYNAMIC_CAST_D(PLT_MediaContainer, PLT_MediaObject)
 
     PLT_MediaContainer();
-    virtual ~PLT_MediaContainer();
+    ~PLT_MediaContainer() override;
 
     // PLT_MediaObject methods
-    NPT_Result Reset();
-    NPT_Result ToDidl(const NPT_String& filter, NPT_String& didl);
-    NPT_Result ToDidl(NPT_UInt64 mask, NPT_String& didl);
-    NPT_Result FromDidl(NPT_XmlElementNode* entry);
+    NPT_Result Reset() override;
+    NPT_Result ToDidl(const NPT_String& filter, NPT_String& didl) override;
+    NPT_Result ToDidl(NPT_UInt64 mask, NPT_String& didl) override;
+    NPT_Result FromDidl(NPT_XmlElementNode* entry) override;
 
 public:
     NPT_List<PLT_SearchClass> m_SearchClasses;

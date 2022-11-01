@@ -1,118 +1,120 @@
-#pragma once
-
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
-#if defined(TARGET_DARWIN_OSX)
+#pragma once
 
-#include "windowing/WinSystem.h"
 #include "threads/CriticalSection.h"
+#include "threads/SystemClock.h"
 #include "threads/Timer.h"
+#include "windowing/WinSystem.h"
 
-typedef struct SDL_Surface SDL_Surface;
+#include <memory>
+#include <string>
+#include <vector>
+
+typedef struct _CGLContextObject* CGLContextObj;
+typedef struct CGRect NSRect;
 
 class IDispResource;
 class CWinEventsOSX;
+#ifdef __OBJC__
+@class NSWindow;
+@class OSXGLView;
+#else
+struct NSWindow;
+struct OSXGLView;
+#endif
 
 class CWinSystemOSX : public CWinSystemBase, public ITimerCallback
 {
 public:
-
   CWinSystemOSX();
-  virtual ~CWinSystemOSX();
+  ~CWinSystemOSX() override;
 
   // ITimerCallback interface
-  virtual void OnTimeout();
+  void OnTimeout() override;
 
   // CWinSystemBase
-  virtual bool InitWindowSystem();
-  virtual bool DestroyWindowSystem();
-  virtual bool CreateNewWindow(const CStdString& name, bool fullScreen, RESOLUTION_INFO& res, PHANDLE_EVENT_FUNC userFunction);
-  virtual bool DestroyWindow();
-  virtual bool ResizeWindow(int newWidth, int newHeight, int newLeft, int newTop);
-  bool         ResizeWindowInternal(int newWidth, int newHeight, int newLeft, int newTop, void *additional);
-  virtual bool SetFullScreen(bool fullScreen, RESOLUTION_INFO& res, bool blankOtherDisplays);
-  virtual void UpdateResolutions();
-  virtual void NotifyAppFocusChange(bool bGaining);
-  virtual void ShowOSMouse(bool show);
-  virtual bool Minimize();
-  virtual bool Restore();
-  virtual bool Hide();
-  virtual bool Show(bool raise = true);
-  virtual void OnMove(int x, int y);
+  bool InitWindowSystem() override;
+  bool DestroyWindowSystem() override;
+  bool CreateNewWindow(const std::string& name, bool fullScreen, RESOLUTION_INFO& res) override;
+  bool DestroyWindow() override;
+  bool ResizeWindow(int newWidth, int newHeight, int newLeft, int newTop) override;
+  bool SetFullScreen(bool fullScreen, RESOLUTION_INFO& res, bool blankOtherDisplays) override;
+  void UpdateResolutions() override;
+  void NotifyAppFocusChange(bool bGaining) override;
+  void ShowOSMouse(bool show) override;
+  bool Minimize() override;
+  bool Restore() override;
+  bool Hide() override;
+  bool Show(bool raise = true) override;
+  void OnMove(int x, int y) override;
 
-  virtual void EnableSystemScreenSaver(bool bEnable);
-  virtual bool IsSystemScreenSaverEnabled();
-  virtual void ResetOSScreensaver();
-  virtual bool EnableFrameLimiter();
+  void SetOcclusionState(bool occluded);
 
-  virtual void EnableTextInput(bool bEnable);
-  virtual bool IsTextInputEnabled();
+  std::string GetClipboardText() override;
 
-  virtual void Register(IDispResource *resource);
-  virtual void Unregister(IDispResource *resource);
-  
-  virtual int GetNumScreens();
-  virtual int GetCurrentScreen();
-  
-  void        WindowChangedScreen();
+  void Register(IDispResource* resource) override;
+  void Unregister(IDispResource* resource) override;
 
-  void        AnnounceOnLostDevice();
-  void        AnnounceOnResetDevice();
-  void        StartLostDeviceTimer();
-  void        StopLostDeviceTimer();
-  
-  void* GetCGLContextObj();
+  std::unique_ptr<CVideoSync> GetVideoSync(void* clock) override;
 
-  std::string GetClipboardText(void);
+  void WindowChangedScreen();
+
+  void AnnounceOnLostDevice();
+  void AnnounceOnResetDevice();
+  void HandleOnResetDevice();
+  void StartLostDeviceTimer();
+  void StopLostDeviceTimer();
+
+  void SetMovedToOtherScreen(bool moved) { m_movedToOtherScreen = moved; }
+  int CheckDisplayChanging(uint32_t flags);
+  void SetFullscreenWillToggle(bool toggle) { m_fullscreenWillToggle = toggle; }
+  bool GetFullscreenWillToggle() { return m_fullscreenWillToggle; }
+
+  CGLContextObj GetCGLContextObj();
+
+  std::vector<std::string> GetConnectedOutputs() override;
+
+  // winevents override
+  bool MessagePump() override;
+
+  NSRect GetWindowDimensions();
+  void enableInputEvents();
+  void disableInputEvents();
 
 protected:
-  void* CreateWindowedContext(void* shareCtx);
-  void* CreateFullScreenContext(int screen_index, void* shareCtx);
-  void  GetScreenResolution(int* w, int* h, double* fps, int screenIdx);
-  void  EnableVSync(bool enable); 
-  bool  SwitchToVideoMode(int width, int height, double refreshrate, int screenIdx);
-  void  FillInVideoModes();
-  bool  FlushBuffer(void);
-  bool  IsObscured(void);
-  void  StartTextInput();
-  void  StopTextInput();
+  std::unique_ptr<KODI::WINDOWING::IOSScreenSaver> GetOSScreenSaverImpl() override;
 
-  void* m_glContext;
-  static void* m_lastOwnedContext;
-  SDL_Surface* m_SDLSurface;
-  CWinEventsOSX *m_osx_events;
-  bool                         m_obscured;
-  unsigned int                 m_obscured_timecheck;
+  void GetScreenResolution(int* w, int* h, double* fps, int screenIdx);
+  void EnableVSync(bool enable);
+  bool SwitchToVideoMode(int width, int height, double refreshrate);
+  void FillInVideoModes();
+  bool FlushBuffer();
+  bool IsObscured();
 
-  bool                         m_use_system_screensaver;
-  bool                         m_can_display_switch;
-  bool                         m_movedToOtherScreen;
-  int                          m_lastDisplayNr;
-  void                        *m_windowDidMove;
-  void                        *m_windowDidReSize;
-  void                        *m_windowChangedScreen;
+  bool DestroyWindowInternal();
 
-  CCriticalSection             m_resourceSection;
-  std::vector<IDispResource*>  m_resources;
-  CTimer                       m_lostDeviceTimer;
+  std::unique_ptr<CWinEventsOSX> m_winEvents;
+
+  std::string m_name;
+  bool m_obscured;
+  NSWindow* m_appWindow;
+  OSXGLView* m_glView;
+  bool m_movedToOtherScreen;
+  int m_lastDisplayNr;
+  double m_refreshRate;
+
+  CCriticalSection m_resourceSection;
+  std::vector<IDispResource*> m_resources;
+  CTimer m_lostDeviceTimer;
+  bool m_delayDispReset;
+  XbmcThreads::EndTime<> m_dispResetTimer;
+  bool m_fullscreenWillToggle;
+  CCriticalSection m_critSection;
 };
-
-#endif

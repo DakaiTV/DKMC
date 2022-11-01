@@ -1,75 +1,108 @@
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
 #pragma once
 
-#include "threads/platform/Condition.h"
+#include "threads/CriticalSection.h"
 
-#include "threads/SystemClock.h"
-#include <stdio.h>
+#include <chrono>
+#include <condition_variable>
+#include <functional>
+#include <mutex>
+#include <utility>
 
 namespace XbmcThreads
 {
 
   /**
-   * This is a condition variable along with its predicate. This allows the use of a 
-   *  condition variable without the spurious returns since the state being monitored
-   *  is also part of the condition.
-   *
-   * L should implement the Lockable concept
-   *
-   * The requirements on P are that it can act as a predicate (that is, I can use
-   *  it in an 'while(!predicate){...}' where 'predicate' is of type 'P').
+   * This is a thin wrapper around std::condition_variable_any. It is subject
+   *  to "spurious returns"
    */
-  template <typename P> class TightConditionVariable
+  class ConditionVariable
   {
-    ConditionVariable& cond;
-    P predicate;
+  private:
+    std::condition_variable_any cond;
+    ConditionVariable(const ConditionVariable&) = delete;
+    ConditionVariable& operator=(const ConditionVariable&) = delete;
 
   public:
-    inline TightConditionVariable(ConditionVariable& cv, P predicate_) : cond(cv), predicate(predicate_) {}
+    ConditionVariable() = default;
 
-    template <typename L> inline void wait(L& lock) { while(!predicate) cond.wait(lock); }
-    template <typename L> inline bool wait(L& lock, unsigned long milliseconds)
+    inline void wait(CCriticalSection& lock, std::function<bool()> predicate)
     {
-      bool ret = true;
-      if (!predicate)
-      {
-        if (!milliseconds)
-        {
-          cond.wait(lock,milliseconds /* zero */);
-          return !(!predicate); // eh? I only require the ! operation on P
-        }
-        else
-        {
-          EndTime endTime((unsigned int)milliseconds);
-          for (bool notdone = true; notdone && ret == true;
-               ret = (notdone = (!predicate)) ? ((milliseconds = endTime.MillisLeft()) != 0) : true)
-            cond.wait(lock,milliseconds);
-        }
-      }
+      int count = lock.count;
+      lock.count = 0;
+      cond.wait(lock.get_underlying(), std::move(predicate));
+      lock.count = count;
+    }
+
+    inline void wait(CCriticalSection& lock)
+    {
+      int count  = lock.count;
+      lock.count = 0;
+      cond.wait(lock.get_underlying());
+      lock.count = count;
+    }
+
+    template<typename Rep, typename Period>
+    inline bool wait(CCriticalSection& lock,
+                     std::chrono::duration<Rep, Period> duration,
+                     std::function<bool()> predicate)
+    {
+      int count = lock.count;
+      lock.count = 0;
+      bool ret = cond.wait_for(lock.get_underlying(), duration, predicate);
+      lock.count = count;
       return ret;
     }
 
-    inline void notifyAll() { cond.notifyAll(); }
-    inline void notify() { cond.notify(); }
+    template<typename Rep, typename Period>
+    inline bool wait(CCriticalSection& lock, std::chrono::duration<Rep, Period> duration)
+    {
+      int count  = lock.count;
+      lock.count = 0;
+      std::cv_status res = cond.wait_for(lock.get_underlying(), duration);
+      lock.count = count;
+      return res == std::cv_status::no_timeout;
+    }
+
+    inline void wait(std::unique_lock<CCriticalSection>& lock, std::function<bool()> predicate)
+    {
+      cond.wait(*lock.mutex(), std::move(predicate));
+    }
+
+    inline void wait(std::unique_lock<CCriticalSection>& lock) { wait(*lock.mutex()); }
+
+    template<typename Rep, typename Period>
+    inline bool wait(std::unique_lock<CCriticalSection>& lock,
+                     std::chrono::duration<Rep, Period> duration,
+                     std::function<bool()> predicate)
+    {
+      return wait(*lock.mutex(), duration, predicate);
+    }
+
+    template<typename Rep, typename Period>
+    inline bool wait(std::unique_lock<CCriticalSection>& lock,
+                     std::chrono::duration<Rep, Period> duration)
+    {
+      return wait(*lock.mutex(), duration);
+    }
+
+    inline void notifyAll()
+    {
+      cond.notify_all();
+    }
+
+    inline void notify()
+    {
+      cond.notify_one();
+    }
   };
+
 }
 

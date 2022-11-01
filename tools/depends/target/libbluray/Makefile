@@ -1,29 +1,29 @@
-include ../../Makefile.include
-DEPS= ../../Makefile.include Makefile
-
-# lib name, version
-LIBNAME=libbluray
-VERSION=0.2.1
-SOURCE=$(LIBNAME)-$(VERSION)
-ARCHIVE=$(SOURCE).tar.bz2
+include ../../Makefile.include LIBBLURAY-VERSION ../../download-files.include
+DEPS = ../../Makefile.include LIBBLURAY-VERSION Makefile ../../download-files.include \
+                                  001-darwinembed_DiskArbitration-revert.patch \
+                                  tvos.patch
 
 # configuration settings
-CONFIGURE=./configure --prefix=$(PREFIX) --exec-prefix=$(PREFIX) \
-  --disable-examples --disable-doxygen-doc
+CONFIGURE=./configure --prefix=$(PREFIX) \
+                      --disable-shared \
+                      --exec-prefix=$(PREFIX) \
+                      --disable-examples \
+                      --disable-doxygen-doc \
+                      --disable-bdjava-jar
 
-LIBDYLIB=$(PLATFORM)/src/.libs/libbluray.la
+LIBDYLIB=$(PLATFORM)/.libs/$(BYPRODUCT)
 
 all: .installed-$(PLATFORM)
 
-$(TARBALLS_LOCATION)/$(ARCHIVE):
-	cd $(TARBALLS_LOCATION); $(RETRIEVE_TOOL) $(RETRIEVE_TOOL_FLAGS) $(BASE_URL)/$(ARCHIVE)
-
-$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE) $(DEPS)
+$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE).$(HASH_TYPE) $(DEPS)
 	rm -rf $(PLATFORM); mkdir -p $(PLATFORM)
 	cd $(PLATFORM); $(ARCHIVE_TOOL) $(ARCHIVE_TOOL_FLAGS) $(TARBALLS_LOCATION)/$(ARCHIVE)
-	# libbluray has borked Makefile.am with respect to CFLAGS, remove the offending line
-	sed -i -e "s|CFLAGS=|#CFLAGS=|" $(PLATFORM)/src/Makefile.am
-	sed -i -e "s|CFLAGS=|#CFLAGS=|" $(PLATFORM)/src/examples/Makefile.am
+ifeq ($(OS),darwin_embedded)
+	cd $(PLATFORM); patch -p1 -i ../001-darwinembed_DiskArbitration-revert.patch
+endif
+ifeq ($(TARGET_PLATFORM),appletvos)
+	cd $(PLATFORM); patch -p1 -i ../tvos.patch
+endif
 	cd $(PLATFORM); ./bootstrap
 	cd $(PLATFORM); $(CONFIGURE)
 
@@ -32,12 +32,6 @@ $(LIBDYLIB): $(PLATFORM)
 
 .installed-$(PLATFORM): $(LIBDYLIB)
 	$(MAKE) -C $(PLATFORM) install
-ifeq ($(OS),android)
-	rm -f $(PREFIX)/lib/libbluray.la $(PREFIX)/lib/libbluray.so $(PREFIX)/lib/libbluray.so.1
-	mv -f $(PREFIX)/lib/libbluray.so.1.0.0 $(PREFIX)/lib/libbluray.so
-	$(RPL) -e "libbluray.so.1" "libbluray.so\x00\x00" $(PREFIX)/lib/libbluray.so
-	-$(READELF) --dynamic $(PREFIX)/lib/libbluray.so | grep ibrary
-endif
 	touch $@
 
 clean:

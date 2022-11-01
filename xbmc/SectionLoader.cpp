@@ -1,59 +1,45 @@
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
-#include "threads/SystemClock.h"
-#include "system.h"
 #include "SectionLoader.h"
-#include "cores/DllLoader/DllLoaderContainer.h"
-#include "threads/SingleLock.h"
-#include "utils/log.h"
-#include "utils/TimeUtils.h"
 
-using namespace std;
+#include "cores/DllLoader/DllLoaderContainer.h"
+#include "utils/GlobalsHandling.h"
+#include "utils/StringUtils.h"
+#include "utils/log.h"
+
+#include <mutex>
 
 #define g_sectionLoader XBMC_GLOBAL_USE(CSectionLoader)
 
 //  delay for unloading dll's
 #define UNLOAD_DELAY 30*1000 // 30 sec.
 
-//Define this to get loggin on all calls to load/unload sections/dlls
+//Define this to get logging on all calls to load/unload sections/dlls
 //#define LOGALL
 
-CSectionLoader::CSectionLoader(void)
-{}
+CSectionLoader::CSectionLoader(void) = default;
 
 CSectionLoader::~CSectionLoader(void)
 {
   UnloadAll();
 }
 
-LibraryLoader *CSectionLoader::LoadDLL(const CStdString &dllname, bool bDelayUnload /*=true*/, bool bLoadSymbols /*=false*/)
+LibraryLoader *CSectionLoader::LoadDLL(const std::string &dllname, bool bDelayUnload /*=true*/, bool bLoadSymbols /*=false*/)
 {
-  CSingleLock lock(g_sectionLoader.m_critSection);
+  std::unique_lock<CCriticalSection> lock(g_sectionLoader.m_critSection);
 
-  if (!dllname) return NULL;
+  if (dllname.empty()) return NULL;
   // check if it's already loaded, and increase the reference count if so
   for (int i = 0; i < (int)g_sectionLoader.m_vecLoadedDLLs.size(); ++i)
   {
     CDll& dll = g_sectionLoader.m_vecLoadedDLLs[i];
-    if (dll.m_strDllName.Equals(dllname))
+    if (StringUtils::EqualsNoCase(dll.m_strDllName, dllname))
     {
       dll.m_lReferenceCount++;
       return dll.m_pDll;
@@ -61,7 +47,7 @@ LibraryLoader *CSectionLoader::LoadDLL(const CStdString &dllname, bool bDelayUnl
   }
 
   // ok, now load the dll
-  CLog::Log(LOGDEBUG, "SECTION:LoadDLL(%s)\n", dllname.c_str());
+  CLog::Log(LOGDEBUG, "SECTION:LoadDLL({})", dllname);
   LibraryLoader* pDll = DllLoaderContainer::LoadModule(dllname.c_str(), NULL, bLoadSymbols);
   if (!pDll)
     return NULL;
@@ -76,25 +62,25 @@ LibraryLoader *CSectionLoader::LoadDLL(const CStdString &dllname, bool bDelayUnl
   return newDLL.m_pDll;
 }
 
-void CSectionLoader::UnloadDLL(const CStdString &dllname)
+void CSectionLoader::UnloadDLL(const std::string &dllname)
 {
-  CSingleLock lock(g_sectionLoader.m_critSection);
+  std::unique_lock<CCriticalSection> lock(g_sectionLoader.m_critSection);
 
-  if (!dllname) return;
+  if (dllname.empty()) return;
   // check if it's already loaded, and decrease the reference count if so
   for (int i = 0; i < (int)g_sectionLoader.m_vecLoadedDLLs.size(); ++i)
   {
     CDll& dll = g_sectionLoader.m_vecLoadedDLLs[i];
-    if (dll.m_strDllName.Equals(dllname))
+    if (StringUtils::EqualsNoCase(dll.m_strDllName, dllname))
     {
       dll.m_lReferenceCount--;
       if (0 == dll.m_lReferenceCount)
       {
         if (dll.m_bDelayUnload)
-          dll.m_unloadDelayStartTick = XbmcThreads::SystemClockMillis();
+          dll.m_unloadDelayStartTick = std::chrono::steady_clock::now();
         else
         {
-          CLog::Log(LOGDEBUG,"SECTION:UnloadDll(%s)", dllname.c_str());
+          CLog::Log(LOGDEBUG, "SECTION:UnloadDll({})", dllname);
           if (dll.m_pDll)
             DllLoaderContainer::ReleaseModule(dll.m_pDll);
           g_sectionLoader.m_vecLoadedDLLs.erase(g_sectionLoader.m_vecLoadedDLLs.begin() + i);
@@ -108,15 +94,18 @@ void CSectionLoader::UnloadDLL(const CStdString &dllname)
 
 void CSectionLoader::UnloadDelayed()
 {
-  CSingleLock lock(g_sectionLoader.m_critSection);
+  std::unique_lock<CCriticalSection> lock(g_sectionLoader.m_critSection);
 
   // check if we can unload any unreferenced dlls
   for (int i = 0; i < (int)g_sectionLoader.m_vecLoadedDLLs.size(); ++i)
   {
     CDll& dll = g_sectionLoader.m_vecLoadedDLLs[i];
-    if (dll.m_lReferenceCount == 0 && XbmcThreads::SystemClockMillis() - dll.m_unloadDelayStartTick > UNLOAD_DELAY)
+    auto now = std::chrono::steady_clock::now();
+    auto duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(now - dll.m_unloadDelayStartTick);
+    if (dll.m_lReferenceCount == 0 && duration.count() > UNLOAD_DELAY)
     {
-      CLog::Log(LOGDEBUG,"SECTION:UnloadDelayed(DLL: %s)", dll.m_strDllName.c_str());
+      CLog::Log(LOGDEBUG, "SECTION:UnloadDelayed(DLL: {})", dll.m_strDllName);
 
       if (dll.m_pDll)
         DllLoaderContainer::ReleaseModule(dll.m_pDll);
@@ -129,12 +118,11 @@ void CSectionLoader::UnloadDelayed()
 void CSectionLoader::UnloadAll()
 {
   // delete the dll's
-  CSingleLock lock(g_sectionLoader.m_critSection);
-  vector<CDll>::iterator it = g_sectionLoader.m_vecLoadedDLLs.begin();
+  std::unique_lock<CCriticalSection> lock(g_sectionLoader.m_critSection);
+  std::vector<CDll>::iterator it = g_sectionLoader.m_vecLoadedDLLs.begin();
   while (it != g_sectionLoader.m_vecLoadedDLLs.end())
   {
     CDll& dll = *it;
-    CLog::Log(LOGDEBUG,"SECTION:UnloadAll(DLL: %s)", dll.m_strDllName.c_str());
     if (dll.m_pDll)
       DllLoaderContainer::ReleaseModule(dll.m_pDll);
     it = g_sectionLoader.m_vecLoadedDLLs.erase(it);

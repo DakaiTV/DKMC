@@ -1,54 +1,90 @@
-#pragma once
-
 /*
- *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2012-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
-#include "GUIWindowPVRBase.h"
-#include "epg/EpgSearchFilter.h"
+#pragma once
+
+#include "dialogs/GUIDialogContextMenu.h"
+#include "pvr/dialogs/GUIDialogPVRGuideSearch.h"
+#include "pvr/windows/GUIWindowPVRBase.h"
+
+#include <memory>
+#include <string>
+
+class CFileItem;
 
 namespace PVR
 {
-  class CGUIWindowPVRSearch : public CGUIWindowPVRBase
+class CPVREpgSearchFilter;
+
+class CGUIWindowPVRSearchBase : public CGUIWindowPVRBase
+{
+public:
+  CGUIWindowPVRSearchBase(bool bRadio, int id, const std::string& xmlFile);
+  ~CGUIWindowPVRSearchBase() override;
+
+  bool OnAction(const CAction& action) override;
+  bool OnMessage(CGUIMessage& message) override;
+  void GetContextButtons(int itemNumber, CContextButtons& buttons) override;
+  bool OnContextButton(int itemNumber, CONTEXT_BUTTON button) override;
+  bool Update(const std::string& strDirectory, bool updateFilterPath = true) override;
+  void UpdateButtons() override;
+
+  /*!
+   * @brief set the item to search similar events for.
+   * @param item the epg event to search similar events for.
+   */
+  void SetItemToSearch(const CFileItem& item);
+
+  /*!
+   * @brief Open the search dialog for the given search filter item.
+   * @param item the epg search filter.
+   * @return The result of the dialog
+   */
+  CGUIDialogPVRGuideSearch::Result OpenDialogSearch(const CFileItem& item);
+
+protected:
+  void OnPrepareFileItems(CFileItemList& items) override;
+
+private:
+  bool OnContextButtonClear(CFileItem* item, CONTEXT_BUTTON button);
+
+  CGUIDialogPVRGuideSearch::Result OpenDialogSearch(
+      const std::shared_ptr<CPVREpgSearchFilter>& searchFilter);
+
+  void ExecuteSearch();
+
+  void SetSearchFilter(const std::shared_ptr<CPVREpgSearchFilter>& searchFilter);
+
+  bool m_bSearchConfirmed;
+  std::shared_ptr<CPVREpgSearchFilter> m_searchfilter;
+};
+
+class CGUIWindowPVRTVSearch : public CGUIWindowPVRSearchBase
+{
+public:
+  CGUIWindowPVRTVSearch() : CGUIWindowPVRSearchBase(false, WINDOW_TV_SEARCH, "MyPVRSearch.xml") {}
+
+protected:
+  std::string GetRootPath() const override;
+  std::string GetStartFolder(const std::string& dir) override;
+  std::string GetDirectoryPath() override;
+};
+
+class CGUIWindowPVRRadioSearch : public CGUIWindowPVRSearchBase
+{
+public:
+  CGUIWindowPVRRadioSearch() : CGUIWindowPVRSearchBase(true, WINDOW_RADIO_SEARCH, "MyPVRSearch.xml")
   {
-  public:
-    CGUIWindowPVRSearch(bool bRadio);
-    virtual ~CGUIWindowPVRSearch(void) {};
+  }
 
-    bool OnMessage(CGUIMessage& message);
-    void OnWindowLoaded();
-    void GetContextButtons(int itemNumber, CContextButtons &buttons);
-    bool OnContextButton(int itemNumber, CONTEXT_BUTTON button);
-    bool OnContextButton(const CFileItem &item, CONTEXT_BUTTON button);
-
-  protected:
-    void OnPrepareFileItems(CFileItemList &items);
-
-  private:
-    bool OnContextButtonClear(CFileItem *item, CONTEXT_BUTTON button);
-    bool OnContextButtonInfo(CFileItem *item, CONTEXT_BUTTON button);
-    bool OnContextButtonStartRecord(CFileItem *item, CONTEXT_BUTTON button);
-    bool OnContextButtonStopRecord(CFileItem *item, CONTEXT_BUTTON button);
-
-    void OpenDialogSearch();
-
-    bool                  m_bSearchConfirmed;
-    EPG::EpgSearchFilter  m_searchfilter;
-  };
-}
+protected:
+  std::string GetRootPath() const override;
+  std::string GetStartFolder(const std::string& dir) override;
+  std::string GetDirectoryPath() override;
+};
+} // namespace PVR

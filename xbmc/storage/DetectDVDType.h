@@ -1,41 +1,28 @@
-#pragma once
-
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
-//  CDetectDVDMedia   -  Thread running in the background to detect a CD change
-//       and the filesystem
+#pragma once
+
+//  CDetectDVDMedia
+//  Thread running in the background to detect a CD change and the filesystem
 //
 // by Bobbin007 in 2003
-//
-//
-//
 
-#include "system.h"
+#include "PlatformDefs.h"
 
 #ifdef HAS_DVD_DRIVE
 
+#include "storage/discs/IDiscDriveHandler.h"
 #include "threads/CriticalSection.h"
-
 #include "threads/Thread.h"
-#include "boost/shared_ptr.hpp"
+#include "utils/DiscsUtils.h"
+
+#include <memory>
 #include <string>
 
 namespace MEDIA_DETECT
@@ -47,15 +34,16 @@ class CDetectDVDMedia : public CThread
 {
 public:
   CDetectDVDMedia();
-  virtual ~CDetectDVDMedia();
+  ~CDetectDVDMedia() override;
 
-  virtual void OnStartup();
-  virtual void OnExit();
-  virtual void Process();
+  void OnStartup() override;
+  void OnExit() override;
+  void Process() override;
 
   static void WaitMediaReady();
   static bool IsDiscInDrive();
-  static int DriveReady();
+  static bool DriveReady();
+  static DriveState GetDriveState();
   static CCdInfo* GetCdInfo();
   static CEvent m_evAutorun;
 
@@ -65,31 +53,36 @@ public:
   static void UpdateState();
 protected:
   void UpdateDvdrom();
-  DWORD GetTrayState();
+  DriveState PollDriveState();
 
 
   void DetectMediaType();
   void SetNewDVDShareUrl( const std::string& strNewUrl, bool bCDDA, const std::string& strDiscLabel );
 
+  void Clear();
+
 private:
   static CCriticalSection m_muReadingMedia;
 
-  static int m_DriveState;
+  static DriveState m_DriveState;
   static time_t m_LastPoll;
   static CDetectDVDMedia* m_pInstance;
 
   static CCdInfo* m_pCdInfo;
 
-  bool m_bStartup;
-  bool m_bAutorun;
-  DWORD m_dwTrayState;
-  DWORD m_dwTrayCount;
-  DWORD m_dwLastTrayState;
+  bool m_bStartup = true; // Do not autorun on startup
+  bool m_bAutorun = false;
+  TrayState m_TrayState{TrayState::UNDEFINED};
+  TrayState m_LastTrayState{TrayState::UNDEFINED};
+  DriveState m_LastDriveState{DriveState::NONE};
 
   static std::string m_diskLabel;
   static std::string m_diskPath;
 
-  boost::shared_ptr<CLibcdio> m_cdio;
+  std::shared_ptr<CLibcdio> m_cdio;
+
+  /*! \brief Stores the DiscInfo of the current disk */
+  static UTILS::DISCS::DiscInfo m_discInfo;
 };
 }
 #endif

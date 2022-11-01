@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 
 # This is a simple example showing how you can send 2 button events
 # to XBMC in a queued fashion to shut it down.
@@ -20,11 +20,22 @@
 # import the XBMC client library
 # NOTE: The library is not complete yet but is usable at this stage.
 
-import sys
-sys.path.append("../../lib/python")
-
-from xbmcclient import *
+import os
 from socket import *
+import sys
+
+if os.path.exists("../../lib/python"):
+    # try loading modules from source directory
+    sys.path.append("../../lib/python")
+
+    from xbmcclient import *
+
+    ICON_PATH = "../../icons/"
+else:
+    # fallback to system wide modules
+
+    from kodi.xbmcclient import *
+    from kodi.defs import *
 
 def main():
     import time
@@ -43,7 +54,7 @@ def main():
     # 'icon_type' can be one of ICON_NONE, ICON_PNG, ICON_JPG or ICON_GIF
     packet = PacketHELO(devicename="Example Remote",
                         icon_type=ICON_PNG,
-                        icon_file="../../icons/bluetooth.png")
+                        icon_file=ICON_PATH + "/bluetooth.png")
     packet.send(sock, addr)
 
     # IMPORTANT: After a HELO packet is sent, the client needs to "ping" XBMC
@@ -51,7 +62,7 @@ def main():
     # Every valid packet sent to XBMC acts as a ping, however if no valid
     # packets NEED to be sent (eg. the user hasn't pressed a key in 50 seconds)
     # then you can use the PacketPING class to send a ping packet (which is
-    # basically just an emppty packet). See below.
+    # basically just an empty packet). See below.
 
     # Once a client times out, it will need to reissue the HELO packet.
     # Currently, since this is a unidirectional protocol, there is no way

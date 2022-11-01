@@ -1,63 +1,65 @@
-#pragma once
-
 /*
- *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2012-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
-#include "GUIWindowPVRBase.h"
+#pragma once
+
+#include "dialogs/GUIDialogContextMenu.h"
+#include "pvr/PVRChannelNumberInputHandler.h"
+#include "pvr/windows/GUIWindowPVRBase.h"
+
+#include <string>
 
 namespace PVR
 {
-  class CGUIWindowPVRChannels : public CGUIWindowPVRBase
-  {
-  public:
-    CGUIWindowPVRChannels(bool bRadio);
-    virtual ~CGUIWindowPVRChannels(void) {};
+class CGUIWindowPVRChannelsBase : public CGUIWindowPVRBase, public CPVRChannelNumberInputHandler
+{
+public:
+  CGUIWindowPVRChannelsBase(bool bRadio, int id, const std::string& xmlFile);
+  ~CGUIWindowPVRChannelsBase() override;
 
-    bool OnMessage(CGUIMessage& message);
-    void GetContextButtons(int itemNumber, CContextButtons &buttons);
-    bool OnContextButton(int itemNumber, CONTEXT_BUTTON button);
-    bool Update(const std::string &strDirectory, bool updateFilterPath = true);
-    void UpdateButtons(void);
-    void ResetObservers(void);
-    void UnregisterObservers(void);
-    bool OnAction(const CAction &action);
+  std::string GetRootPath() const override;
+  bool OnMessage(CGUIMessage& message) override;
+  void GetContextButtons(int itemNumber, CContextButtons& buttons) override;
+  bool OnContextButton(int itemNumber, CONTEXT_BUTTON button) override;
+  bool Update(const std::string& strDirectory, bool updateFilterPath = true) override;
+  void UpdateButtons() override;
+  bool OnAction(const CAction& action) override;
 
-  protected:
-    std::string GetDirectoryPath(void);
+  // CPVRChannelNumberInputHandler implementation
+  void GetChannelNumbers(std::vector<std::string>& channelNumbers) override;
+  void OnInputDone() override;
 
-  private:
-    bool OnContextButtonAdd(CFileItem *item, CONTEXT_BUTTON button);
-    bool OnContextButtonGroupManager(CFileItem *item, CONTEXT_BUTTON button);
-    bool OnContextButtonHide(CFileItem *item, CONTEXT_BUTTON button);
-    bool OnContextButtonInfo(CFileItem *item, CONTEXT_BUTTON button);
-    bool OnContextButtonMove(CFileItem *item, CONTEXT_BUTTON button);
-    bool OnContextButtonPlay(CFileItem *item, CONTEXT_BUTTON button);
-    bool OnContextButtonSetThumb(CFileItem *item, CONTEXT_BUTTON button);
-    bool OnContextButtonShowHidden(CFileItem *item, CONTEXT_BUTTON button);
-    bool OnContextButtonFilter(CFileItem *item, CONTEXT_BUTTON button);
-    bool OnContextButtonUpdateEpg(CFileItem *item, CONTEXT_BUTTON button);
-    bool OnContextButtonRecord(CFileItem *item, CONTEXT_BUTTON button);
-    bool OnContextButtonLock(CFileItem *item, CONTEXT_BUTTON button);
+private:
+  bool OnContextButtonManage(const CFileItemPtr& item, CONTEXT_BUTTON button);
 
-    void ShowGroupManager(void);
+  void ShowChannelManager();
+  void ShowGroupManager();
+  void UpdateEpg(const CFileItemPtr& item);
 
-    bool m_bShowHiddenChannels;
-  };
-}
+protected:
+  bool m_bShowHiddenChannels;
+};
+
+class CGUIWindowPVRTVChannels : public CGUIWindowPVRChannelsBase
+{
+public:
+  CGUIWindowPVRTVChannels();
+
+protected:
+  std::string GetDirectoryPath() override;
+};
+
+class CGUIWindowPVRRadioChannels : public CGUIWindowPVRChannelsBase
+{
+public:
+  CGUIWindowPVRRadioChannels();
+
+protected:
+  std::string GetDirectoryPath() override;
+};
+} // namespace PVR

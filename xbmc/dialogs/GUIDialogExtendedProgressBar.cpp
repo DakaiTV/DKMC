@@ -1,28 +1,19 @@
 /*
- *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2012-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
 #include "GUIDialogExtendedProgressBar.h"
+
+#include "guilib/GUIMessage.h"
 #include "guilib/GUIProgressControl.h"
-#include "guilib/GUISliderControl.h"
-#include "threads/SingleLock.h"
-#include "threads/SystemClock.h"
+#include "utils/TimeUtils.h"
+
+#include <cmath>
+#include <mutex>
 
 #define CONTROL_LABELHEADER       30
 #define CONTROL_LABELTITLE        31
@@ -30,53 +21,49 @@
 
 #define ITEM_SWITCH_TIME_MS       2000
 
-using namespace std;
-
-string CGUIDialogProgressBarHandle::Text(void) const
+std::string CGUIDialogProgressBarHandle::Text(void) const
 {
-  CSingleLock lock(m_critSection);
-  string retVal(m_strText);
+  std::unique_lock<CCriticalSection> lock(m_critSection);
+  std::string retVal(m_strText);
   return retVal;
 }
 
-void CGUIDialogProgressBarHandle::SetText(const string &strText)
+void CGUIDialogProgressBarHandle::SetText(const std::string &strText)
 {
-  CSingleLock lock(m_critSection);
+  std::unique_lock<CCriticalSection> lock(m_critSection);
   m_strText = strText;
 }
 
-void CGUIDialogProgressBarHandle::SetTitle(const string &strTitle)
+void CGUIDialogProgressBarHandle::SetTitle(const std::string &strTitle)
 {
-  CSingleLock lock(m_critSection);
+  std::unique_lock<CCriticalSection> lock(m_critSection);
   m_strTitle = strTitle;
 }
 
 void CGUIDialogProgressBarHandle::SetProgress(int currentItem, int itemCount)
 {
-  float fPercentage = (float)((currentItem*100)/itemCount);
-  if (fPercentage > 100.0F)
-    fPercentage = 100.0F;
-
-  m_fPercentage = fPercentage;
+  float fPercentage = (currentItem*100.0f)/itemCount;
+  if (!std::isnan(fPercentage))
+    m_fPercentage = std::min(100.0f, fPercentage);
 }
 
 CGUIDialogExtendedProgressBar::CGUIDialogExtendedProgressBar(void)
-  : CGUIDialog(WINDOW_DIALOG_EXT_PROGRESS, "DialogExtendedProgressBar.xml")
+  : CGUIDialog(WINDOW_DIALOG_EXT_PROGRESS, "DialogExtendedProgressBar.xml", DialogModalityType::MODELESS)
 {
   m_loadType        = LOAD_ON_GUI_INIT;
   m_iLastSwitchTime = 0;
   m_iCurrentItem    = 0;
 }
 
-CGUIDialogProgressBarHandle *CGUIDialogExtendedProgressBar::GetHandle(const string &strTitle)
+CGUIDialogProgressBarHandle *CGUIDialogExtendedProgressBar::GetHandle(const std::string &strTitle)
 {
   CGUIDialogProgressBarHandle *handle = new CGUIDialogProgressBarHandle(strTitle);
   {
-    CSingleLock lock(m_critSection);
+    std::unique_lock<CCriticalSection> lock(m_critSection);
     m_handles.push_back(handle);
   }
 
-  Show();
+  Open();
 
   return handle;
 }
@@ -87,7 +74,7 @@ bool CGUIDialogExtendedProgressBar::OnMessage(CGUIMessage& message)
   {
   case GUI_MSG_WINDOW_INIT:
     {
-      m_iLastSwitchTime = XbmcThreads::SystemClockMillis();
+      m_iLastSwitchTime = CTimeUtils::GetFrameTime();
       m_iCurrentItem = 0;
       CGUIDialog::OnMessage(message);
 
@@ -110,12 +97,12 @@ void CGUIDialogExtendedProgressBar::Process(unsigned int currentTime, CDirtyRegi
 
 void CGUIDialogExtendedProgressBar::UpdateState(unsigned int currentTime)
 {
-  string strHeader;
-  string strTitle;
+  std::string strHeader;
+  std::string strTitle;
   float  fProgress(-1.0f);
 
   {
-    CSingleLock lock(m_critSection);
+    std::unique_lock<CCriticalSection> lock(m_critSection);
 
     // delete finished items
     for (int iPtr = m_handles.size() - 1; iPtr >= 0; iPtr--)

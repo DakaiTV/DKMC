@@ -1,36 +1,22 @@
-include ../../Makefile.include
-DEPS= ../../Makefile.include Makefile
+include ../../Makefile.include LIBJPEG-TURBO-VERSION ../../download-files.include
+DEPS = ../../Makefile.include LIBJPEG-TURBO-VERSION Makefile ../../download-files.include \
+                                  01-disable-executables.patch
 
-# lib name, version
-LIBNAME=libjpeg-turbo
-VERSION=1.2.0
-SOURCE=$(LIBNAME)-$(VERSION)
-ARCHIVE=$(LIBNAME)-$(VERSION).tar.gz
-# configuration settings
-CONFIGURE=cp -f $(CONFIG_SUB) $(CONFIG_GUESS) .; \
-          ./configure --prefix=$(PREFIX) --with-jpeg8 --disable-shared
-
-export CFLAGS=-O3
-
-LIBDYLIB=$(PLATFORM)/.libs/libjpeg.a
-
-CLEAN_FILES=$(ARCHIVE) $(PLATFORM)
+LIBDYLIB=$(PLATFORM)/build/libjpeg.a
 
 all: .installed-$(PLATFORM)
 
-$(TARBALLS_LOCATION)/$(ARCHIVE):
-	cd $(TARBALLS_LOCATION); $(RETRIEVE_TOOL) $(RETRIEVE_TOOL_FLAGS) $(BASE_URL)/$(ARCHIVE)
-
-$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE) $(DEPS)
+$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE).$(HASH_TYPE) $(DEPS)
 	rm -rf $(PLATFORM)/*; mkdir -p $(PLATFORM)
 	cd $(PLATFORM); $(ARCHIVE_TOOL) $(ARCHIVE_TOOL_FLAGS) $(TARBALLS_LOCATION)/$(ARCHIVE)
-	cd $(PLATFORM); $(CONFIGURE)
+	cd $(PLATFORM); patch -p1 -i ../01-disable-executables.patch
+	cd $(PLATFORM); $(CMAKE) -B build -DCMAKE_ASM_NASM_COMPILER:FILEPATH=$(NATIVEPREFIX)/bin/nasm -DENABLE_SHARED:BOOL=OFF -DWITH_JPEG8:BOOL=ON
 
 $(LIBDYLIB): $(PLATFORM)
-	$(MAKE) -j 1 -C $(PLATFORM)
+	$(MAKE) -C $(PLATFORM)/build
 
 .installed-$(PLATFORM): $(LIBDYLIB)
-	$(MAKE) -C $(PLATFORM) install
+	$(MAKE) -C $(PLATFORM)/build install
 	touch $@
 
 clean:

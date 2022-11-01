@@ -1,4 +1,5 @@
 include ../../Makefile.include.in
+DEPS=Makefile
 PREFIX=$(CURDIR)/../../pre-build-deps
 PLATFORM=native
 TARBALLS_LOCATION=$(PREFIX)
@@ -6,16 +7,14 @@ RETRIEVE_TOOL=curl
 ARCHIVE_TOOL=tar
 # lib name, version
 LIBNAME=m4
-VERSION=1.4.9
+VERSION=1.4.19
 SOURCE=$(LIBNAME)-$(VERSION)
-ARCHIVE=$(SOURCE).tar.gz
+ARCHIVE=$(SOURCE).tar.xz
 
 # configuration settings
 CONFIGURE=./configure --prefix=$(PREFIX)
 
-LIBDYLIB=$(PLATFORM)/bin/$(LIBNAME)
-
-CLEAN_FILES=$(ARCHIVE) $(PLATFORM)
+LIBDYLIB=$(PLATFORM)/src/$(LIBNAME)
 
 all: $(PREFIX)/bin/$(LIBNAME)
 
@@ -26,9 +25,9 @@ $(TARBALLS_LOCATION)/$(ARCHIVE):
 $(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE) $(DEPS)
 	-rm -rf $(PLATFORM)/*; mkdir -p $(PLATFORM)
 	cd $(PLATFORM); $(ARCHIVE_TOOL) $(ARCHIVE_TOOL_FLAGS) $(TARBALLS_LOCATION)/$(ARCHIVE)
+	cd $(PLATFORM); $(CONFIGURE)
 
 $(LIBDYLIB): $(PLATFORM)
-	cd $(PLATFORM); $(CONFIGURE)
 	$(MAKE) -C $(PLATFORM)
 
 $(PREFIX)/bin/$(LIBNAME): $(LIBDYLIB)

@@ -1,26 +1,13 @@
-#pragma once
-
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
-#include "threads/SingleLock.h"
+#pragma once
+
 
 //WARNING: since this will unlock/lock the python global interpreter lock,
 //         it will not work recursively
@@ -29,7 +16,7 @@
 class CPyThreadState
 {
   public:
-    CPyThreadState(bool save = true)
+    explicit CPyThreadState(bool save = true)
     {
       m_threadState = NULL;
 
@@ -62,12 +49,16 @@ class CPyThreadState
 };
 
 /**
- * A CSingleLock that will relinquish the GIL during the time
+ * A std::unique_lock<CCriticalSection> that will relinquish the GIL during the time
  *  it takes to obtain the CriticalSection
  */
-class GilSafeSingleLock : public CPyThreadState, public CSingleLock
+class GilSafeSingleLock : public CPyThreadState, public std::unique_lock<CCriticalSection>
 {
 public:
-  GilSafeSingleLock(const CCriticalSection& critSec) : CPyThreadState(true), CSingleLock(critSec) { CPyThreadState::Restore(); }
+  explicit GilSafeSingleLock(CCriticalSection& critSec)
+    : CPyThreadState(true), std::unique_lock<CCriticalSection>(critSec)
+  {
+    CPyThreadState::Restore();
+  }
 };
 

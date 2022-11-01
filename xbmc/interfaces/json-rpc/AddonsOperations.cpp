@@ -1,101 +1,102 @@
 /*
- *      Copyright (C) 2011-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2011-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
 #include "AddonsOperations.h"
-#include "JSONUtils.h"
-#include "addons/AddonManager.h"
-#include "addons/AddonDatabase.h"
-#include "addons/PluginSource.h"
-#include "ApplicationMessenger.h"
-#include "TextureCache.h"
-#include "filesystem/File.h"
-#include "utils/StringUtils.h"
 
-using namespace std;
+#include "JSONUtils.h"
+#include "ServiceBroker.h"
+#include "TextureCache.h"
+#include "addons/AddonDatabase.h"
+#include "addons/AddonManager.h"
+#include "addons/PluginSource.h"
+#include "addons/addoninfo/AddonInfo.h"
+#include "addons/addoninfo/AddonType.h"
+#include "messaging/ApplicationMessenger.h"
+#include "utils/FileUtils.h"
+#include "utils/StringUtils.h"
+#include "utils/Variant.h"
+
 using namespace JSONRPC;
 using namespace ADDON;
-using namespace XFILE;
 
 JSONRPC_STATUS CAddonsOperations::GetAddons(const std::string &method, ITransportLayer *transport, IClient *client, const CVariant &parameterObject, CVariant &result)
 {
-  vector<TYPE> addonTypes;
-  TYPE addonType = TranslateType(parameterObject["type"].asString());
+  std::vector<AddonType> addonTypes;
+  AddonType addonType = CAddonInfo::TranslateType(parameterObject["type"].asString());
   CPluginSource::Content content = CPluginSource::Translate(parameterObject["content"].asString());
   CVariant enabled = parameterObject["enabled"];
+  CVariant installed = parameterObject["installed"];
 
   // ignore the "content" parameter if the type is specified but not a plugin or script
-  if (addonType != ADDON_UNKNOWN && addonType != ADDON_PLUGIN && addonType != ADDON_SCRIPT)
+  if (addonType != AddonType::UNKNOWN && addonType != AddonType::PLUGIN &&
+      addonType != AddonType::SCRIPT)
     content = CPluginSource::UNKNOWN;
 
-  if (addonType >= ADDON_VIDEO && addonType <= ADDON_EXECUTABLE)
+  if (addonType >= AddonType::VIDEO && addonType <= AddonType::EXECUTABLE)
   {
-    addonTypes.push_back(ADDON_PLUGIN);
-    addonTypes.push_back(ADDON_SCRIPT);
+    addonTypes.push_back(AddonType::PLUGIN);
+    addonTypes.push_back(AddonType::SCRIPT);
 
     switch (addonType)
     {
-    case ADDON_VIDEO:
-      content = CPluginSource::VIDEO;
-      break;
-    case ADDON_AUDIO:
-      content = CPluginSource::AUDIO;
-      break;
-    case ADDON_IMAGE:
-      content = CPluginSource::IMAGE;
-      break;
-    case ADDON_EXECUTABLE:
-      content = CPluginSource::EXECUTABLE;
-      break;
-
-    default:
-      break;
+      case AddonType::VIDEO:
+        content = CPluginSource::VIDEO;
+        break;
+      case AddonType::AUDIO:
+        content = CPluginSource::AUDIO;
+        break;
+      case AddonType::IMAGE:
+        content = CPluginSource::IMAGE;
+        break;
+      case AddonType::GAME:
+        content = CPluginSource::GAME;
+        break;
+      case AddonType::EXECUTABLE:
+        content = CPluginSource::EXECUTABLE;
+        break;
+      default:
+        break;
     }
   }
   else
     addonTypes.push_back(addonType);
 
   VECADDONS addons;
-  for (vector<TYPE>::const_iterator typeIt = addonTypes.begin(); typeIt != addonTypes.end(); ++typeIt)
+  for (const auto& typeIt : addonTypes)
   {
     VECADDONS typeAddons;
-    if (*typeIt == ADDON_UNKNOWN)
+    if (typeIt == AddonType::UNKNOWN)
     {
-      if (!enabled.isBoolean())
+      if (!enabled.isBoolean()) //All
       {
-        CAddonMgr::Get().GetAllAddons(typeAddons, false);
-        CAddonMgr::Get().GetAllAddons(typeAddons, true);
+        if (!installed.isBoolean() || installed.asBoolean())
+          CServiceBroker::GetAddonMgr().GetInstalledAddons(typeAddons);
+        if (!installed.isBoolean() || (installed.isBoolean() && !installed.asBoolean()))
+          CServiceBroker::GetAddonMgr().GetInstallableAddons(typeAddons);
       }
-      else
-        CAddonMgr::Get().GetAllAddons(typeAddons, enabled.asBoolean());
+      else if (enabled.asBoolean() && (!installed.isBoolean() || installed.asBoolean())) //Enabled
+        CServiceBroker::GetAddonMgr().GetAddons(typeAddons);
+      else if (!installed.isBoolean() || installed.asBoolean())
+        CServiceBroker::GetAddonMgr().GetDisabledAddons(typeAddons);
     }
     else
     {
-      if (!enabled.isBoolean())
+      if (!enabled.isBoolean()) //All
       {
-        CAddonMgr::Get().GetAddons(*typeIt, typeAddons, false);
-        VECADDONS enabledAddons;
-        CAddonMgr::Get().GetAddons(*typeIt, enabledAddons, true);
-        typeAddons.insert(typeAddons.end(), enabledAddons.begin(), enabledAddons.end());
+        if (!installed.isBoolean() || installed.asBoolean())
+          CServiceBroker::GetAddonMgr().GetInstalledAddons(typeAddons, typeIt);
+        if (!installed.isBoolean() || (installed.isBoolean() && !installed.asBoolean()))
+          CServiceBroker::GetAddonMgr().GetInstallableAddons(typeAddons, typeIt);
       }
-      else
-        CAddonMgr::Get().GetAddons(*typeIt, typeAddons, enabled.asBoolean());
+      else if (enabled.asBoolean() && (!installed.isBoolean() || installed.asBoolean())) //Enabled
+        CServiceBroker::GetAddonMgr().GetAddons(typeAddons, typeIt);
+      else if (!installed.isBoolean() || installed.asBoolean())
+        CServiceBroker::GetAddonMgr().GetDisabledAddons(typeAddons, typeIt);
     }
 
     addons.insert(addons.end(), typeAddons.begin(), typeAddons.end());
@@ -104,12 +105,14 @@ JSONRPC_STATUS CAddonsOperations::GetAddons(const std::string &method, ITranspor
   // remove library addons
   for (int index = 0; index < (int)addons.size(); index++)
   {
-    PluginPtr plugin;
+    std::shared_ptr<CPluginSource> plugin;
     if (content != CPluginSource::UNKNOWN)
-      plugin = boost::dynamic_pointer_cast<CPluginSource>(addons.at(index));
+      plugin = std::dynamic_pointer_cast<CPluginSource>(addons.at(index));
 
-    if ((addons.at(index)->Type() <= ADDON_UNKNOWN || addons.at(index)->Type() >= ADDON_MAX) ||
-       ((content != CPluginSource::UNKNOWN && plugin == NULL) || (plugin != NULL && !plugin->Provides(content))))
+    if ((addons.at(index)->Type() <= AddonType::UNKNOWN ||
+         addons.at(index)->Type() >= AddonType::MAX_TYPES) ||
+        ((content != CPluginSource::UNKNOWN && plugin == NULL) ||
+         (plugin != NULL && !plugin->Provides(content))))
     {
       addons.erase(addons.begin() + index);
       index--;
@@ -118,22 +121,23 @@ JSONRPC_STATUS CAddonsOperations::GetAddons(const std::string &method, ITranspor
 
   int start, end;
   HandleLimits(parameterObject, result, addons.size(), start, end);
-  
+
   CAddonDatabase addondb;
   for (int index = start; index < end; index++)
     FillDetails(addons.at(index), parameterObject["properties"], result["addons"], addondb, true);
-  
+
   return OK;
 }
 
 JSONRPC_STATUS CAddonsOperations::GetAddonDetails(const std::string &method, ITransportLayer *transport, IClient *client, const CVariant &parameterObject, CVariant &result)
 {
-  string id = parameterObject["addonid"].asString();
+  std::string id = parameterObject["addonid"].asString();
   AddonPtr addon;
-  if (!CAddonMgr::Get().GetAddon(id, addon, ADDON::ADDON_UNKNOWN, false) || addon.get() == NULL ||
-      addon->Type() <= ADDON_UNKNOWN || addon->Type() >= ADDON_MAX)
+  if (!CServiceBroker::GetAddonMgr().GetAddon(id, addon, OnlyEnabled::CHOICE_NO) ||
+      addon.get() == NULL || addon->Type() <= AddonType::UNKNOWN ||
+      addon->Type() >= AddonType::MAX_TYPES)
     return InvalidParams;
-    
+
   CAddonDatabase addondb;
   FillDetails(addon, parameterObject["properties"], result["addon"], addondb);
 
@@ -142,35 +146,49 @@ JSONRPC_STATUS CAddonsOperations::GetAddonDetails(const std::string &method, ITr
 
 JSONRPC_STATUS CAddonsOperations::SetAddonEnabled(const std::string &method, ITransportLayer *transport, IClient *client, const CVariant &parameterObject, CVariant &result)
 {
-  string id = parameterObject["addonid"].asString();
-  bool disabled = false;
-  if (parameterObject["enabled"].isBoolean())
-    disabled = !parameterObject["enabled"].asBoolean();
-  // we need to toggle the current disabled state of the addon
-  else if (parameterObject["enabled"].isString())
-    disabled = !CAddonMgr::Get().IsAddonDisabled(id);
-  else
+  std::string id = parameterObject["addonid"].asString();
+  AddonPtr addon;
+  if (!CServiceBroker::GetAddonMgr().GetAddon(id, addon, OnlyEnabled::CHOICE_NO) ||
+      addon == nullptr || addon->Type() <= AddonType::UNKNOWN ||
+      addon->Type() >= AddonType::MAX_TYPES)
     return InvalidParams;
 
-  if (!CAddonMgr::Get().DisableAddon(id, disabled))
-      return InvalidParams;
+  bool disabled = false;
+  if (parameterObject["enabled"].isBoolean())
+  {
+    disabled = !parameterObject["enabled"].asBoolean();
+  }
+  // we need to toggle the current disabled state of the addon
+  else if (parameterObject["enabled"].isString())
+  {
+    disabled = !CServiceBroker::GetAddonMgr().IsAddonDisabled(id);
+  }
+  else
+  {
+    return InvalidParams;
+  }
 
-  return ACK;
+  bool success = disabled
+                     ? CServiceBroker::GetAddonMgr().DisableAddon(id, AddonDisabledReason::USER)
+                     : CServiceBroker::GetAddonMgr().EnableAddon(id);
+
+  return success ? ACK : InvalidParams;
 }
 
 JSONRPC_STATUS CAddonsOperations::ExecuteAddon(const std::string &method, ITransportLayer *transport, IClient *client, const CVariant &parameterObject, CVariant &result)
 {
-  string id = parameterObject["addonid"].asString();
+  std::string id = parameterObject["addonid"].asString();
   AddonPtr addon;
-  if (!CAddonMgr::Get().GetAddon(id, addon) || addon.get() == NULL ||
-      addon->Type() < ADDON_VIZ || addon->Type() >= ADDON_MAX)
+  if (!CServiceBroker::GetAddonMgr().GetAddon(id, addon, OnlyEnabled::CHOICE_YES) ||
+      addon.get() == NULL || addon->Type() < AddonType::VISUALIZATION ||
+      addon->Type() >= AddonType::MAX_TYPES)
     return InvalidParams;
-    
-  string argv;
+
+  std::string argv;
   CVariant params = parameterObject["params"];
   if (params.isObject())
   {
-    for (CVariant::const_iterator_map it = params.begin_map(); it != params.end_map(); it++)
+    for (CVariant::const_iterator_map it = params.begin_map(); it != params.end_map(); ++it)
     {
       if (it != params.begin_map())
         argv += ",";
@@ -179,7 +197,7 @@ JSONRPC_STATUS CAddonsOperations::ExecuteAddon(const std::string &method, ITrans
   }
   else if (params.isArray())
   {
-    for (CVariant::const_iterator_array it = params.begin_array(); it != params.end_array(); it++)
+    for (CVariant::const_iterator_array it = params.begin_array(); it != params.end_array(); ++it)
     {
       if (it != params.begin_array())
         argv += ",";
@@ -191,38 +209,94 @@ JSONRPC_STATUS CAddonsOperations::ExecuteAddon(const std::string &method, ITrans
     if (!params.empty())
       argv = StringUtils::Paramify(params.asString());
   }
-  
+
   std::string cmd;
-  if (params.size() == 0)
-    cmd = StringUtils::Format("RunAddon(%s)", id.c_str());
+  if (params.empty())
+    cmd = StringUtils::Format("RunAddon({})", id);
   else
-    cmd = StringUtils::Format("RunAddon(%s, %s)", id.c_str(), argv.c_str());
-  CApplicationMessenger::Get().ExecBuiltIn(cmd, parameterObject["wait"].asBoolean());
-  
+    cmd = StringUtils::Format("RunAddon({}, {})", id, argv);
+
+  if (params["wait"].asBoolean())
+    CServiceBroker::GetAppMessenger()->SendMsg(TMSG_EXECUTE_BUILT_IN, -1, -1, nullptr, cmd);
+  else
+    CServiceBroker::GetAppMessenger()->PostMsg(TMSG_EXECUTE_BUILT_IN, -1, -1, nullptr, cmd);
+
   return ACK;
 }
 
-void CAddonsOperations::FillDetails(AddonPtr addon, const CVariant& fields, CVariant &result, CAddonDatabase &addondb, bool append /* = false */)
+static CVariant Serialize(const AddonPtr& addon)
+{
+  CVariant variant;
+  variant["addonid"] = addon->ID();
+  variant["type"] = CAddonInfo::TranslateType(addon->Type(), false);
+  variant["name"] = addon->Name();
+  variant["version"] = addon->Version().asString();
+  variant["summary"] = addon->Summary();
+  variant["description"] = addon->Description();
+  variant["path"] = addon->Path();
+  variant["author"] = addon->Author();
+  variant["thumbnail"] = addon->Icon();
+  variant["disclaimer"] = addon->Disclaimer();
+  variant["fanart"] = addon->FanArt();
+
+  variant["dependencies"] = CVariant(CVariant::VariantTypeArray);
+  for (const auto& dep : addon->GetDependencies())
+  {
+    CVariant info(CVariant::VariantTypeObject);
+    info["addonid"] = dep.id;
+    info["minversion"] = dep.versionMin.asString();
+    info["version"] = dep.version.asString();
+    info["optional"] = dep.optional;
+    variant["dependencies"].push_back(std::move(info));
+  }
+  if (addon->LifecycleState() == AddonLifecycleState::BROKEN)
+    variant["broken"] = addon->LifecycleStateDescription();
+  else
+    variant["broken"] = false;
+  if (addon->LifecycleState() == AddonLifecycleState::DEPRECATED)
+    variant["deprecated"] = addon->LifecycleStateDescription();
+  else
+    variant["deprecated"] = false;
+  variant["extrainfo"] = CVariant(CVariant::VariantTypeArray);
+  for (const auto& kv : addon->ExtraInfo())
+  {
+    CVariant info(CVariant::VariantTypeObject);
+    info["key"] = kv.first;
+    info["value"] = kv.second;
+    variant["extrainfo"].push_back(std::move(info));
+  }
+  variant["rating"] = -1;
+  return variant;
+}
+
+void CAddonsOperations::FillDetails(const std::shared_ptr<ADDON::IAddon>& addon,
+                                    const CVariant& fields,
+                                    CVariant& result,
+                                    CAddonDatabase& addondb,
+                                    bool append /* = false */)
 {
   if (addon.get() == NULL)
     return;
-  
-  CVariant addonInfo;
-  addon->Props().Serialize(addonInfo);
+
+  CVariant addonInfo = Serialize(addon);
 
   CVariant object;
   object["addonid"] = addonInfo["addonid"];
   object["type"] = addonInfo["type"];
-  
+
   for (unsigned int index = 0; index < fields.size(); index++)
   {
-    string field = fields[index].asString();
-    
-    // we need to manually retrieve the enabled state of every addon
+    std::string field = fields[index].asString();
+
+    // we need to manually retrieve the enabled / installed state of every addon
     // from the addon database because it can't be read from addon.xml
     if (field == "enabled")
     {
-      object[field] = !CAddonMgr::Get().IsAddonDisabled(addon->ID());
+      object[field] = !CServiceBroker::GetAddonMgr().IsAddonDisabled(addon->ID());
+    }
+    else if (field == "installed")
+    {
+      object[field] = CServiceBroker::GetAddonMgr().IsAddonInstalled(addon->ID());
     }
     else if (field == "fanart" || field == "thumbnail")
     {
@@ -230,8 +304,8 @@ void CAddonsOperations::FillDetails(AddonPtr addon, const CVariant& fields, CVar
       // We need to check the existence of fanart and thumbnails as the addon simply
       // holds where the art will be, not whether it exists.
       bool needsRecaching;
-      std::string image = CTextureCache::Get().CheckCachedImage(url, false, needsRecaching);
-      if (!image.empty() || CFile::Exists(url))
+      std::string image = CServiceBroker::GetTextureCache()->CheckCachedImage(url, needsRecaching);
+      if (!image.empty() || CFileUtils::Exists(url))
         object[field] = CTextureUtils::GetWrappedImageURL(url);
       else
         object[field] = "";
@@ -239,7 +313,7 @@ void CAddonsOperations::FillDetails(AddonPtr addon, const CVariant& fields, CVar
     else if (addonInfo.isMember(field))
       object[field] = addonInfo[field];
   }
-  
+
   if (append)
     result.append(object);
   else

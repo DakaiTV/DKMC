@@ -1,57 +1,44 @@
-#pragma once
 /*
- *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2012-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
+
+#pragma once
 
 #include "guilib/GUIDialog.h"
 
-namespace EPG
-{
-  class CEpgInfoTag;
-}
+#include <memory>
+
+class CGUIMessage;
 
 namespace PVR
 {
-  class CPVRTimerInfoTag;
+class CGUIDialogPVRGuideInfo : public CGUIDialog
+{
+public:
+  CGUIDialogPVRGuideInfo();
+  ~CGUIDialogPVRGuideInfo() override;
+  bool OnMessage(CGUIMessage& message) override;
+  bool OnInfo(int actionID) override;
+  bool HasListItems() const override { return true; }
+  CFileItemPtr GetCurrentListItem(int offset = 0) override;
 
-  class CGUIDialogPVRGuideInfo : public CGUIDialog
-  {
-  public:
-    CGUIDialogPVRGuideInfo(void);
-    virtual ~CGUIDialogPVRGuideInfo(void);
-    virtual bool OnMessage(CGUIMessage& message);
-    virtual bool HasListItems() const { return true; };
-    virtual CFileItemPtr GetCurrentListItem(int offset = 0);
+  void SetProgInfo(const std::shared_ptr<CFileItem>& item);
 
-    void SetProgInfo(const CFileItem *item);
+protected:
+  void OnInitWindow() override;
 
-  protected:
-    virtual void OnInitWindow();
+private:
+  bool OnClickButtonOK(const CGUIMessage& message);
+  bool OnClickButtonRecord(const CGUIMessage& message);
+  bool OnClickButtonPlay(const CGUIMessage& message);
+  bool OnClickButtonFind(const CGUIMessage& message);
+  bool OnClickButtonAddTimer(const CGUIMessage& message);
+  bool OnClickButtonSetReminder(const CGUIMessage& message);
 
-    bool ActionStartTimer(const EPG::CEpgInfoTag *tag);
-    bool ActionCancelTimer(CFileItemPtr timer);
-
-    bool OnClickButtonOK(CGUIMessage &message);
-    bool OnClickButtonRecord(CGUIMessage &message);
-    bool OnClickButtonSwitch(CGUIMessage &message);
-    bool OnClickButtonFind(CGUIMessage &message);
-
-    CFileItemPtr m_progItem;
-  };
-}
+  std::shared_ptr<CFileItem> m_progItem;
+};
+} // namespace PVR

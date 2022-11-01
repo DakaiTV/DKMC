@@ -1,27 +1,16 @@
 /*
- *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2012-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
 #include "BooleanLogic.h"
-#include "utils/log.h"
+
 #include "utils/StringUtils.h"
 #include "utils/XBMCTinyXML.h"
+#include "utils/log.h"
 
 bool CBooleanLogicValue::Deserialize(const TiXmlNode *node)
 {
@@ -43,18 +32,12 @@ bool CBooleanLogicValue::Deserialize(const TiXmlNode *node)
       m_negated = true;
     else if (!StringUtils::EqualsNoCase(strNegated, "false"))
     {
-      CLog::Log(LOGDEBUG, "CBooleanLogicValue: invalid negated value \"%s\"", strNegated);
+      CLog::Log(LOGDEBUG, "CBooleanLogicValue: invalid negated value \"{}\"", strNegated);
       return false;
     }
   }
 
   return true;
-}
-
-CBooleanLogicOperation::~CBooleanLogicOperation()
-{
-  m_operations.clear();
-  m_values.clear();
 }
 
 bool CBooleanLogicOperation::Deserialize(const TiXmlNode *node)
@@ -90,7 +73,7 @@ bool CBooleanLogicOperation::Deserialize(const TiXmlNode *node)
       operation->SetOperation(StringUtils::EqualsNoCase(tag, "and") ? BooleanLogicOperationAnd : BooleanLogicOperationOr);
       if (!operation->Deserialize(operationNode))
       {
-        CLog::Log(LOGDEBUG, "CBooleanLogicOperation: failed to deserialize <%s> definition", tag.c_str());
+        CLog::Log(LOGDEBUG, "CBooleanLogicOperation: failed to deserialize <{}> definition", tag);
         return false;
       }
 
@@ -106,14 +89,14 @@ bool CBooleanLogicOperation::Deserialize(const TiXmlNode *node)
       {
         if (!value->Deserialize(operationNode))
         {
-          CLog::Log(LOGDEBUG, "CBooleanLogicOperation: failed to deserialize <%s> definition", tag.c_str());
+          CLog::Log(LOGDEBUG, "CBooleanLogicOperation: failed to deserialize <{}> definition", tag);
           return false;
         }
 
         m_values.push_back(value);
       }
       else if (operationNode->Type() == TiXmlNode::TINYXML_ELEMENT)
-        CLog::Log(LOGDEBUG, "CBooleanLogicOperation: unknown <%s> definition encountered", tag.c_str());
+        CLog::Log(LOGDEBUG, "CBooleanLogicOperation: unknown <{}> definition encountered", tag);
     }
 
     operationNode = operationNode->NextSibling();

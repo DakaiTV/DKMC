@@ -48,6 +48,7 @@ const char* didl_header         = "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metad
                                             " xmlns:dc=\"http://purl.org/dc/elements/1.1/\""
                                             " xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\""
                                             " xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\""
+                                            " xmlns:sec=\"http://www.sec.co.kr/\""
                                             " xmlns:xbmc=\"urn:schemas-xbmc-org:metadata-1-0/\">";
 const char* didl_footer         = "</DIDL-Lite>";
 const char* didl_namespace_dc   = "http://purl.org/dc/elements/1.1/";
@@ -162,6 +163,8 @@ PLT_Didl::ConvertFilterToMask(const NPT_String& filter)
             mask |= PLT_FILTER_MASK_EPISODE_COUNT;
         } else if (NPT_String::CompareN(s+i, PLT_FILTER_FIELD_EPISODE_SEASON, len, true) == 0) {
             mask |= PLT_FILTER_MASK_EPISODE_SEASON;
+        } else if (NPT_String::CompareN(s+i, PLT_FILTER_FIELD_XBMC_LASTPLAYERSTATE, len, true) == 0) {
+            mask |= PLT_FILTER_MASK_XBMC_LASTPLAYERSTATE;
         } else if (NPT_String::CompareN(s+i, PLT_FILTER_FIELD_XBMC_DATEADDED, len, true) == 0) {
             mask |= PLT_FILTER_MASK_XBMC_DATEADDED;
         } else if (NPT_String::CompareN(s+i, PLT_FILTER_FIELD_XBMC_RATING, len, true) == 0) {
@@ -170,6 +173,12 @@ PLT_Didl::ConvertFilterToMask(const NPT_String& filter)
             mask |= PLT_FILTER_MASK_XBMC_VOTES;
         } else if (NPT_String::CompareN(s+i, PLT_FILTER_FIELD_XBMC_ARTWORK, len, true) == 0) {
             mask |= PLT_FILTER_MASK_XBMC_ARTWORK;
+        } else if (NPT_String::CompareN(s+i, PLT_FILTER_FIELD_XBMC_UNIQUE_IDENTIFIER, len, true) == 0) {
+            mask |= PLT_FILTER_MASK_XBMC_UNIQUE_IDENTIFIER;
+        } else if (NPT_String::CompareN(s + i, PLT_FILTER_FIELD_XBMC_COUNTRY, len, true) == 0) {
+          mask |= PLT_FILTER_MASK_XBMC_COUNTRY;
+        } else if (NPT_String::CompareN(s + i, PLT_FILTER_FIELD_XBMC_USERRATING, len, true) == 0) {
+          mask |= PLT_FILTER_MASK_XBMC_USERRATING;
         }
 
         if (next_comma < 0) {

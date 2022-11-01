@@ -1,29 +1,20 @@
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
 #include "dll_tracker.h"
-#include "dll_tracker_library.h"
-#include "dll_tracker_file.h"
+
 #include "DllLoader.h"
-#include "threads/SingleLock.h"
+#include "dll_tracker_file.h"
+#include "dll_tracker_library.h"
 #include "utils/log.h"
+
+#include <mutex>
+#include <stdlib.h>
 
 #ifdef _cplusplus
 extern "C"
@@ -39,13 +30,13 @@ void tracker_dll_add(DllLoader* pDll)
   trackInfo->pDll = pDll;
   trackInfo->lMinAddr = 0;
   trackInfo->lMaxAddr = 0;
-  CSingleLock locktd(g_trackerLock);
+  std::unique_lock<CCriticalSection> locktd(g_trackerLock);
   g_trackedDlls.push_back(trackInfo);
 }
 
 void tracker_dll_free(DllLoader* pDll)
 {
-  CSingleLock locktd(g_trackerLock);
+  std::unique_lock<CCriticalSection> locktd(g_trackerLock);
   for (TrackedDllsIter it = g_trackedDlls.begin(); it != g_trackedDlls.end();)
   {
     // NOTE: This code assumes that the same dll pointer can be in more than one
@@ -67,7 +58,7 @@ void tracker_dll_free(DllLoader* pDll)
 	    DummyListIter dit = (*it)->dummyList.begin();
 	    while (dit != (*it)->dummyList.end()) { free((void*)*dit); ++dit;	}
 	    (*it)->dummyList.clear();
-	
+
       delete (*it);
       it = g_trackedDlls.erase(it);
     }
@@ -76,9 +67,9 @@ void tracker_dll_free(DllLoader* pDll)
   }
 }
 
-void tracker_dll_set_addr(DllLoader* pDll, uintptr_t min, uintptr_t max)
+void tracker_dll_set_addr(const DllLoader* pDll, uintptr_t min, uintptr_t max)
 {
-  CSingleLock locktd(g_trackerLock);
+  std::unique_lock<CCriticalSection> locktd(g_trackerLock);
   for (TrackedDllsIter it = g_trackedDlls.begin(); it != g_trackedDlls.end(); ++it)
   {
     if ((*it)->pDll == pDll)
@@ -100,7 +91,7 @@ const char* tracker_getdllname(uintptr_t caller)
 
 DllTrackInfo* tracker_get_dlltrackinfo(uintptr_t caller)
 {
-  CSingleLock locktd(g_trackerLock);
+  std::unique_lock<CCriticalSection> locktd(g_trackerLock);
   for (TrackedDllsIter it = g_trackedDlls.begin(); it != g_trackedDlls.end(); ++it)
   {
     if (caller >= (*it)->lMinAddr && caller <= (*it)->lMaxAddr)
@@ -123,9 +114,9 @@ DllTrackInfo* tracker_get_dlltrackinfo(uintptr_t caller)
   return NULL;
 }
 
-DllTrackInfo* tracker_get_dlltrackinfo_byobject(DllLoader* pDll)
+DllTrackInfo* tracker_get_dlltrackinfo_byobject(const DllLoader* pDll)
 {
-  CSingleLock locktd(g_trackerLock);
+  std::unique_lock<CCriticalSection> locktd(g_trackerLock);
   for (TrackedDllsIter it = g_trackedDlls.begin(); it != g_trackedDlls.end(); ++it)
   {
     if ((*it)->pDll == pDll)
@@ -136,9 +127,9 @@ DllTrackInfo* tracker_get_dlltrackinfo_byobject(DllLoader* pDll)
   return NULL;
 }
 
-void tracker_dll_data_track(DllLoader* pDll, uintptr_t addr)
+void tracker_dll_data_track(const DllLoader* pDll, uintptr_t addr)
 {
-  CSingleLock locktd(g_trackerLock);
+  std::unique_lock<CCriticalSection> locktd(g_trackerLock);
   for (TrackedDllsIter it = g_trackedDlls.begin(); it != g_trackedDlls.end(); ++it)
   {
     if (pDll == (*it)->pDll)

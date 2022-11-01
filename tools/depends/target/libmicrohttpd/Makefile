@@ -1,46 +1,35 @@
-include ../../Makefile.include
-DEPS= ../../Makefile.include fix-android-include.patch Makefile
-
-# lib name, version
-LIBNAME=libmicrohttpd
-VERSION=0.4.6
-SOURCE=$(LIBNAME)-$(VERSION)
-ARCHIVE=$(SOURCE).tar.gz
+include ../../Makefile.include LIBMICROHTTPD-VERSION ../../download-files.include
+DEPS = ../../Makefile.include Makefile LIBMICROHTTPD-VERSION ../../download-files.include \
+                                    001-remove-assert.patch
 
 # configuration settings
 CONFIGURE=cp -f $(CONFIG_SUB) $(CONFIG_GUESS) .; \
-          ./configure --prefix=$(PREFIX) --disable-shared
+          ./configure --prefix=$(PREFIX) \
+                      --disable-shared \
+                      --disable-doc \
+                      --disable-examples \
+                      --disable-curl \
+                      --enable-https
 
-# internal memmem sym collides with internal gnutils memmem
-# when built on 10.6.8, strip it.
-ifeq ($(OS), osx)
-STRIP_MEMMEM=-$(AR) d $(PLATFORM)/src/daemon/.libs/libmicrohttpd.a memmem.o
+ifeq ($(DEBUG_BUILD), yes)
+  CONFIGURE+= --enable-asserts
 endif
 
-
-LIBDYLIB=$(PLATFORM)/src/daemon/.libs/$(LIBNAME).a
-
-CLEAN_FILES=$(ARCHIVE) $(PLATFORM)
+LIBDYLIB=$(PLATFORM)/src/microhttpd/.libs/$(LIBNAME).a
 
 all: .installed-$(PLATFORM)
 
-$(TARBALLS_LOCATION)/$(ARCHIVE):
-	cd $(TARBALLS_LOCATION); $(RETRIEVE_TOOL) $(RETRIEVE_TOOL_FLAGS) $(BASE_URL)/$(ARCHIVE)
-
-$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE) $(DEPS)
+$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE).$(HASH_TYPE) $(DEPS)
 	rm -rf $(PLATFORM)/*; mkdir -p $(PLATFORM)
 	cd $(PLATFORM); $(ARCHIVE_TOOL) $(ARCHIVE_TOOL_FLAGS) $(TARBALLS_LOCATION)/$(ARCHIVE)
-	cd $(PLATFORM); patch -p0 < ../fix-android-include.patch
+	cd $(PLATFORM); patch -p1 -i ../001-remove-assert.patch
 	cd $(PLATFORM); $(CONFIGURE)
 
 $(LIBDYLIB): $(PLATFORM)
-	$(MAKE) -C $(PLATFORM)/src/daemon
-	$(MAKE) -C $(PLATFORM)/src/include install
-	$(STRIP_MEMMEM)
+	$(MAKE) -C $(PLATFORM)
 
 .installed-$(PLATFORM): $(LIBDYLIB)
-	rm -f $(PREFIX)/lib/libmicrohttpd.so $(PREFIX)/lib/libmicrohttpd.so.5 $(PREFIX)/lib/libmicrohttpd.so.5.2.1
-	$(MAKE) -C $(PLATFORM)/src/daemon install
+	$(MAKE) -C $(PLATFORM) install
 	touch $@
 
 clean:
@@ -49,4 +38,3 @@ clean:
 
 distclean::
 	rm -rf $(PLATFORM) .installed-$(PLATFORM)
-

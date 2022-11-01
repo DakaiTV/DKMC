@@ -1,24 +1,17 @@
 @echo off
 
-if not exist dependencies\vcredist\2008 mkdir dependencies\vcredist\2008
-if not exist dependencies\vcredist\2010 mkdir dependencies\vcredist\2010
-if not exist dependencies\vcredist\2013 mkdir dependencies\vcredist\2013
-if not exist dependencies\vcredist\2008\vcredist_x86.exe (
-  echo Downloading vc90 redist...
-  ..\BuildDependencies\bin\wget -nv -O dependencies\vcredist\2008\vcredist_x86.exe http://mirrors.xbmc.org/build-deps/win32/vcredist/2008/vcredist_x86.exe
-)
-if not exist dependencies\vcredist\2010\vcredist_x86.exe (
-  echo Downloading vc100 redist...
-  ..\BuildDependencies\bin\wget -nv -O dependencies\vcredist\2010\vcredist_x86.exe http://mirrors.xbmc.org/build-deps/win32/vcredist/2010/vcredist_x86.exe
-)
-if not exist dependencies\vcredist\2013\vcredist_x86.exe (
-  echo Downloading vc120 redist...
-  ..\BuildDependencies\bin\wget -nv -O dependencies\vcredist\2013\vcredist_x86.exe http://mirrors.xbmc.org/build-deps/win32/vcredist/2013/vcredist_x86.exe
-)
+set DOWNLOAD_URL=https://aka.ms/vs/17/release/vc_redist.%TARGET_ARCHITECTURE%.exe
+set DOWNLOAD_FOLDER=..\BuildDependencies\downloads\vcredist\2015-2022
+set DOWNLOAD_FILE=vcredist_%TARGET_ARCHITECTURE%.exe
 
-if not exist dependencies\dxsetup mkdir dependencies\dxsetup
-for %%f in (DSETUP.dll dsetup32.dll dxdllreg_x86.cab DXSETUP.exe dxupdate.cab Jun2010_D3DCompiler_43_x86.cab Jun2010_d3dx9_43_x86.cab) do (
-  if not exist dependencies\dxsetup\%%f (
-    ..\BuildDependencies\bin\wget -nv -O dependencies\dxsetup\%%f http://mirrors.xbmc.org/build-deps/win32/dxsetup/%%f
-  )
+:: Following commands expect this script's parent directory to be the current directory, so make sure that's so
+PUSHD %~dp0
+
+if not exist %DOWNLOAD_FOLDER% mkdir %DOWNLOAD_FOLDER%
+
+if not exist %DOWNLOAD_FOLDER%\%DOWNLOAD_FILE% (
+  echo Downloading vc143 redist...
+  ..\BuildDependencies\bin\wget --tries=5 --retry-connrefused --waitretry=2 -nv -O %DOWNLOAD_FOLDER%\%DOWNLOAD_FILE% %DOWNLOAD_URL%
 )
+:: Restore the previous current directory
+POPD

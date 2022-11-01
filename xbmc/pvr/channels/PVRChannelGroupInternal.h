@@ -1,178 +1,116 @@
-#pragma once
-
 /*
- *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2012-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
-#include "PVRChannelGroup.h"
-#include "utils/Observer.h"
+#pragma once
+
+#include "pvr/channels/PVRChannelGroup.h"
+
+#include <memory>
+#include <vector>
 
 namespace PVR
 {
-  class CPVRChannelGroups;
-  class CPVRDatabase;
+  enum class PVREvent;
 
-  /** XBMC's internal group, the group containing all channels */
+  class CPVRChannel;
+  class CPVRChannelNumber;
 
-  class CPVRChannelGroupInternal : public CPVRChannelGroup, public Observer
+  class CPVRChannelGroupInternal : public CPVRChannelGroup
   {
-    friend class CPVRChannelGroups;
-    friend class CPVRDatabase;
-
   public:
+    CPVRChannelGroupInternal() = delete;
+
     /*!
      * @brief Create a new internal channel group.
      * @param bRadio True if this group holds radio channels.
      */
-    CPVRChannelGroupInternal(bool bRadio);
+    explicit CPVRChannelGroupInternal(bool bRadio);
 
-    CPVRChannelGroupInternal(const CPVRChannelGroup &group);
+    /*!
+     * @brief Create a new internal channel group.
+     * @param path The path for the new group.
+     */
+    explicit CPVRChannelGroupInternal(const CPVRChannelsPath& path);
 
-    virtual ~CPVRChannelGroupInternal(void);
-
-    virtual void Notify(const Observable &obs, const ObservableMessage msg);
+    ~CPVRChannelGroupInternal() override;
 
     /**
      * @brief The amount of channels in this container.
      * @return The amount of channels in this container.
      */
-    int GetNumHiddenChannels() const { return m_iHiddenChannels; }
-
-    /*!
-     * @brief Add or update a channel in this table.
-     * @param channel The channel to update.
-     * @return True if the channel was updated and persisted.
-     */
-    bool UpdateChannel(const CPVRChannel &channel);
-
-    /*!
-     * @brief Add a channel to this internal group.
-     * @param iChannelNumber The channel number to use for this channel or 0 to add it to the back.
-     */
-    bool InsertInGroup(CPVRChannel &channel, int iChannelNumber = 0);
-
-    /*!
-     * @brief Callback for add-ons to update a channel.
-     * @param channel The updated channel.
-     * @return True if the channel has been updated succesfully, false otherwise.
-     */
-    void UpdateFromClient(const CPVRChannel &channel, unsigned int iChannelNumber = 0);
+    size_t GetNumHiddenChannels() const override { return m_iHiddenChannels; }
 
     /*!
      * @see CPVRChannelGroup::IsGroupMember
      */
-    bool IsGroupMember(const CPVRChannel &channel) const;
+    bool IsGroupMember(const std::shared_ptr<CPVRChannel>& channel) const override;
 
     /*!
-     * @see CPVRChannelGroup::AddToGroup
+     * @see CPVRChannelGroup::AppendToGroup
      */
-    bool AddToGroup(CPVRChannel &channel, int iChannelNumber = 0);
+    bool AppendToGroup(const std::shared_ptr<CPVRChannel>& channel) override;
 
     /*!
      * @see CPVRChannelGroup::RemoveFromGroup
      */
-    bool RemoveFromGroup(const CPVRChannel &channel);
-
-    /*!
-     * @see CPVRChannelGroup::MoveChannel
-     */
-    bool MoveChannel(unsigned int iOldChannelNumber, unsigned int iNewChannelNumber, bool bSaveInDb = true);
-
-    /*!
-     * @see CPVRChannelGroup::GetMembers
-     */
-    int GetMembers(CFileItemList &results, bool bGroupMembers = true) const;
+    bool RemoveFromGroup(const std::shared_ptr<CPVRChannel>& channel) override;
 
     /*!
      * @brief Check whether the group name is still correct after the language setting changed.
      */
-    void CheckGroupName(void);
+    void CheckGroupName();
 
     /*!
      * @brief Create an EPG table for each channel.
      * @brief bForce Create the tables, even if they already have been created before.
      * @return True if all tables were created successfully, false otherwise.
      */
-    bool CreateChannelEpgs(bool bForce = false);
-
-    bool AddNewChannel(const CPVRChannel &channel, unsigned int iChannelNumber = 0) { UpdateFromClient(channel, iChannelNumber); return true; }
+    bool CreateChannelEpgs(bool bForce = false) override;
 
   protected:
     /*!
-     * @brief Load all channels from the database.
-     * @param bCompress Compress the database after changing anything.
-     * @return The amount of channels that were loaded.
+     * @brief Remove deleted group members from this group. Delete stale channels.
+     * @param groupMembers The group members to use to update this list.
+     * @return The removed members .
      */
-    int LoadFromDb(bool bCompress = false);
+    std::vector<std::shared_ptr<CPVRChannelGroupMember>> RemoveDeletedGroupMembers(
+        const std::vector<std::shared_ptr<CPVRChannelGroupMember>>& groupMembers) override;
 
     /*!
-     * @brief Load all channels from the clients.
-     * @return True when updated succesfully, false otherwise.
+     * @brief Update data with 'all channels' group members from the given clients, sync with local data.
+     * @param clients The clients to fetch data from. Leave empty to fetch data from all created clients.
+     * @return True on success, false otherwise.
      */
-    bool LoadFromClients(void);
-
-    /*!
-     * @brief Check if this group is the internal group containing all channels.
-     * @return True if it's the internal group, false otherwise.
-     */
-    bool IsInternalGroup(void) const { return true; }
-
-    /*!
-     * @brief Update the current channel list with the given list.
-     *
-     * Update the current channel list with the given list.
-     * Only the new channels will be present in the passed list after this call.
-     *
-     * @param channels The channels to use to update this list.
-     * @return True if everything went well, false otherwise.
-     */
-    bool UpdateGroupEntries(const CPVRChannelGroup &channels);
-
-    bool AddAndUpdateChannels(const CPVRChannelGroup &channels, bool bUseBackendChannelNumbers);
-
-    /*!
-     * @brief Refresh the channel list from the clients.
-     */
-    bool Update(void);
-
-    /*!
-     * @brief Remove invalid channels and updates the channel numbers.
-     */
-    bool Renumber(void);
+    bool UpdateFromClients(const std::vector<std::shared_ptr<CPVRClient>>& clients) override;
 
     /*!
      * @brief Load the channels from the database.
-     *
-     * Load the channels from the database.
-     * If no channels are stored in the database, then the channels will be loaded from the clients.
-     *
+     * @param channels All available channels.
+     * @param clients The PVR clients data should be loaded for. Leave empty for all clients.
      * @return True when loaded successfully, false otherwise.
      */
-    bool Load(void);
+    bool LoadFromDatabase(
+        const std::map<std::pair<int, int>, std::shared_ptr<CPVRChannel>>& channels,
+        const std::vector<std::shared_ptr<CPVRClient>>& clients) override;
+
+    /*!
+     * @brief Clear all data.
+     */
+    void Unload() override;
 
     /*!
      * @brief Update the vfs paths of all channels.
      */
-    void UpdateChannelPaths(void);
+    void UpdateChannelPaths();
 
-    void CreateChannelEpg(CPVRChannelPtr channel, bool bForce = false);
+    size_t m_iHiddenChannels; /*!< the amount of hidden channels in this container */
 
-    int m_iHiddenChannels; /*!< the amount of hidden channels in this container */
+  private:
+    void OnPVRManagerEvent(const PVREvent& event);
   };
 }

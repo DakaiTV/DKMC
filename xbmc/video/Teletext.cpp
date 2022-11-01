@@ -1,21 +1,9 @@
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
 /*
@@ -25,39 +13,21 @@
  * Many thanks to the TuxBox Teletext Team for this great work.
  */
 
-#include "threads/SystemClock.h"
 #include "Teletext.h"
-#include "Application.h"
-#include "utils/log.h"
-#include "utils/TimeUtils.h"
+
+#include "application/ApplicationComponents.h"
+#include "application/ApplicationPlayer.h"
 #include "filesystem/SpecialProtocol.h"
-#include "guilib/GraphicContext.h"
-#include "cores/IPlayer.h"
+#include "input/Key.h"
+#include "utils/log.h"
+#include "windowing/GraphicContext.h"
 
-#if SDL_VERSION == 1
-#include <SDL/SDL_stdinc.h>
-#elif SDL_VERSION == 2
-#include <SDL2/SDL_stdinc.h>
-#else
-#define SDL_memset4(dst, val, len)		\
-do {						\
-	uint32_t _count = (len);		\
-	uint32_t _n = (_count + 3) / 4;		\
-	uint32_t *_p = static_cast<uint32_t *>(dst);	\
-	uint32_t _val = (val);			\
-	if (len == 0) break;			\
-        switch (_count % 4) {			\
-        case 0: do {    *_p++ = _val;		\
-        case 3:         *_p++ = _val;		\
-        case 2:         *_p++ = _val;		\
-        case 1:         *_p++ = _val;		\
-		} while ( --_n );		\
-	}					\
-} while(0)
+static inline void SDL_memset4(uint32_t* dst, uint32_t val, size_t len)
+{
+  for (; len > 0; --len)
+    *dst++ = val;
+}
 #define SDL_memcpy4(dst, src, len) memcpy(dst, src, (len) << 2)
-#endif
-
-using namespace std;
 
 static const char *TeletextFont = "special://xbmc/media/Fonts/teletext.ttf";
 
@@ -136,8 +106,8 @@ TextPageAttr_t Text_AtrTable[] =
   { TXT_ColorWhite  , TXT_ColorBlack , C_G0P, 0, 0, 0 ,0, 0, 0, 0, 0, 0, 0, 0x3f}, /* ATR_WB */
   { TXT_ColorWhite  , TXT_ColorBlack , C_G0P, 0, 0, 1 ,0, 0, 0, 0, 0, 0, 0, 0x3f}, /* ATR_PassiveDefault */
   { TXT_ColorWhite  , TXT_ColorRed   , C_G0P, 0, 0, 0 ,0, 0, 0, 0, 0, 0, 0, 0x3f}, /* ATR_L250 */
-  { TXT_ColorBlack  , TXT_ColorYellow, C_G0P, 0, 0, 0 ,0, 0, 0, 0, 0, 0, 0, 0x3f}, /* ATR_L252 */
   { TXT_ColorBlack  , TXT_ColorGreen , C_G0P, 0, 0, 0 ,0, 0, 0, 0, 0, 0, 0, 0x3f}, /* ATR_L251 */
+  { TXT_ColorBlack  , TXT_ColorYellow, C_G0P, 0, 0, 0 ,0, 0, 0, 0, 0, 0, 0, 0x3f}, /* ATR_L252 */
   { TXT_ColorWhite  , TXT_ColorBlue  , C_G0P, 0, 0, 0 ,0, 0, 0, 0, 0, 0, 0, 0x3f}, /* ATR_L253 */
   { TXT_ColorMagenta, TXT_ColorBlack , C_G0P, 0, 0, 0 ,0, 0, 0, 0, 0, 0, 0, 0x3f}, /* ATR_TOPMENU0 */
   { TXT_ColorGreen  , TXT_ColorBlack , C_G0P, 0, 0, 0 ,0, 0, 0, 0, 0, 0, 0, 0x3f}, /* ATR_TOPMENU1 */
@@ -471,9 +441,7 @@ CTeletextDecoder::CTeletextDecoder()
   m_YOffset = 0;
 }
 
-CTeletextDecoder::~CTeletextDecoder()
-{
-}
+CTeletextDecoder::~CTeletextDecoder() = default;
 
 bool CTeletextDecoder::HandleAction(const CAction &action)
 {
@@ -551,7 +519,7 @@ bool CTeletextDecoder::HandleAction(const CAction &action)
     PageInput(action.GetID() - REMOTE_0);
     return true;
   }
-  else if (action.GetID() >= KEY_ASCII) // FIXME make it KEY_UNICODE
+  else if (action.GetID() == KEY_UNICODE)
   { // input from the keyboard
     if (action.GetUnicode() >= 48 && action.GetUnicode() < 58)
     {
@@ -586,7 +554,7 @@ bool CTeletextDecoder::HandleAction(const CAction &action)
   if (m_RenderInfo.PageCatching)
   {
     m_txtCache->PageUpdate    = true;
-    m_RenderInfo.PageCatching = 0;
+    m_RenderInfo.PageCatching = false;
     return true;
   }
 
@@ -623,17 +591,19 @@ bool CTeletextDecoder::InitDecoder()
 {
   int error;
 
-  m_txtCache = g_application.m_pPlayer->GetTeletextCache();
-  if (m_txtCache == NULL)
+  auto& components = CServiceBroker::GetAppComponents();
+  const auto appPlayer = components.GetComponent<CApplicationPlayer>();
+  m_txtCache = appPlayer->GetTeletextCache();
+  if (m_txtCache == nullptr)
   {
-    CLog::Log(LOGERROR, "%s: called without teletext cache", __FUNCTION__);
+    CLog::Log(LOGERROR, "{}: called without teletext cache", __FUNCTION__);
     return false;
   }
 
   /* init fontlibrary */
   if ((error = FT_Init_FreeType(&m_Library)))
   {
-    CLog::Log(LOGERROR, "%s: <FT_Init_FreeType: 0x%.2X>", __FUNCTION__, error);
+    CLog::Log(LOGERROR, "{}: <FT_Init_FreeType: {:#2X}>", __FUNCTION__, error);
     m_Library = NULL;
     return false;
   }
@@ -643,7 +613,7 @@ bool CTeletextDecoder::InitDecoder()
     FT_Done_FreeType(m_Library);
     m_Library = NULL;
     m_Manager = NULL;
-    CLog::Log(LOGERROR, "%s: <FTC_Manager_New: 0x%.2X>", __FUNCTION__, error);
+    CLog::Log(LOGERROR, "{}: <FTC_Manager_New: {:#2X}>", __FUNCTION__, error);
     return false;
   }
 
@@ -653,13 +623,13 @@ bool CTeletextDecoder::InitDecoder()
     FT_Done_FreeType(m_Library);
     m_Manager = NULL;
     m_Library = NULL;
-    CLog::Log(LOGERROR, "%s: <FTC_SBit_Cache_New: 0x%.2X>", __FUNCTION__, error);
+    CLog::Log(LOGERROR, "{}: <FTC_SBit_Cache_New: {:#2X}>", __FUNCTION__, error);
     return false;
   }
 
   /* calculate font dimensions */
-  m_RenderInfo.Width            = (int)(g_graphicsContext.GetWidth()*g_graphicsContext.GetGUIScaleX());
-  m_RenderInfo.Height           = (int)(g_graphicsContext.GetHeight()*g_graphicsContext.GetGUIScaleY());
+  m_RenderInfo.Width            = (int)(CServiceBroker::GetWinSystem()->GetGfxContext().GetWidth()*CServiceBroker::GetWinSystem()->GetGfxContext().GetGUIScaleX());
+  m_RenderInfo.Height           = (int)(CServiceBroker::GetWinSystem()->GetGfxContext().GetHeight()*CServiceBroker::GetWinSystem()->GetGfxContext().GetGUIScaleY());
   m_RenderInfo.FontHeight       = m_RenderInfo.Height / 25;
   m_RenderInfo.FontWidth_Normal = m_RenderInfo.Width  / (m_RenderInfo.Show39 ? 39 : 40);
   SetFontWidth(m_RenderInfo.FontWidth_Normal);
@@ -667,15 +637,16 @@ bool CTeletextDecoder::InitDecoder()
     m_RenderInfo.axdrcs[i+12+1] = (m_RenderInfo.FontHeight * i + 6) / 10;
 
   /* center screen */
-  m_TypeTTF.face_id   = (FTC_FaceID) m_teletextFont.c_str();
+  m_TypeTTF.face_id   = (FTC_FaceID) const_cast<char*>(m_teletextFont.c_str());
   m_TypeTTF.height    = (FT_UShort) m_RenderInfo.FontHeight;
   m_TypeTTF.flags     = FT_LOAD_MONOCHROME;
   if (FTC_Manager_LookupFace(m_Manager, m_TypeTTF.face_id, &m_Face))
   {
-    m_TypeTTF.face_id = (FTC_FaceID) m_teletextFont.c_str();
+    m_TypeTTF.face_id = (FTC_FaceID) const_cast<char*>(m_teletextFont.c_str());
     if ((error = FTC_Manager_LookupFace(m_Manager, m_TypeTTF.face_id, &m_Face)))
     {
-      CLog::Log(LOGERROR, "%s: <FTC_Manager_Lookup_Face failed with Errorcode 0x%.2X>\n", __FUNCTION__, error);
+      CLog::Log(LOGERROR, "{}: <FTC_Manager_Lookup_Face failed with Errorcode {:#2X}>",
+                __FUNCTION__, error);
       FTC_Manager_Done(m_Manager);
       FT_Done_FreeType(m_Library);
       m_Manager = NULL;
@@ -687,12 +658,12 @@ bool CTeletextDecoder::InitDecoder()
 
   /* set variable screeninfo for double buffering */
   m_YOffset       = 0;
-  m_TextureBuffer = new color_t [4*m_RenderInfo.Height*m_RenderInfo.Width];
+  m_TextureBuffer = new UTILS::COLOR::Color[4 * m_RenderInfo.Height * m_RenderInfo.Width];
 
   ClearFB(GetColorRGB(TXT_ColorTransp));
   ClearBB(GetColorRGB(TXT_ColorTransp)); /* initialize backbuffer */
   /* set new colormap */
-  SetColors((unsigned short *)DefaultColors, 0, TXT_Color_SIZECOLTABLE);
+  SetColors(DefaultColors, 0, TXT_Color_SIZECOLTABLE);
 
   for (int i = 0; i < 40 * 25; i++)
   {
@@ -714,12 +685,12 @@ bool CTeletextDecoder::InitDecoder()
 void CTeletextDecoder::EndDecoder()
 {
   /* clear SubtitleCache */
-  for (int i = 0; i < SUBTITLE_CACHESIZE; i++)
+  for (TextSubtitleCache_t*& subtitleCache : m_RenderInfo.SubtitleCache)
   {
-    if (m_RenderInfo.SubtitleCache[i] != NULL)
+    if (subtitleCache != NULL)
     {
-      delete m_RenderInfo.SubtitleCache[i];
-      m_RenderInfo.SubtitleCache[i] = NULL;
+      delete subtitleCache;
+      subtitleCache = NULL;
     }
   }
 
@@ -744,14 +715,13 @@ void CTeletextDecoder::EndDecoder()
 
   if (!m_txtCache)
   {
-    CLog::Log(LOGNOTICE, "%s: called without cache", __FUNCTION__);
+    CLog::Log(LOGINFO, "{}: called without cache", __FUNCTION__);
   }
   else
   {
     m_txtCache->PageUpdate = true;
     CLog::Log(LOGDEBUG, "Teletext: Rendering ended");
   }
-  return;
 }
 
 void CTeletextDecoder::PageInput(int Number)
@@ -1195,11 +1165,11 @@ void CTeletextDecoder::RenderPage()
         if (c == NULL)
           return;
 
-        memset(c, 0x00, sizeof(TextSubtitleCache_t));
+        c = {};
         m_RenderInfo.SubtitleCache[j] = c;
       }
       c->Valid = true;
-      c->Timestamp = XbmcThreads::SystemClockMillis()/1000;
+      c->Timestamp = std::chrono::steady_clock::now();
 
       if (m_txtCache->SubPageTable[m_txtCache->Page] != 0xFF)
       {
@@ -1239,15 +1209,17 @@ void CTeletextDecoder::RenderPage()
   {
     if (m_RenderInfo.DelayStarted)
     {
-      long now = XbmcThreads::SystemClockMillis()/1000;
-      for (int i = 0; i < SUBTITLE_CACHESIZE ; i++)
+      auto now = std::chrono::steady_clock::now();
+      for (TextSubtitleCache_t* const subtitleCache : m_RenderInfo.SubtitleCache)
       {
-        if (m_RenderInfo.SubtitleCache[i] && m_RenderInfo.SubtitleCache[i]->Valid && now - m_RenderInfo.SubtitleCache[i]->Timestamp >= (long)m_RenderInfo.SubtitleDelay)
+        if (subtitleCache && subtitleCache->Valid &&
+            std::chrono::duration_cast<std::chrono::seconds>(now - subtitleCache->Timestamp)
+                    .count() >= m_RenderInfo.SubtitleDelay)
         {
-          memcpy(m_RenderInfo.PageChar, m_RenderInfo.SubtitleCache[i]->PageChar, 40 * 25);
-          memcpy(m_RenderInfo.PageAtrb, m_RenderInfo.SubtitleCache[i]->PageAtrb, 40 * 25 * sizeof(TextPageAttr_t));
+          memcpy(m_RenderInfo.PageChar, subtitleCache->PageChar, 40 * 25);
+          memcpy(m_RenderInfo.PageAtrb, subtitleCache->PageAtrb, 40 * 25 * sizeof(TextPageAttr_t));
           DoRenderPage(StartRow, national_subset_bak);
-          m_RenderInfo.SubtitleCache[i]->Valid = false;
+          subtitleCache->Valid = false;
           return;
         }
       }
@@ -1293,9 +1265,9 @@ void CTeletextDecoder::RenderPage()
               SetPosX(8);
 
             memcpy(&m_RenderInfo.PageChar[8], pCachedPage->p0, 24); /* header line without timestring */
-            for (int i = 0; i < 24; i++)
+            for (unsigned char i : pCachedPage->p0)
             {
-              RenderCharFB(pCachedPage->p0[i], &m_RenderInfo.PageAtrb[32]);
+              RenderCharFB(i, &m_RenderInfo.PageAtrb[32]);
             }
 
             /* Update on every Header number change */
@@ -1317,7 +1289,6 @@ void CTeletextDecoder::RenderPage()
         else
         {
           SetPosX(33+i);
-          m_RenderInfo.PageChar[32+i] = m_RenderInfo.PageChar[32+i];
         }
       }
 
@@ -1345,7 +1316,7 @@ void CTeletextDecoder::DoFlashing(int startrow)
   /* Flashing */
   TextPageAttr_t flashattr;
   char flashchar;
-  long flashphase = XbmcThreads::SystemClockMillis() % 1000;
+  long flashphase = std::chrono::steady_clock::now().time_since_epoch().count() % 1000;
 
   int srow = startrow;
   int erow = 24;
@@ -1534,12 +1505,12 @@ void CTeletextDecoder::DoRenderPage(int startrow, int national_subset_bak)
     {
       RenderCharBB(m_RenderInfo.PageChar[index + col], &m_RenderInfo.PageAtrb[index + col]);
 
-      if (m_RenderInfo.PageAtrb[index + col].doubleh && m_RenderInfo.PageChar[index + col] != 0xff)  /* disable lower char in case of doubleh setting in l25 objects */
+      if (m_RenderInfo.PageAtrb[index + col].doubleh && m_RenderInfo.PageChar[index + col] != 0xff && row < 24-1)  /* disable lower char in case of doubleh setting in l25 objects */
         m_RenderInfo.PageChar[index + col + 40] = 0xff;
-      if (m_RenderInfo.PageAtrb[index + col].doublew)  /* skip next column if double width */
+      if (m_RenderInfo.PageAtrb[index + col].doublew && col < 40-1)  /* skip next column if double width */
       {
         col++;
-        if (m_RenderInfo.PageAtrb[index + col-1].doubleh && m_RenderInfo.PageChar[index + col] != 0xff)  /* disable lower char in case of doubleh setting in l25 objects */
+        if (m_RenderInfo.PageAtrb[index + col - 1].doubleh && m_RenderInfo.PageChar[index + col] != 0xff && row < 24-1)  /* disable lower char in case of doubleh setting in l25 objects */
           m_RenderInfo.PageChar[index + col + 40] = 0xff;
       }
     }
@@ -1561,7 +1532,10 @@ void CTeletextDecoder::Decode_BTT()
   if (m_txtCache->SubPageTable[0x1f0] == 0xff || 0 == m_txtCache->astCachetable[0x1f0][m_txtCache->SubPageTable[0x1f0]]) /* not yet received */
     return;
 
-  g_application.m_pPlayer->LoadPage(0x1f0, m_txtCache->SubPageTable[0x1f0],btt);
+  auto& components = CServiceBroker::GetAppComponents();
+  const auto appPlayer = components.GetComponent<CApplicationPlayer>();
+
+  appPlayer->LoadPage(0x1f0, m_txtCache->SubPageTable[0x1f0], btt);
   if (btt[799] == ' ') /* not completely received or error */
     return;
 
@@ -1604,7 +1578,7 @@ void CTeletextDecoder::Decode_BTT()
 
     if (b1 == 0xFF || b2 == 0xFF || b3 == 0xFF)
     {
-      CLog::Log(LOGERROR, "CTeletextDecoder::Decode_BTT <Biterror in btt/plt index %d>", i);
+      CLog::Log(LOGERROR, "CTeletextDecoder::Decode_BTT <Biterror in btt/plt index {}>", i);
       btt[799] = ' '; /* mark btt as not received */
       return;
     }
@@ -1621,13 +1595,16 @@ void CTeletextDecoder::Decode_ADIP() /* additional information table */
   int i, p, j, b1, b2, b3, charfound;
   unsigned char padip[23*40];
 
+  auto& components = CServiceBroker::GetAppComponents();
+  const auto appPlayer = components.GetComponent<CApplicationPlayer>();
+
   for (i = 0; i <= m_txtCache->ADIP_PgMax; i++)
   {
     p = m_txtCache->ADIP_Pg[i];
     if (!p || m_txtCache->SubPageTable[p] == 0xff || 0 == m_txtCache->astCachetable[p][m_txtCache->SubPageTable[p]]) /* not cached (avoid segfault) */
       continue;
 
-    g_application.m_pPlayer->LoadPage(p,m_txtCache->SubPageTable[p],padip);
+    appPlayer->LoadPage(p, m_txtCache->SubPageTable[p], padip);
     for (j = 0; j < 44; j++)
     {
       b1 = dehamming[padip[20*j+0]];
@@ -1642,16 +1619,14 @@ void CTeletextDecoder::Decode_ADIP() /* additional information table */
 
       if (b1 == 0xFF || b2 == 0xFF || b3 == 0xFF)
       {
-        CLog::Log(LOGERROR, "CTeletextDecoder::Decode_BTT <Biterror in ait %03x %d %02x %02x %02x %02x %02x %02x>", p, j,
-                   padip[20*j+0],
-                   padip[20*j+1],
-                   padip[20*j+2],
-                   b1, b2, b3
-                   );
+        CLog::Log(LOGERROR,
+                  "CTeletextDecoder::Decode_BTT <Biterror in ait {:03x} {} {:02x} {:02x} {:02x} "
+                  "{:02x} {:02x} {:02x}>",
+                  p, j, padip[20 * j + 0], padip[20 * j + 1], padip[20 * j + 2], b1, b2, b3);
         return;
       }
 
-      if (b1>8 || b2>9 || b3>9) /* ignore extries with invalid or hex page numbers */
+      if (b1>8 || b2>9 || b3>9) /* ignore entries with invalid or hex page numbers */
       {
         continue;
       }
@@ -1836,9 +1811,9 @@ void CTeletextDecoder::RenderCharBB(int Char, TextPageAttr_t *Attribute)
 
 void CTeletextDecoder::CopyBB2FB()
 {
-  color_t *src, *dst, *topsrc;
+  UTILS::COLOR::Color *src, *dst, *topsrc;
   int screenwidth;
-  color_t fillcolor;
+  UTILS::COLOR::Color fillcolor;
 
   /* line 25 */
   if (!m_RenderInfo.PageCatching)
@@ -1904,9 +1879,9 @@ FT_Error CTeletextDecoder::MyFaceRequester(FTC_FaceID face_id, FT_Library librar
   FT_Error result = FT_New_Face(library, (const char*)face_id, 0, aface);
 
   if (!result)
-    CLog::Log(LOGNOTICE, "Teletext font %s loaded", (char*)face_id);
+    CLog::Log(LOGINFO, "Teletext font {} loaded", (char*)face_id);
   else
-    CLog::Log(LOGERROR, "Opening of Teletext font %s failed", (char*)face_id);
+    CLog::Log(LOGERROR, "Opening of Teletext font {} failed", (char*)face_id);
 
   return result;
 }
@@ -1939,27 +1914,28 @@ void CTeletextDecoder::SetPosX(int column)
     m_RenderInfo.PosX += GetCurFontWidth();
 }
 
-void CTeletextDecoder::ClearBB(color_t Color)
+void CTeletextDecoder::ClearBB(UTILS::COLOR::Color Color)
 {
   SDL_memset4(m_TextureBuffer + (m_RenderInfo.Height-m_YOffset)*m_RenderInfo.Width, Color, m_RenderInfo.Width*m_RenderInfo.Height);
 }
 
-void CTeletextDecoder::ClearFB(color_t Color)
+void CTeletextDecoder::ClearFB(UTILS::COLOR::Color Color)
 {
   SDL_memset4(m_TextureBuffer + m_RenderInfo.Width*m_YOffset, Color, m_RenderInfo.Width*m_RenderInfo.Height);
 }
 
-void CTeletextDecoder::FillBorder(color_t Color)
+void CTeletextDecoder::FillBorder(UTILS::COLOR::Color Color)
 {
   FillRect(m_TextureBuffer + (m_RenderInfo.Height-m_YOffset)*m_RenderInfo.Width, m_RenderInfo.Width, 0, 25*m_RenderInfo.FontHeight, m_RenderInfo.Width, m_RenderInfo.Height-(25*m_RenderInfo.FontHeight), Color);
   FillRect(m_TextureBuffer + m_RenderInfo.Width*m_YOffset, m_RenderInfo.Width, 0, 25*m_RenderInfo.FontHeight, m_RenderInfo.Width, m_RenderInfo.Height-(25*m_RenderInfo.FontHeight), Color);
 }
 
-void CTeletextDecoder::FillRect(color_t *buffer, int xres, int x, int y, int w, int h, color_t Color)
+void CTeletextDecoder::FillRect(
+    UTILS::COLOR::Color* buffer, int xres, int x, int y, int w, int h, UTILS::COLOR::Color Color)
 {
   if (!buffer) return;
 
-  color_t *p = buffer + x + y * xres;
+  UTILS::COLOR::Color* p = buffer + x + y * xres;
 
   if (w > 0)
   {
@@ -1971,10 +1947,11 @@ void CTeletextDecoder::FillRect(color_t *buffer, int xres, int x, int y, int w, 
   }
 }
 
-void CTeletextDecoder::DrawVLine(color_t *lfb, int xres, int x, int y, int l, color_t color)
+void CTeletextDecoder::DrawVLine(
+    UTILS::COLOR::Color* lfb, int xres, int x, int y, int l, UTILS::COLOR::Color color)
 {
   if (!lfb) return;
-  color_t *p = lfb + x + y * xres;
+  UTILS::COLOR::Color* p = lfb + x + y * xres;
 
   for ( ; l > 0 ; l--)
   {
@@ -1983,18 +1960,21 @@ void CTeletextDecoder::DrawVLine(color_t *lfb, int xres, int x, int y, int l, co
   }
 }
 
-void CTeletextDecoder::DrawHLine(color_t *lfb, int xres,int x, int y, int l, color_t color)
+void CTeletextDecoder::DrawHLine(
+    UTILS::COLOR::Color* lfb, int xres, int x, int y, int l, UTILS::COLOR::Color color)
 {
   if (!lfb) return;
   if (l > 0)
     SDL_memset4(lfb + x + y * xres, color, l);
 }
 
-void CTeletextDecoder::RenderDRCS(int xres,
-                                 unsigned char *s,  /* pointer to char data, parity undecoded */
-                                 color_t *d,  /* pointer to frame buffer of top left pixel */
-                                 unsigned char *ax, /* array[0..12] of x-offsets, array[0..10] of y-offsets for each pixel */
-                                 color_t fgcolor, color_t bgcolor)
+void CTeletextDecoder::RenderDRCS(
+    int xres,
+    unsigned char* s, /* pointer to char data, parity undecoded */
+    UTILS::COLOR::Color* d, /* pointer to frame buffer of top left pixel */
+    unsigned char* ax, /* array[0..12] of x-offsets, array[0..10] of y-offsets for each pixel */
+    UTILS::COLOR::Color fgcolor,
+    UTILS::COLOR::Color bgcolor)
 {
   if (d == NULL) return;
 
@@ -2014,8 +1994,8 @@ void CTeletextDecoder::RenderDRCS(int xres,
         bit;
         bit >>= 1, x++)  /* bit mask (MSB left), column counter */
     {
-      color_t f1 = (c1 & bit) ? fgcolor : bgcolor;
-      color_t f2 = (c2 & bit) ? fgcolor : bgcolor;
+      UTILS::COLOR::Color f1 = (c1 & bit) ? fgcolor : bgcolor;
+      UTILS::COLOR::Color f2 = (c2 & bit) ? fgcolor : bgcolor;
       for (int i = 0; i < h; i++)
       {
         if (ax[x+1] > ax[x])
@@ -2030,7 +2010,15 @@ void CTeletextDecoder::RenderDRCS(int xres,
   }
 }
 
-void CTeletextDecoder::FillRectMosaicSeparated(color_t *lfb, int xres,int x, int y, int w, int h, color_t fgcolor, color_t bgcolor, int set)
+void CTeletextDecoder::FillRectMosaicSeparated(UTILS::COLOR::Color* lfb,
+                                               int xres,
+                                               int x,
+                                               int y,
+                                               int w,
+                                               int h,
+                                               UTILS::COLOR::Color fgcolor,
+                                               UTILS::COLOR::Color bgcolor,
+                                               int set)
 {
   if (!lfb) return;
   FillRect(lfb,xres,x, y, w, h, bgcolor);
@@ -2040,9 +2028,17 @@ void CTeletextDecoder::FillRectMosaicSeparated(color_t *lfb, int xres,int x, int
   }
 }
 
-void CTeletextDecoder::FillTrapez(color_t *lfb, int xres,int x0, int y0, int l0, int xoffset1, int h, int l1, color_t color)
+void CTeletextDecoder::FillTrapez(UTILS::COLOR::Color* lfb,
+                                  int xres,
+                                  int x0,
+                                  int y0,
+                                  int l0,
+                                  int xoffset1,
+                                  int h,
+                                  int l1,
+                                  UTILS::COLOR::Color color)
 {
-  color_t *p = lfb + x0 + y0 * xres;
+  UTILS::COLOR::Color* p = lfb + x0 + y0 * xres;
   int xoffset, l;
 
   for (int yoffset = 0; yoffset < h; yoffset++)
@@ -2055,10 +2051,10 @@ void CTeletextDecoder::FillTrapez(color_t *lfb, int xres,int x0, int y0, int l0,
   }
 }
 
-void CTeletextDecoder::FlipHorz(color_t *lfb, int xres,int x, int y, int w, int h)
+void CTeletextDecoder::FlipHorz(UTILS::COLOR::Color* lfb, int xres, int x, int y, int w, int h)
 {
-  color_t buf[2048];
-  color_t *p = lfb + x + y * xres;
+  UTILS::COLOR::Color buf[2048];
+  UTILS::COLOR::Color* p = lfb + x + y * xres;
   int w1,h1;
 
   for (h1 = 0 ; h1 < h ; h1++)
@@ -2072,10 +2068,10 @@ void CTeletextDecoder::FlipHorz(color_t *lfb, int xres,int x, int y, int w, int 
   }
 }
 
-void CTeletextDecoder::FlipVert(color_t *lfb, int xres,int x, int y, int w, int h)
+void CTeletextDecoder::FlipVert(UTILS::COLOR::Color* lfb, int xres, int x, int y, int w, int h)
 {
-  color_t buf[2048];
-  color_t *p = lfb + x + y * xres, *p1, *p2;
+  UTILS::COLOR::Color buf[2048];
+  UTILS::COLOR::Color *p = lfb + x + y * xres, *p1, *p2;
   int h1;
 
   for (h1 = 0 ; h1 < h/2 ; h1++)
@@ -2115,7 +2111,17 @@ int CTeletextDecoder::ShapeCoord(int param, int curfontwidth, int curFontHeight)
   }
 }
 
-void CTeletextDecoder::DrawShape(color_t *lfb, int xres, int x, int y, int shapenumber, int curfontwidth, int FontHeight, int curFontHeight, color_t fgcolor, color_t bgcolor, bool clear)
+void CTeletextDecoder::DrawShape(UTILS::COLOR::Color* lfb,
+                                 int xres,
+                                 int x,
+                                 int y,
+                                 int shapenumber,
+                                 int curfontwidth,
+                                 int FontHeight,
+                                 int curFontHeight,
+                                 UTILS::COLOR::Color fgcolor,
+                                 UTILS::COLOR::Color bgcolor,
+                                 bool clear)
 {
   if (!lfb || shapenumber < 0x20 || shapenumber > 0x7e || (shapenumber == 0x7e && clear))
     return;
@@ -2201,7 +2207,7 @@ void CTeletextDecoder::RenderCharIntern(TextRenderInfo_t* RenderInfo, int Char, 
 {
   int Row, Pitch;
   int glyph;
-  color_t bgcolor, fgcolor;
+  UTILS::COLOR::Color bgcolor, fgcolor;
   int factor, xfactor;
   unsigned char *sbitbuffer;
 
@@ -2241,7 +2247,8 @@ void CTeletextDecoder::RenderCharIntern(TextRenderInfo_t* RenderInfo, int Char, 
 
   if (!(glyph = FT_Get_Char_Index(m_Face, alphachar)))
   {
-    CLog::Log(LOGERROR, "%s:  <FT_Get_Char_Index for Char %x \"%c\" failed", __FUNCTION__, alphachar, alphachar);
+    CLog::Log(LOGERROR, "{}:  <FT_Get_Char_Index for Char {:x} \"{}\" failed", __FUNCTION__,
+              alphachar, alphachar);
 
     FillRect(m_TextureBuffer, m_RenderInfo.Width, m_RenderInfo.PosX, m_RenderInfo.PosY + yoffset, curfontwidth, factor*m_RenderInfo.FontHeight, bgcolor);
     m_RenderInfo.PosX += curfontwidth;
@@ -2296,7 +2303,7 @@ void CTeletextDecoder::RenderCharIntern(TextRenderInfo_t* RenderInfo, int Char, 
   if (national_subset_local == NAT_AR)
       m_RenderInfo.TTFShiftY = backupTTFshiftY - 2; // for arabic TTF font should be shifted up slightly
 
-  color_t *p;
+  UTILS::COLOR::Color* p;
   int f; /* running counter for zoom factor */
   int he = m_sBit->height; // sbit->height should not be altered, I guess
   Row = factor * (m_Ascender - m_sBit->top + m_RenderInfo.TTFShiftY);
@@ -2319,7 +2326,7 @@ void CTeletextDecoder::RenderCharIntern(TextRenderInfo_t* RenderInfo, int Char, 
   for (Row = he; Row; Row--) /* row counts up, but down may be a little faster :) */
   {
     int pixtodo = m_sBit->width;
-    color_t *pstart = p;
+    UTILS::COLOR::Color* pstart = p;
 
     for (int Bit = xfactor * (m_sBit->left + m_RenderInfo.TTFShiftX); Bit > 0; Bit--) /* fill left margin */
     {
@@ -2332,7 +2339,7 @@ void CTeletextDecoder::RenderCharIntern(TextRenderInfo_t* RenderInfo, int Char, 
     {
       for (int Bit = 0x80; Bit; Bit >>= 1)
       {
-        color_t color;
+        UTILS::COLOR::Color color;
 
         if (--pixtodo < 0)
           break;
@@ -2388,21 +2395,23 @@ void CTeletextDecoder::RenderCharIntern(TextRenderInfo_t* RenderInfo, int Char, 
   m_RenderInfo.TTFShiftY  = backupTTFshiftY; // restore TTFShiftY
 }
 
-int CTeletextDecoder::RenderChar(color_t *buffer,    // pointer to render buffer, min. FontHeight*2*xres
-                                int xres,                 // length of 1 line in render buffer
-                                int Char,                 // character to render
-                                int *pPosX,               // left border for rendering relative to *buffer, will be set to right border after rendering
-                                int PosY,                 // vertical position of char in *buffer
-                                TextPageAttr_t *Attribute,// Attributes of Char
-                                bool zoom,                // 1= character will be rendered in double height
-                                int curfontwidth,         // rendering width of character
-                                int curfontwidth2,        // rendering width of next character (needed for doublewidth)
-                                int FontHeight,           // height of character
-                                bool transpmode,          // 1= transparent display
-                                unsigned char *axdrcs,    // width and height of DRCS-chars
-                                int Ascender)             // Ascender of font
+int CTeletextDecoder::RenderChar(
+    UTILS::COLOR::Color* buffer, // pointer to render buffer, min. FontHeight*2*xres
+    int xres, // length of 1 line in render buffer
+    int Char, // character to render
+    int*
+        pPosX, // left border for rendering relative to *buffer, will be set to right border after rendering
+    int PosY, // vertical position of char in *buffer
+    TextPageAttr_t* Attribute, // Attributes of Char
+    bool zoom, // 1= character will be rendered in double height
+    int curfontwidth, // rendering width of character
+    int curfontwidth2, // rendering width of next character (needed for doublewidth)
+    int FontHeight, // height of character
+    bool transpmode, // 1= transparent display
+    unsigned char* axdrcs, // width and height of DRCS-chars
+    int Ascender) // Ascender of font
 {
-  color_t bgcolor, fgcolor;
+  UTILS::COLOR::Color bgcolor, fgcolor;
   int factor, xfactor;
   int national_subset_local = m_txtCache->NationalSubset;
   int ymosaic[4];
@@ -2514,7 +2523,7 @@ int CTeletextDecoder::RenderChar(color_t *buffer,    // pointer to render buffer
     }
 
     *pPosX += curfontwidth;
-    return 0;;
+    return 0;
   }
 
   if (Attribute->charset == C_G3)
@@ -2535,7 +2544,7 @@ int CTeletextDecoder::RenderChar(color_t *buffer,    // pointer to render buffer
         if (buffer)
         {
           int x,y,f,c;
-          color_t* p = buffer + *pPosX + PosY* xres;
+          UTILS::COLOR::Color* p = buffer + *pPosX + PosY * xres;
           for (y=0; y<FontHeight;y++)
           {
             for (f=0; f<factor; f++)
@@ -2566,7 +2575,10 @@ int CTeletextDecoder::RenderChar(color_t *buffer,    // pointer to render buffer
     if (pcache)
     {
       unsigned char drcs_data[23*40];
-      g_application.m_pPlayer->LoadPage((Attribute->charset & 0x10) ? m_txtCache->drcs : m_txtCache->gdrcs, Attribute->charset & 0x0f, drcs_data);
+      auto& components = CServiceBroker::GetAppComponents();
+      const auto appPlayer = components.GetComponent<CApplicationPlayer>();
+      appPlayer->LoadPage((Attribute->charset & 0x10) ? m_txtCache->drcs : m_txtCache->gdrcs,
+                          Attribute->charset & 0x0f, drcs_data);
       unsigned char *p;
       if (Char < 23*2)
         p = drcs_data + 20*Char;
@@ -2734,8 +2746,6 @@ int CTeletextDecoder::RenderChar(color_t *buffer,    // pointer to render buffer
     case 0xF2:
     case 0xF3:
     case 0xF4:
-    case 0xF5:
-    case 0xF6:
       Char = arrowtable[Char - 0xED];
       break;
     default:
@@ -2753,7 +2763,7 @@ int CTeletextDecoder::RenderChar(color_t *buffer,    // pointer to render buffer
 
 TextPageinfo_t* CTeletextDecoder::DecodePage(bool showl25,             // 1=decode Level2.5-graphics
                                             unsigned char* PageChar,  // page buffer, min. 25*40
-                                            TextPageAttr_t *PageAtrb, // attribut buffer, min 25*40
+                                            TextPageAttr_t *PageAtrb, // attribute buffer, min 25*40
                                             bool HintMode,            // 1=show hidden information
                                             bool showflof)            // 1=decode FLOF-line
 {
@@ -2772,9 +2782,11 @@ TextPageinfo_t* CTeletextDecoder::DecodePage(bool showl25,             // 1=deco
   else
     pCachedPage = m_txtCache->astCachetable[m_txtCache->Page][m_txtCache->SubPageTable[m_txtCache->Page]];
   if (!pCachedPage)  /* not cached: do nothing */
-    return NULL;
+    return nullptr;
 
-  g_application.m_pPlayer->LoadPage(m_txtCache->Page, m_txtCache->SubPage, &PageChar[40]);
+  auto& components = CServiceBroker::GetAppComponents();
+  const auto appPlayer = components.GetComponent<CApplicationPlayer>();
+  appPlayer->LoadPage(m_txtCache->Page, m_txtCache->SubPage, &PageChar[40]);
 
   memcpy(&PageChar[8], pCachedPage->p0, 24); /* header line without TimeString */
 
@@ -2860,7 +2872,7 @@ TextPageinfo_t* CTeletextDecoder::DecodePage(bool showl25,             // 1=deco
         PageAtrb[i] = atr;
 
       /* decode parity/hamming */
-      for (unsigned int i = 40; i < sizeof(PageChar); i++)
+      for (unsigned int i = 40; i < TELETEXT_PAGE_SIZE; i++)
       {
         PageAtrb[i] = atr;
         p = PageChar + i;
@@ -2905,7 +2917,7 @@ TextPageinfo_t* CTeletextDecoder::DecodePage(bool showl25,             // 1=deco
     held_mosaic  = ' ';
     dhset        = 0;
     IgnoreAtBlackBgSubst = 0;
-    mosaic_pending = esc_pending = 0; // we need to render at least one mosaic char if 'esc' is received immediatly after mosac charset switch on
+    mosaic_pending = esc_pending = 0; // we need to render at least one mosaic char if 'esc' is received immediately after mosaic charset switch on
 
     if (boxed && memchr(&PageChar[row*40], start_box, 40) == 0)
     {
@@ -3150,19 +3162,19 @@ TextPageinfo_t* CTeletextDecoder::DecodePage(bool showl25,             // 1=deco
     int o = 0;
     char bitmask ;
 
-    for (int r = 0; r < 25; r++)
+    for (unsigned char row : m_txtCache->FullRowColor)
     {
       for (int c = 0; c < 40; c++)
       {
-        bitmask = (PageAtrb[o].bg == 0x08 ? 0x08 : 0x00) | (m_txtCache->FullRowColor[r] == 0x08 ? 0x04 : 0x00) | (PageAtrb[o].boxwin <<1) | (int)boxed;
+        bitmask = (PageAtrb[o].bg == 0x08 ? 0x08 : 0x00) | (row == 0x08 ? 0x04 : 0x00) | (PageAtrb[o].boxwin <<1) | (int)boxed;
         switch (bitmask)
         {
           case 0x08:
           case 0x0b:
-            if (m_txtCache->FullRowColor[r] == 0x08)
+            if (row == 0x08)
               PageAtrb[o].bg = m_txtCache->FullScrColor;
             else
-              PageAtrb[o].bg = m_txtCache->FullRowColor[r];
+              PageAtrb[o].bg = row;
             break;
           case 0x01:
           case 0x05:
@@ -3175,15 +3187,15 @@ TextPageinfo_t* CTeletextDecoder::DecodePage(bool showl25,             // 1=deco
             PageAtrb[o].bg = TXT_ColorTransp;
             break;
         }
-        bitmask = (PageAtrb[o].fg  == 0x08 ? 0x08 : 0x00) | (m_txtCache->FullRowColor[r] == 0x08 ? 0x04 : 0x00) | (PageAtrb[o].boxwin <<1) | (int)boxed;
+        bitmask = (PageAtrb[o].fg  == 0x08 ? 0x08 : 0x00) | (row == 0x08 ? 0x04 : 0x00) | (PageAtrb[o].boxwin <<1) | (int)boxed;
         switch (bitmask)
         {
           case 0x08:
           case 0x0b:
-            if (m_txtCache->FullRowColor[r] == 0x08)
+            if (row == 0x08)
               PageAtrb[o].fg = m_txtCache->FullScrColor;
             else
-              PageAtrb[o].fg = m_txtCache->FullRowColor[r];
+              PageAtrb[o].fg = row;
             break;
           case 0x01:
           case 0x05:
@@ -3282,7 +3294,9 @@ void CTeletextDecoder::Eval_l25(unsigned char* PageChar, TextPageAttr_t *PageAtr
     if (pmot)
     {
       unsigned char pmot_data[23*40];
-      g_application.m_pPlayer->LoadPage((m_txtCache->Page & 0xf00) | 0xfe, 0, pmot_data);
+      auto& components = CServiceBroker::GetAppComponents();
+      const auto appPlayer = components.GetComponent<CApplicationPlayer>();
+      appPlayer->LoadPage((m_txtCache->Page & 0xf00) | 0xfe, 0, pmot_data);
 
       unsigned char *p  = pmot_data;      /* start of link data */
       int o             = 2 * (((m_txtCache->Page & 0xf0) >> 4) * 10 + (m_txtCache->Page & 0x0f));  /* offset of links for current page */
@@ -3403,16 +3417,16 @@ void CTeletextDecoder::Eval_l25(unsigned char* PageChar, TextPageAttr_t *PageAtr
 
     {
       int o = 0;
-      for (int r = 0; r < 25; r++)
+      for (unsigned char row : m_txtCache->FullRowColor)
       {
         for (int c = 0; c < 40; c++)
         {
           if (BlackBgSubst && PageAtrb[o].bg == TXT_ColorBlack && !(PageAtrb[o].IgnoreAtBlackBgSubst))
           {
-            if (m_txtCache->FullRowColor[r] == 0x08)
+            if (row == 0x08)
               PageAtrb[o].bg = m_txtCache->FullScrColor;
             else
-              PageAtrb[o].bg = m_txtCache->FullRowColor[r];
+              PageAtrb[o].bg = row;
           }
           o++;
         }
@@ -3488,7 +3502,9 @@ void CTeletextDecoder::Eval_NumberedObject(int p, int s, int packet, int triplet
     return;
 
   unsigned char pagedata[23*40];
-  g_application.m_pPlayer->LoadPage(p, s,pagedata);
+  auto& components = CServiceBroker::GetAppComponents();
+  const auto appPlayer = components.GetComponent<CApplicationPlayer>();
+  appPlayer->LoadPage(p, s, pagedata);
 
   int idata = CDVDTeletextTools::deh24(pagedata + 40*(packet-1) + 1 + 3*triplet);
   int iONr;
@@ -3989,7 +4005,7 @@ int CTeletextDecoder::NextHex(int i) /* return next existing non-decimal page nu
   return i;
 }
 
-void CTeletextDecoder::SetColors(unsigned short *pcolormap, int offset, int number)
+void CTeletextDecoder::SetColors(const unsigned short *pcolormap, int offset, int number)
 {
   int j = offset; /* index in global color table */
 
@@ -4015,7 +4031,7 @@ void CTeletextDecoder::SetColors(unsigned short *pcolormap, int offset, int numb
   }
 }
 
-color_t CTeletextDecoder::GetColorRGB(enumTeletextColor ttc)
+UTILS::COLOR::Color CTeletextDecoder::GetColorRGB(enumTeletextColor ttc)
 {
   switch (ttc)
   {
@@ -4033,10 +4049,8 @@ color_t CTeletextDecoder::GetColorRGB(enumTeletextColor ttc)
 
  /* Get colors for CLUTs 2+3 */
   int index = (int)ttc;
-  color_t color = (m_RenderInfo.tr0[index] << 24) |
-                  (m_RenderInfo.bl0[index] << 16) |
-                  (m_RenderInfo.gn0[index] << 8) |
-                   m_RenderInfo.rd0[index];
+  UTILS::COLOR::Color color = (m_RenderInfo.tr0[index] << 24) | (m_RenderInfo.bl0[index] << 16) |
+                              (m_RenderInfo.gn0[index] << 8) | m_RenderInfo.rd0[index];
   return color;
 }
 

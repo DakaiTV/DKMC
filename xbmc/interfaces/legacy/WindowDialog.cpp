@@ -1,37 +1,33 @@
- /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+/*
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
 #include "WindowDialog.h"
 
+#include "ServiceBroker.h"
+#include "WindowInterceptor.h"
+#include "guilib/GUIComponent.h"
 #include "guilib/GUIWindow.h"
 #include "guilib/GUIWindowManager.h"
+
+#include <mutex>
 
 namespace XBMCAddon
 {
   namespace xbmcgui
   {
-    WindowDialog::WindowDialog() throw(WindowException) :
+    WindowDialog::WindowDialog() :
       Window(true), WindowDialogMixin(this)
     {
-      CSingleLock lock(g_graphicsContext);
-      setWindow(new Interceptor<CGUIWindow>("CGUIWindow",this,getNextAvailalbeWindowId()));
+      std::unique_lock<CCriticalSection> lock(CServiceBroker::GetWinSystem()->GetGfxContext());
+      InterceptorBase* interceptor = new Interceptor<CGUIWindow>("CGUIWindow", this, getNextAvailableWindowId());
+      // set the render order to the dialog's default because this dialog is mapped to CGUIWindow instead of CGUIDialog
+      interceptor->SetRenderOrder(RENDER_ORDER_DIALOG);
+      setWindow(interceptor);
     }
 
     WindowDialog::~WindowDialog() { deallocating(); }
@@ -40,7 +36,8 @@ namespace XBMCAddon
     {
 #ifdef ENABLE_XBMC_TRACE_API
       XBMC_TRACE;
-      CLog::Log(LOGDEBUG,"%sNEWADDON WindowDialog::OnMessage Message %d", _tg.getSpaces(),message.GetMessage());
+      CLog::Log(LOGDEBUG, "{}NEWADDON WindowDialog::OnMessage Message {}", _tg.getSpaces(),
+                message.GetMessage());
 #endif
 
       switch(message.GetMessage())
@@ -71,7 +68,7 @@ namespace XBMCAddon
 
     void WindowDialog::OnDeinitWindow(int nextWindowID)
     {
-      g_windowManager.RemoveDialog(iWindowId);
+      CServiceBroker::GetGUI()->GetWindowManager().RemoveDialog(iWindowId);
       Window::OnDeinitWindow(nextWindowID);
     }
 

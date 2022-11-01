@@ -1,33 +1,34 @@
 include ../../Makefile.include
-DEPS= ../../Makefile.include Makefile
+DEPS = ../../Makefile.include Makefile ../../download-files.include \
+                              add-dl-as-private-lib.patch \
+                              01-macos-clang-accel.patch 03-support-correct-cisdigit.patch
 
 # lib name, version
 LIBNAME=gnutls
-VERSION=3.1.14
+VERSION=3.6.16
 SOURCE=$(LIBNAME)-$(VERSION)
 ARCHIVE=$(SOURCE).tar.xz
-
-ifeq (darwin, $(findstring darwin, $(HOST)))
-# darwins tar doesn't know about xz - so we need our native version of tar here
-ARCHIVE_TOOL=$(ARCHIVE_TOOL_NATIVE)
-endif
+SHA512=72c78d7fcb024393c1d15f2a1856608ae4460ba43cc5bbbb4c29b80508cae6cb822df4638029de2363437d110187e0a3cc19a7288c3b2f44b2f648399a028438
+include ../../download-files.include
 
 # configuration settings
-CONFIGURE=cp -f $(CONFIG_SUB) $(CONFIG_GUESS) .; \
-          ./configure --prefix=$(PREFIX) --disable-shared --without-p11-kit --disable-nls
+CONFIGURE=./configure --prefix=$(PREFIX) --disable-shared --without-p11-kit --disable-nls --with-included-unistring \
+                      --with-included-libtasn1 --enable-local-libopts --disable-doc --disable-tests --disable-guile \
+                      --disable-tools $(CONFIGURE_OPTIONS)
 
-LIBDYLIB=$(PLATFORM)/src/.libs/$(LIBNAME).a
-
-CLEAN_FILES=$(ARCHIVE) $(PLATFORM)
+LIBDYLIB=$(PLATFORM)/lib/.libs/lib$(LIBNAME).a
 
 all: .installed-$(PLATFORM)
 
-$(TARBALLS_LOCATION)/$(ARCHIVE):
-	cd $(TARBALLS_LOCATION); $(RETRIEVE_TOOL) $(RETRIEVE_TOOL_FLAGS) $(BASE_URL)/$(ARCHIVE)
-
-$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE) $(DEPS)
+$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE).$(HASH_TYPE) $(DEPS)
 	rm -rf $(PLATFORM)/*; mkdir -p $(PLATFORM)
 	cd $(PLATFORM); $(ARCHIVE_TOOL) $(ARCHIVE_TOOL_FLAGS) $(TARBALLS_LOCATION)/$(ARCHIVE)
+	cd $(PLATFORM); patch -p1 -i ../add-dl-as-private-lib.patch
+ifeq ($(findstring apple-darwin, $(HOST)), apple-darwin)
+	cd $(PLATFORM); patch -p1 -i ../01-macos-clang-accel.patch
+endif
+	cd $(PLATFORM); patch -p1 -i ../03-support-correct-cisdigit.patch
+	cd $(PLATFORM); $(AUTORECONF) -vif
 	cd $(PLATFORM); $(CONFIGURE)
 
 $(LIBDYLIB): $(PLATFORM)

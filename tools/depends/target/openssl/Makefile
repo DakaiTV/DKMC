@@ -1,65 +1,75 @@
 include ../../Makefile.include
-DEPS= ../../Makefile.include Makefile
+DEPS = ../../Makefile.include Makefile 001-android-getauxvalrevert.patch 16-kodi.conf ../../download-files.include
 
 # lib name, version
 LIBNAME=openssl
-VERSION=0.9.8r
+VERSION=1.1.1n
 SOURCE=$(LIBNAME)-$(VERSION)
 ARCHIVE=$(SOURCE).tar.gz
+SHA512=1937796736613dcf4105a54e42ecb61f95a1cea74677156f9459aea0f2c95159359e766089632bf364ee6b0d28d661eb9957bce8fecc9d2436378d8d79e8d0a4
+include ../../download-files.include
 
 # configuration settings
-CONFIGURE=MACHINE=$(PLATFORM) ./config shared zlib --openssldir=$(PREFIX) --with-zlib-include=$(PREFIX)/include --with-zlib-lib=$(PREFIX)/lib no-asm
-ifeq ($(OS), android)
-  CONFIGURE=./Configure shared zlib --openssldir=$(PREFIX) --with-zlib-include=$(PREFIX)/include --with-zlib-lib=$(PREFIX)/lib no-asm linux-generic32
-endif
-ifeq ($(OS), ios)
-  # No darwin-arm-cc so use darwin-i386-cc and patch files after configure
-  CONFIGURE=./Configure darwin-i386-cc zlib no-asm no-krb5 shared --openssldir=$(PREFIX)
-endif
-ifeq ($(OS), osx)
-  ifeq ($(CPU),x86_64)
-    CONFIGURE=./Configure darwin64-$(CPU)-cc zlib no-asm no-krb5 shared --openssldir=$(PREFIX)
-  else
-    CONFIGURE=./Configure darwin-$(CPU)-cc zlib no-asm no-krb5 shared --openssldir=$(PREFIX)
+ifeq ($(OS), linux)
+  # Need to export our vars to override "default" conf data of openssl
+  TARGETOPT=--with-zlib-include=$(PREFIX)/include --with-zlib-lib=$(PREFIX)/lib
+  CONFIGURE=MACHINE=$(PLATFORM) ./config no-shared zlib no-tests no-asm $(TARGETOPT) --prefix=$(PREFIX)
+else
+  ifeq ($(OS), android)
+    TARGETOPT=--with-zlib-include=$(PREFIX)/include --with-zlib-lib=$(PREFIX)/lib -D__ANDROID_API__=$(NDK_LEVEL)
+    # openssl 1.x incorrectly uses ANDROID_NDK_HOME, when openssl 3.x.x comes in use ANDROID_NDK_ROOT
+    # see https://github.com/openssl/openssl/pull/11206
+    export ANDROID_NDK_HOME=$(NDKROOT)
+    export PATH:=$(TOOLCHAIN)/bin:$(PATH)
+    ifeq ($(MESON_CPU), aarch64)
+      OPENSSLPLATFORM=android-arm64
+    else
+      OPENSSLPLATFORM=android-$(MESON_CPU)
+    endif
   endif
+  ifeq ($(OS), darwin_embedded)
+    export SDKROOT CFLAGS
+    OPENSSLPLATFORM=kodi-$(TARGET_PLATFORM)-$(CPU)
+    ifeq ($(TARGET_PLATFORM),appletvos)
+      # Need to add "no-async" to avoid "'setcontext' is unavailable: not available on tvOS" error
+      TARGETOPT=no-async
+    endif
+  endif
+  ifeq ($(OS), osx)
+    OPENSSLPLATFORM=kodi-darwin64-$(CPU)
+    ASMFLAG=no-asm
+  endif
+
+  CONFIGURE=./Configure $(OPENSSLPLATFORM) no-shared $(ASMFLAG) zlib no-tests $(TARGETOPT) --prefix=$(PREFIX)
 endif
+
+export CC CXX AR RANLIB
+export CFLAGS CXXFLAGS CPPFLAGS LDFLAGS
+
 LIBDYLIB=$(PLATFORM)/libssl.a
-CLEAN_FILES=$(ARCHIVE) $(PLATFORM)
 
 all: .installed-$(PLATFORM)
 
-$(TARBALLS_LOCATION)/$(ARCHIVE):
-	cd $(TARBALLS_LOCATION); $(RETRIEVE_TOOL) $(RETRIEVE_TOOL_FLAGS) $(BASE_URL)/$(ARCHIVE)
 
-$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE) $(DEPS)
+$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE).$(HASH_TYPE) $(DEPS)
 	rm -rf $(PLATFORM); mkdir -p $(PLATFORM)
 	cd $(PLATFORM); $(ARCHIVE_TOOL) $(ARCHIVE_TOOL_FLAGS) $(TARBALLS_LOCATION)/$(ARCHIVE)
-	#when compiled on darwin it just won't realise that we do crosscompiling
-	#so it would stick in -arch i386 or -arch x86_64 into the cflags
-	#that would break the cross compile so we have to get rid of these
-	cd $(PLATFORM); patch -p1 < ../libz.patch
-	cd $(PLATFORM); patch -p1 < ../fix_alert_handling.patch
-	cd $(PLATFORM); CFLAGS="$(CFLAGS)" CC=$(CC) RANLIB=$(RANLIB) $(CONFIGURE)
-	if test "$(OS)" = "osx"; then \
-		sed -ie "s|CC= /usr/bin/gcc-4.2|CC= $(CC)|" "$(PLATFORM)/Makefile"; \
-		sed -ie "s|CFLAG= |CFLAG=$(CFLAGS) |" "$(PLATFORM)/Makefile"; \
+ifeq ($(OS),android)
+	cd $(PLATFORM); patch -p1 -i ../001-android-getauxvalrevert.patch
+endif
+	cd $(PLATFORM); cp ../16-kodi.conf ./Configurations/
+	cd $(PLATFORM); $(CONFIGURE)
+	if test "$(OS)" = "darwin_embedded"; then \
+		sed -E -ie "s|static volatile sig_atomic_t intr_signal;|static volatile intr_signal;|" "$(PLATFORM)/crypto/ui/ui_openssl.c"; \
 	fi
-	if test "$(OS)" = "ios"; then \
-		sed -ie "s|CFLAG= |CFLAG=$(CFLAGS) |" "$(PLATFORM)/Makefile"; \
-		sed -ie "s|-arch i386|-arch armv7|" "$(PLATFORM)/Makefile"; \
-		sed -ie "s|static volatile sig_atomic_t intr_signal;|static volatile intr_signal;|" "$(PLATFORM)/crypto/ui/ui_openssl.c"; \
-	fi
+	sed -ie "s|PROGRAMS=|PROGRAMS=#|" "$(PLATFORM)/Makefile";
 
 $(LIBDYLIB): $(PLATFORM)
-	$(MAKE) -j 1 -C $(PLATFORM)
+	$(MAKE) -C $(PLATFORM)
 	touch $@
 
 .installed-$(PLATFORM): $(LIBDYLIB)
 	$(MAKE) -C $(PLATFORM) install_sw
-	rm -f $(PREFIX)/lib/libcrypto.so*
-	rm -f $(PREFIX)/lib/libssl.so*
-	rm -rf $(PREFIX)/lib/libcrypto.*dylib*
-	rm -rf $(PREFIX)/lib/libssl.*dylib*
 	touch $@
 
 clean:

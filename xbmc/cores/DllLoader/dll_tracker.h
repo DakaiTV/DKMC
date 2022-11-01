@@ -1,30 +1,19 @@
-#ifndef _DLL_TRACKER_H_
-#define _DLL_TRACKER_H_
-
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
+
+#pragma once
 
 #include "threads/CriticalSection.h"
 #include "PlatformDefs.h"
 #ifdef TARGET_WINDOWS
-#include "system.h" // for SOCKET
+#if defined(TARGET_WINDOWS_STORE)
+#include <WinSock2.h>
+#endif
 #endif
 
 #include <list>
@@ -114,19 +103,19 @@ void tracker_dll_add(DllLoader* pDll);
 void tracker_dll_free(DllLoader* pDll);
 
 // sets the dll base address and size
-void tracker_dll_set_addr(DllLoader* pDll, uintptr_t min, uintptr_t max);
+void tracker_dll_set_addr(const DllLoader* pDll, uintptr_t min, uintptr_t max);
 
-// returns the name from the dll that contains this addres or "" if not found
+// returns the name from the dll that contains this address or "" if not found
 const char* tracker_getdllname(uintptr_t caller);
 
 // returns a function pointer if there is one available for it, or NULL if not ofund
 void* tracker_dll_get_function(DllLoader* pDll, char* sFunctionName);
 
-DllTrackInfo* tracker_get_dlltrackinfo_byobject(DllLoader* pDll);
+DllTrackInfo* tracker_get_dlltrackinfo_byobject(const DllLoader* pDll);
 
 DllTrackInfo* tracker_get_dlltrackinfo(uintptr_t caller);
 
-void tracker_dll_data_track(DllLoader* pDll, uintptr_t addr);
+void tracker_dll_data_track(const DllLoader* pDll, uintptr_t addr);
 
 #ifdef TARGET_POSIX
 #define _ReturnAddress() __builtin_return_address(0)
@@ -141,4 +130,3 @@ extern "C" void * _ReturnAddress(void);
 #pragma intrinsic(_ReturnAddress)
 #endif
 
-#endif // _DLL_TRACKER_H_

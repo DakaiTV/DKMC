@@ -1,31 +1,30 @@
-#pragma once
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
+#pragma once
+
 #include "IDirectory.h"
-#include "addons/AddonManager.h"
 
+#include <memory>
+#include <vector>
+
+class CFileItem;
+class CFileItemList;
 class CURL;
-typedef boost::shared_ptr<CFileItem> CFileItemPtr;
+typedef std::shared_ptr<CFileItem> CFileItemPtr;
 
-namespace XFILE 
+namespace ADDON
+{
+class IAddon;
+using VECADDONS = std::vector<std::shared_ptr<IAddon>>;
+} // namespace ADDON
+
+namespace XFILE
 {
 
   /*!
@@ -36,11 +35,11 @@ namespace XFILE
   {
   public:
     CAddonsDirectory(void);
-    virtual ~CAddonsDirectory(void);
-    virtual bool GetDirectory(const CURL& url, CFileItemList &items);
-    virtual bool Create(const CURL& url) { return true; }
-    virtual bool Exists(const CURL& url) { return true; }
-    virtual bool AllowAll() const { return true; }
+    ~CAddonsDirectory(void) override;
+    bool GetDirectory(const CURL& url, CFileItemList &items) override;
+    bool Create(const CURL& url) override { return true; }
+    bool Exists(const CURL& url) override { return true; }
+    bool AllowAll() const override { return true; }
 
     /*! \brief Fetch script and plugin addons of a given content type
      \param content the content type to fetch
@@ -56,13 +55,18 @@ namespace XFILE
      */
     static bool GetScriptsAndPlugins(const std::string &content, CFileItemList &items);
 
-    /*! \brief return the "Get More..." link item for the current content type
-     \param content the content type for the link item
-     \return a CFileItemPtr to a new item for the link.
-     */
-    static CFileItemPtr GetMoreItem(const std::string &content);
+    static void GenerateAddonListing(const CURL& path,
+                                     const ADDON::VECADDONS& addons,
+                                     CFileItemList& items,
+                                     const std::string& label);
+    static CFileItemPtr FileItemFromAddon(const std::shared_ptr<ADDON::IAddon>& addon,
+                                          const std::string& path,
+                                          bool folder = false);
 
-    static void GenerateListing(CURL &path, ADDON::VECADDONS& addons, CFileItemList &items, bool reposAsFolders = true);
-    static CFileItemPtr FileItemFromAddon(const ADDON::AddonPtr &addon, const std::string &basePath, bool folder = false);
+    /*! \brief Returns true if `path` is a path or subpath of the repository directory, otherwise false */
+    static bool IsRepoDirectory(const CURL& path);
+
+  private:
+    bool GetSearchResults(const CURL& path, CFileItemList &items);
   };
 }

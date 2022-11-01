@@ -1,77 +1,70 @@
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
-#include "system.h"
 #include "GUIWindowSystemInfo.h"
-#include "GUIInfoManager.h"
-#include "guilib/GUIWindowManager.h"
-#include "guilib/WindowIDs.h"
-#include "guilib/LocalizeStrings.h"
-#include "pvr/PVRManager.h"
-#ifdef HAS_SYSINFO
-#include "utils/SystemInfo.h"
-#endif
-#include "utils/StringUtils.h"
-#include "storage/MediaManager.h"
 
+#include "GUIInfoManager.h"
+#include "ServiceBroker.h"
+#include "guilib/GUIComponent.h"
+#include "guilib/GUIMessage.h"
+#include "guilib/LocalizeStrings.h"
+#include "guilib/WindowIDs.h"
+#include "guilib/guiinfo/GUIInfoLabels.h"
+#include "pvr/PVRManager.h"
+#include "storage/MediaManager.h"
+#include "utils/CPUInfo.h"
+#include "utils/StringUtils.h"
+#include "utils/SystemInfo.h"
+
+#define CONTROL_TB_POLICY   30
 #define CONTROL_BT_STORAGE  94
 #define CONTROL_BT_DEFAULT  95
 #define CONTROL_BT_NETWORK  96
 #define CONTROL_BT_VIDEO    97
 #define CONTROL_BT_HARDWARE 98
 #define CONTROL_BT_PVR      99
+#define CONTROL_BT_POLICY   100
 
 #define CONTROL_START       CONTROL_BT_STORAGE
-#define CONTROL_END         CONTROL_BT_PVR
+#define CONTROL_END         CONTROL_BT_POLICY
 
-CGUIWindowSystemInfo::CGUIWindowSystemInfo(void)
-:CGUIWindow(WINDOW_SYSTEM_INFORMATION, "SettingsSystemInfo.xml")
+CGUIWindowSystemInfo::CGUIWindowSystemInfo(void) :
+    CGUIWindow(WINDOW_SYSTEM_INFORMATION, "SettingsSystemInfo.xml")
 {
   m_section = CONTROL_BT_DEFAULT;
   m_loadType = KEEP_IN_MEMORY;
 }
-CGUIWindowSystemInfo::~CGUIWindowSystemInfo(void)
-{
-}
+
+CGUIWindowSystemInfo::~CGUIWindowSystemInfo(void) = default;
+
 bool CGUIWindowSystemInfo::OnMessage(CGUIMessage& message)
 {
-  switch ( message.GetMessage() )
+  switch (message.GetMessage())
   {
-  case GUI_MSG_WINDOW_INIT:
+    case GUI_MSG_WINDOW_INIT:
     {
       CGUIWindow::OnMessage(message);
-      SET_CONTROL_LABEL(52, CSysInfo::GetAppName() + " " + g_infoManager.GetLabel(SYSTEM_BUILD_VERSION).c_str() +
-                            " (Compiled: " + g_infoManager.GetLabel(SYSTEM_BUILD_DATE).c_str() +")");
-      CONTROL_ENABLE_ON_CONDITION(CONTROL_BT_PVR,
-                                  PVR::CPVRManager::Get().IsStarted());
+      SET_CONTROL_LABEL(52, CSysInfo::GetAppName() + " " + CSysInfo::GetVersion());
+      SET_CONTROL_LABEL(53, CSysInfo::GetBuildDate());
+      CONTROL_ENABLE_ON_CONDITION(CONTROL_BT_PVR, CServiceBroker::GetPVRManager().IsStarted());
       return true;
     }
     break;
-  case GUI_MSG_WINDOW_DEINIT:
+
+    case GUI_MSG_WINDOW_DEINIT:
     {
       CGUIWindow::OnMessage(message);
       m_diskUsage.clear();
       return true;
     }
     break;
-  case GUI_MSG_FOCUSED:
+
+    case GUI_MSG_FOCUSED:
     {
       CGUIWindow::OnMessage(message);
       int focusedControl = GetFocusedControlID();
@@ -79,6 +72,14 @@ bool CGUIWindowSystemInfo::OnMessage(CGUIMessage& message)
       {
         ResetLabels();
         m_section = focusedControl;
+      }
+      if (m_section >= CONTROL_BT_STORAGE && m_section <= CONTROL_BT_PVR)
+        SET_CONTROL_HIDDEN(CONTROL_TB_POLICY);
+      else if (m_section == CONTROL_BT_POLICY)
+      {
+        SET_CONTROL_LABEL(CONTROL_TB_POLICY, CServiceBroker::GetGUI()->GetInfoManager().GetLabel(
+                                                 SYSTEM_PRIVACY_POLICY, INFO::DEFAULT_CONTEXT));
+        SET_CONTROL_VISIBLE(CONTROL_TB_POLICY);
       }
       return true;
     }
@@ -92,112 +93,168 @@ void CGUIWindowSystemInfo::FrameMove()
   int i = 2;
   if (m_section == CONTROL_BT_DEFAULT)
   {
-    SET_CONTROL_LABEL(40,g_localizeStrings.Get(20154));
-    SetControlLabel(i++, "%s: %s", 158, SYSTEM_FREE_MEMORY);
-    SetControlLabel(i++, "%s: %s", 150, NETWORK_IP_ADDRESS);
-    SetControlLabel(i++, "%s %s", 13287, SYSTEM_SCREEN_RESOLUTION);
-#ifdef HAS_SYSINFO
-    SetControlLabel(i++, "%s %s", 13283, SYSTEM_OS_VERSION_INFO);
-#endif
-    SetControlLabel(i++, "%s: %s", 12390, SYSTEM_UPTIME);
-    SetControlLabel(i++, "%s: %s", 12394, SYSTEM_TOTALUPTIME);
-    SetControlLabel(i++, "%s: %s", 12395, SYSTEM_BATTERY_LEVEL);
+    SET_CONTROL_LABEL(40, g_localizeStrings.Get(20154));
+    SetControlLabel(i++, "{}: {}", 158, SYSTEM_FREE_MEMORY);
+    SetControlLabel(i++, "{}: {}", 150, NETWORK_IP_ADDRESS);
+    SetControlLabel(i++, "{} {}", 13287, SYSTEM_SCREEN_RESOLUTION);
+    SetControlLabel(i++, "{} {}", 13283, SYSTEM_OS_VERSION_INFO);
+    SetControlLabel(i++, "{}: {}", 12390, SYSTEM_UPTIME);
+    SetControlLabel(i++, "{}: {}", 12394, SYSTEM_TOTALUPTIME);
+    SetControlLabel(i++, "{}: {}", 12395, SYSTEM_BATTERY_LEVEL);
   }
+
   else if (m_section == CONTROL_BT_STORAGE)
   {
-    SET_CONTROL_LABEL(40,g_localizeStrings.Get(20155));
-    if (m_diskUsage.size() == 0)
-      m_diskUsage = g_mediaManager.GetDiskUsage();
+    SET_CONTROL_LABEL(40, g_localizeStrings.Get(20155));
+    if (m_diskUsage.empty())
+      m_diskUsage = CServiceBroker::GetMediaManager().GetDiskUsage();
 
     for (size_t d = 0; d < m_diskUsage.size(); d++)
     {
       SET_CONTROL_LABEL(i++, m_diskUsage[d]);
     }
   }
+
   else if (m_section == CONTROL_BT_NETWORK)
   {
     SET_CONTROL_LABEL(40,g_localizeStrings.Get(20158));
-#ifdef HAS_SYSINFO
-    SET_CONTROL_LABEL(i++, g_infoManager.GetLabel(NETWORK_LINK_STATE));
-    SetControlLabel(i++, "%s: %s", 149, NETWORK_MAC_ADDRESS);
-#endif
-    SetControlLabel(i++, "%s: %s", 150, NETWORK_IP_ADDRESS);
-    SetControlLabel(i++, "%s: %s", 13159, NETWORK_SUBNET_MASK);
-    SetControlLabel(i++, "%s: %s", 13160, NETWORK_GATEWAY_ADDRESS);
-    SetControlLabel(i++, "%s: %s", 13161, NETWORK_DNS1_ADDRESS);
-    SetControlLabel(i++, "%s: %s", 20307, NETWORK_DNS2_ADDRESS);
-    SetControlLabel(i++, "%s %s", 13295, SYSTEM_INTERNET_STATE);
+    SET_CONTROL_LABEL(i++, CServiceBroker::GetGUI()->GetInfoManager().GetLabel(
+                               NETWORK_LINK_STATE, INFO::DEFAULT_CONTEXT));
+    SetControlLabel(i++, "{}: {}", 149, NETWORK_MAC_ADDRESS);
+    SetControlLabel(i++, "{}: {}", 150, NETWORK_IP_ADDRESS);
+    SetControlLabel(i++, "{}: {}", 13159, NETWORK_SUBNET_MASK);
+    SetControlLabel(i++, "{}: {}", 13160, NETWORK_GATEWAY_ADDRESS);
+    SetControlLabel(i++, "{}: {}", 13161, NETWORK_DNS1_ADDRESS);
+    SetControlLabel(i++, "{}: {}", 20307, NETWORK_DNS2_ADDRESS);
+    SetControlLabel(i++, "{} {}", 13295, SYSTEM_INTERNET_STATE);
   }
+
   else if (m_section == CONTROL_BT_VIDEO)
   {
     SET_CONTROL_LABEL(40,g_localizeStrings.Get(20159));
-#ifdef HAS_SYSINFO
-    SET_CONTROL_LABEL(i++,g_infoManager.GetLabel(SYSTEM_VIDEO_ENCODER_INFO));
-    SetControlLabel(i++, "%s %s", 13287, SYSTEM_SCREEN_RESOLUTION);
-#endif
-#ifndef HAS_DX
-    SetControlLabel(i++, "%s %s", 22007, SYSTEM_RENDER_VENDOR);
-    SetControlLabel(i++, "%s %s", 22009, SYSTEM_RENDER_VERSION);
+    SET_CONTROL_LABEL(i++, CServiceBroker::GetGUI()->GetInfoManager().GetLabel(
+                               SYSTEM_VIDEO_ENCODER_INFO, INFO::DEFAULT_CONTEXT));
+    SetControlLabel(i++, "{} {}", 13287, SYSTEM_SCREEN_RESOLUTION);
+
+    auto renderingSystem = CServiceBroker::GetRenderSystem();
+    if (renderingSystem)
+    {
+      static std::string vendor = renderingSystem->GetRenderVendor();
+      if (!vendor.empty())
+        SET_CONTROL_LABEL(i++, StringUtils::Format("{} {}", g_localizeStrings.Get(22007), vendor));
+
+#if defined(HAS_DX)
+      int renderVersionLabel = 22024;
 #else
-    SetControlLabel(i++, "%s %s", 22023, SYSTEM_RENDER_VENDOR);
-    SetControlLabel(i++, "%s %s", 22024, SYSTEM_RENDER_VERSION);
+      int renderVersionLabel = 22009;
 #endif
-#ifndef __arm__
-    SetControlLabel(i++, "%s %s", 22010, SYSTEM_GPU_TEMPERATURE);
-#endif
+      static std::string version = renderingSystem->GetRenderVersionString();
+      if (!version.empty())
+        SET_CONTROL_LABEL(
+            i++, StringUtils::Format("{} {}", g_localizeStrings.Get(renderVersionLabel), version));
+    }
+
+    auto windowSystem = CServiceBroker::GetWinSystem();
+    if (windowSystem)
+    {
+      static std::string platform = windowSystem->GetName();
+      if (platform != "platform default")
+        SET_CONTROL_LABEL(i++,
+                          StringUtils::Format("{} {}", g_localizeStrings.Get(39153), platform));
+    }
+
+    SetControlLabel(i++, "{} {}", 22010, SYSTEM_GPU_TEMPERATURE);
+
+    const std::string hdrTypes = CServiceBroker::GetGUI()->GetInfoManager().GetLabel(
+        SYSTEM_SUPPORTED_HDR_TYPES, INFO::DEFAULT_CONTEXT);
+    SET_CONTROL_LABEL(
+        i++, StringUtils::Format("{}: {}", g_localizeStrings.Get(39174),
+                                 hdrTypes.empty() ? g_localizeStrings.Get(231) : hdrTypes));
   }
+
   else if (m_section == CONTROL_BT_HARDWARE)
   {
     SET_CONTROL_LABEL(40,g_localizeStrings.Get(20160));
-#ifdef HAS_SYSINFO
-    SET_CONTROL_LABEL(i++, g_sysinfo.GetCPUModel());
-#if defined(__arm__) && defined(TARGET_LINUX)
-    SET_CONTROL_LABEL(i++, g_sysinfo.GetCPUBogoMips());
-    SET_CONTROL_LABEL(i++, g_sysinfo.GetCPUHardware());
-    SET_CONTROL_LABEL(i++, g_sysinfo.GetCPURevision());
-    SET_CONTROL_LABEL(i++, g_sysinfo.GetCPUSerial());
-#endif
-    SetControlLabel(i++, "%s %s", 22011, SYSTEM_CPU_TEMPERATURE);
-#if !defined(__arm__) || defined(TARGET_RASPBERRY_PI)
-    SetControlLabel(i++, "%s %s", 13284, SYSTEM_CPUFREQUENCY);
-#endif
-#endif
-#if !(defined(__arm__) && defined(TARGET_LINUX))
-    SetControlLabel(i++, "%s %s", 13271, SYSTEM_CPU_USAGE);
-#endif
-    i++; // empty line
-    SetControlLabel(i++, "%s: %s", 22012, SYSTEM_TOTAL_MEMORY);
-    SetControlLabel(i++, "%s: %s", 158, SYSTEM_FREE_MEMORY);
+
+    auto cpuInfo = CServiceBroker::GetCPUInfo();
+    if (cpuInfo)
+    {
+      static std::string model = cpuInfo->GetCPUModel();
+      if (!model.empty())
+        SET_CONTROL_LABEL(i++, "CPU: " + model);
+
+      static std::string mips = cpuInfo->GetCPUBogoMips();
+      if (!mips.empty())
+        SET_CONTROL_LABEL(i++, "BogoMips: " + mips);
+
+      static std::string soc = cpuInfo->GetCPUSoC();
+      if (!soc.empty())
+        SET_CONTROL_LABEL(i++, "SoC: " + soc);
+
+      static std::string hardware = cpuInfo->GetCPUHardware();
+      if (!hardware.empty())
+        SET_CONTROL_LABEL(i++, "Hardware: " + hardware);
+
+      static std::string revision = cpuInfo->GetCPURevision();
+      if (!revision.empty())
+        SET_CONTROL_LABEL(i++, "Revision: " + revision);
+
+      static std::string serial = cpuInfo->GetCPUSerial();
+      if (!serial.empty())
+        SET_CONTROL_LABEL(i++, "Serial: " + serial);
+
+      // temperature can't really be conditional because of localization units
+      SetControlLabel(i++, "{} {}", 22011, SYSTEM_CPU_TEMPERATURE);
+
+      // we can check if the cpufrequency is not 0 (default if not implemented)
+      // but we have to call through CGUIInfoManager -> CSystemGUIInfo -> CSysInfo
+      // to limit the frequency of updates
+      static float cpuFreq = cpuInfo->GetCPUFrequency();
+      if (cpuFreq > 0)
+        SetControlLabel(i++, "{} {}", 13284, SYSTEM_CPUFREQUENCY);
+    }
   }
-  else if(m_section == CONTROL_BT_PVR)
+
+  else if (m_section == CONTROL_BT_PVR)
   {
-    SET_CONTROL_LABEL(40,g_localizeStrings.Get(19166));
+    SET_CONTROL_LABEL(40, g_localizeStrings.Get(19166));
     int i = 2;
 
-    SetControlLabel(i++, "%s: %s", 19120, PVR_BACKEND_NUMBER);
-    i++; // empty line
-    SetControlLabel(i++, "%s: %s", 19012, PVR_BACKEND_NAME);
-    SetControlLabel(i++, "%s: %s", 19114, PVR_BACKEND_VERSION);
-    SetControlLabel(i++, "%s: %s", 19115, PVR_BACKEND_HOST);
-    SetControlLabel(i++, "%s: %s", 19116, PVR_BACKEND_DISKSPACE);
-    SetControlLabel(i++, "%s: %s", 19019, PVR_BACKEND_CHANNELS);
-    SetControlLabel(i++, "%s: %s", 19163, PVR_BACKEND_RECORDINGS);
-    SetControlLabel(i++, "%s: %s", 19025, PVR_BACKEND_TIMERS);
+    SetControlLabel(i++, "{}: {}", 19120, PVR_BACKEND_NUMBER);
+    i++;  // empty line
+    SetControlLabel(i++, "{}: {}", 19012, PVR_BACKEND_NAME);
+    SetControlLabel(i++, "{}: {}", 19114, PVR_BACKEND_VERSION);
+    SetControlLabel(i++, "{}: {}", 19115, PVR_BACKEND_HOST);
+    SetControlLabel(i++, "{}: {}", 19116, PVR_BACKEND_DISKSPACE);
+    SetControlLabel(i++, "{}: {}", 19334, PVR_BACKEND_PROVIDERS);
+    SetControlLabel(i++, "{}: {}", 19042, PVR_BACKEND_CHANNEL_GROUPS);
+    SetControlLabel(i++, "{}: {}", 19019, PVR_BACKEND_CHANNELS);
+    SetControlLabel(i++, "{}: {}", 19163, PVR_BACKEND_RECORDINGS);
+    SetControlLabel(i++, "{}: {}", 19168,
+                    PVR_BACKEND_DELETED_RECORDINGS); // Deleted and recoverable recordings
+    SetControlLabel(i++, "{}: {}", 19025, PVR_BACKEND_TIMERS);
   }
 
+  else if (m_section == CONTROL_BT_POLICY)
+  {
+    SET_CONTROL_LABEL(40, g_localizeStrings.Get(12389));
+  }
   CGUIWindow::FrameMove();
 }
 
 void CGUIWindowSystemInfo::ResetLabels()
 {
-  for (int i = 2; i < 12; i++)
+  for (int i = 2; i < 13; i++)
   {
-    SET_CONTROL_LABEL(i,"");
+    SET_CONTROL_LABEL(i, "");
   }
+  SET_CONTROL_LABEL(CONTROL_TB_POLICY, "");
 }
 
 void CGUIWindowSystemInfo::SetControlLabel(int id, const char *format, int label, int info)
 {
-  CStdString tmpStr = StringUtils::Format(format, g_localizeStrings.Get(label).c_str(), g_infoManager.GetLabel(info).c_str());
+  std::string tmpStr = StringUtils::Format(
+      format, g_localizeStrings.Get(label),
+      CServiceBroker::GetGUI()->GetInfoManager().GetLabel(info, INFO::DEFAULT_CONTEXT));
   SET_CONTROL_LABEL(id, tmpStr);
 }

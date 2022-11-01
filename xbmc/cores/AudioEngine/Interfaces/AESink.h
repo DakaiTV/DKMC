@@ -1,29 +1,19 @@
-#pragma once
 /*
- *      Copyright (C) 2010-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2010-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
-#include <string>
-#include <stdint.h>
+#pragma once
+
 #include "cores/AudioEngine/Interfaces/AE.h" // for typedef's used in derived classes
 #include "cores/AudioEngine/Utils/AEAudioFormat.h"
 #include "cores/AudioEngine/Utils/AEUtil.h"
+
+#include <stdint.h>
+#include <string>
 
 class IAESink
 {
@@ -31,8 +21,8 @@ public:
   /* return the name of this sync for logging */
   virtual const char *GetName() = 0;
 
-  IAESink() {};
-  virtual ~IAESink() {};
+  IAESink() = default;
+  virtual ~IAESink() = default;
 
   /*
     The sink does NOT have to honour anything in the format struct or the device
@@ -54,7 +44,7 @@ public:
   /*
     This method returns latency of hardware.
   */
-  virtual double GetLatency() { return 0.0; };
+  virtual double GetLatency() { return 0.0; }
 
   /*!
    * @brief Adds packets to be sent out, this routine MUST block or sleep.
@@ -65,6 +55,11 @@ public:
   */
   virtual unsigned int AddPackets(uint8_t **data, unsigned int frames, unsigned int offset) = 0;
 
+  /*!
+   * @brief instruct the sink to add a pause
+   * @param millis ms to pause
+   */
+  virtual void AddPause(unsigned int millis) {}
 
   /*!
    * @brief Return a timestamped status structure with delay and sink info
@@ -75,16 +70,16 @@ public:
   /*
     Drain the sink
    */
-  virtual void Drain() {};
+  virtual void Drain() {}
 
   /*
     Indicates if sink can handle volume control.
   */
-  virtual bool  HasVolume() {return false;};
+  virtual bool HasVolume() { return false; }
 
   /*
     This method sets the volume control, volume ranges from 0.0 to 1.0.
   */
-  virtual void  SetVolume(float volume) {};
+  virtual void SetVolume(float volume) {}
 };
 

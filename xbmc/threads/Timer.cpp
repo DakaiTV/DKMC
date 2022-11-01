@@ -1,34 +1,23 @@
 /*
- *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2012-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
+
+#include "Timer.h"
 
 #include <algorithm>
 
-#include "Timer.h"
-#include "SystemClock.h"
+using namespace std::chrono_literals;
+
+CTimer::CTimer(std::function<void()> const& callback)
+  : CThread("Timer"), m_callback(callback), m_timeout(0ms), m_interval(false)
+{ }
 
 CTimer::CTimer(ITimerCallback *callback)
-  : CThread("Timer"),
-    m_callback(callback),
-    m_timeout(0),
-    m_interval(false),
-    m_endTime(0)
+  : CTimer(std::bind(&ITimerCallback::OnTimeout, callback))
 { }
 
 CTimer::~CTimer()
@@ -36,9 +25,9 @@ CTimer::~CTimer()
   Stop(true);
 }
 
-bool CTimer::Start(uint32_t timeout, bool interval /* = false */)
+bool CTimer::Start(std::chrono::milliseconds timeout, bool interval /* = false */)
 {
-  if (m_callback == NULL || timeout == 0 || IsRunning())
+  if (m_callback == NULL || timeout == 0ms || IsRunning())
     return false;
 
   m_timeout = timeout;
@@ -60,12 +49,20 @@ bool CTimer::Stop(bool wait /* = false */)
   return true;
 }
 
+void CTimer::RestartAsync(std::chrono::milliseconds timeout)
+{
+  m_timeout = timeout;
+  m_endTime = std::chrono::steady_clock::now() + timeout;
+  m_eventTimeout.Set();
+}
+
 bool CTimer::Restart()
 {
   if (!IsRunning())
     return false;
 
   Stop(true);
+
   return Start(m_timeout, m_interval);
 }
 
@@ -79,30 +76,33 @@ float CTimer::GetElapsedMilliseconds() const
   if (!IsRunning())
     return 0.0f;
 
-  return (float)(XbmcThreads::SystemClockMillis() - (m_endTime - m_timeout));
+  auto now = std::chrono::steady_clock::now();
+  std::chrono::duration<float, std::milli> duration = (now - (m_endTime - m_timeout));
+
+  return duration.count();
 }
 
 void CTimer::Process()
 {
-  uint32_t currentTime = XbmcThreads::SystemClockMillis();
-  m_endTime = currentTime + m_timeout;
-
   while (!m_bStop)
   {
+    auto currentTime = std::chrono::steady_clock::now();
+    m_endTime = currentTime + m_timeout;
+
     // wait the necessary time
-    if (!m_eventTimeout.WaitMSec(m_endTime - currentTime))
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(m_endTime - currentTime);
+
+    if (!m_eventTimeout.Wait(duration))
     {
-      currentTime = XbmcThreads::SystemClockMillis();
+      currentTime = std::chrono::steady_clock::now();
       if (m_endTime <= currentTime)
       {
         // execute OnTimeout() callback
-        m_callback->OnTimeout();
+        m_callback();
 
-        // stop if this is not an interval timer
-        if (!m_interval)
+        // continue if this is an interval timer, or if it was restarted during callback
+        if (!m_interval && m_endTime <= currentTime)
           break;
-
-        m_endTime = currentTime + m_timeout;
       }
     }
   }

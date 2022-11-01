@@ -1,26 +1,14 @@
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2016-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
 #include "QueryParams.h"
+
 #include "video/VideoDatabase.h"
-#include "utils/StringUtils.h"
 
 using namespace XFILE::VIDEODATABASEDIRECTORY;
 
@@ -32,7 +20,7 @@ CQueryParams::CQueryParams()
   m_idYear = -1;
   m_idActor = -1;
   m_idDirector = -1;
-  m_idContent = -1;
+  m_idContent = static_cast<long>(VideoDbContentType::UNKNOWN);
   m_idShow = -1;
   m_idSeason = -1;
   m_idEpisode = -1;
@@ -51,11 +39,11 @@ void CQueryParams::SetQueryParam(NODE_TYPE NodeType, const std::string& strNodeN
   {
   case NODE_TYPE_OVERVIEW:
     if (strNodeName == "tvshows")
-      m_idContent = VIDEODB_CONTENT_TVSHOWS;
+      m_idContent = static_cast<long>(VideoDbContentType::TVSHOWS);
     else if (strNodeName == "musicvideos")
-      m_idContent = VIDEODB_CONTENT_MUSICVIDEOS;
+      m_idContent = static_cast<long>(VideoDbContentType::MUSICVIDEOS);
     else
-      m_idContent = VIDEODB_CONTENT_MOVIES;
+      m_idContent = static_cast<long>(VideoDbContentType::MOVIES);
     break;
   case NODE_TYPE_GENRE:
     m_idGenre = idDb;
@@ -77,6 +65,7 @@ void CQueryParams::SetQueryParam(NODE_TYPE NodeType, const std::string& strNodeN
     m_idMovie = idDb;
     break;
   case NODE_TYPE_TITLE_TVSHOWS:
+  case NODE_TYPE_INPROGRESS_TVSHOWS:
     m_idShow = idDb;
     break;
   case NODE_TYPE_SEASONS:

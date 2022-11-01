@@ -1,43 +1,71 @@
-#pragma once
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
-#include "system.h"
+
+#pragma once
+
 #include "MediaSource.h"
+
+#include <memory>
+#include <string>
+#include <vector>
 #ifdef HAS_DVD_DRIVE
 #include "cdioSupport.h"
 #endif
 
+namespace MEDIA_DETECT
+{
+namespace STORAGE
+{
+/*! \brief Abstracts a generic storage device type*/
+enum class Type
+{
+  UNKNOWN, /*!< the storage type is unknown */
+  OPTICAL /*!< an optical device (e.g. DVD or Bluray) */
+};
+
+/*! \brief Abstracts a generic storage device */
+struct StorageDevice
+{
+  /*! Device name/label */
+  std::string label{};
+  /*! Device mountpoint/path */
+  std::string path{};
+  /*! The storage type (e.g. OPTICAL) */
+  STORAGE::Type type{STORAGE::Type::UNKNOWN};
+};
+} // namespace STORAGE
+} // namespace MEDIA_DETECT
+
 class IStorageEventsCallback
 {
 public:
-  virtual ~IStorageEventsCallback() { }
+  virtual ~IStorageEventsCallback() = default;
 
-  virtual void OnStorageAdded(const std::string &label, const std::string &path) = 0;
-  virtual void OnStorageSafelyRemoved(const std::string &label) = 0;
-  virtual void OnStorageUnsafelyRemoved(const std::string &label) = 0;
+  /*! \brief Callback executed when a new storage device is added
+    * @param device the storage device
+    */
+  virtual void OnStorageAdded(const MEDIA_DETECT::STORAGE::StorageDevice& device) = 0;
+
+  /*! \brief Callback executed when a new storage device is safely removed
+    * @param device the storage device
+    */
+  virtual void OnStorageSafelyRemoved(const MEDIA_DETECT::STORAGE::StorageDevice& device) = 0;
+
+  /*! \brief Callback executed when a new storage device is unsafely removed
+    * @param device the storage device
+    */
+  virtual void OnStorageUnsafelyRemoved(const MEDIA_DETECT::STORAGE::StorageDevice& device) = 0;
 };
 
 class IStorageProvider
 {
 public:
-  virtual ~IStorageProvider() { }
+  virtual ~IStorageProvider() = default;
 
   virtual void Initialize() = 0;
   virtual void Stop() = 0;
@@ -58,4 +86,10 @@ public:
   virtual std::vector<std::string> GetDiskUsage() = 0;
 
   virtual bool PumpDriveChangeEvents(IStorageEventsCallback *callback) = 0;
+
+  /**\brief Called by media manager to create platform storage provider
+  *
+  * This method used to create platform specified storage provider
+  */
+  static std::unique_ptr<IStorageProvider> CreateInstance();
 };

@@ -1,39 +1,41 @@
-include ../../Makefile.include
-DEPS= ../../Makefile.include 01-fontconfig-cross-compile-fix.patch lconv.patch Makefile
-
-# lib name, version
-LIBNAME=fontconfig
-VERSION=2.8.0
-SOURCE=$(LIBNAME)-$(VERSION)
-ARCHIVE=$(SOURCE).tar.gz
+include ../../Makefile.include FONTCONFIG-VERSION ../../download-files.include
+DEPS = ../../Makefile.include FONTCONFIG-VERSION Makefile ../../download-files.include
 
 # configuration settings
-CONFIGURE=./configure --prefix=$(PREFIX) \
-  --with-freetype-config=$(PREFIX)/bin/freetype-config \
-  --disable-libxml2 --disable-docs --with-arch=$(PLATFORM) --disable-shared
+MESON_BUILD_TYPE=release
 
-LIBDYLIB=$(PLATFORM)/src/.libs/lib$(LIBNAME).a
+ifeq ($(DEBUG_BUILD), yes)
+  MESON_BUILD_TYPE=debug
+endif
 
-CLEAN_FILES=$(ARCHIVE) $(PLATFORM)
+# configuration settings
+CONFIGURE = $(NATIVEPREFIX)/bin/python3 $(NATIVEPREFIX)/bin/meson \
+                --buildtype=$(MESON_BUILD_TYPE) \
+                --prefix=$(PREFIX) \
+                -Ddoc=disabled \
+                -Dtests=disabled \
+                -Dtools=disabled \
+                -Ddefault_library=static
+
+ifeq ($(CROSS_COMPILING), yes)
+  CONFIGURE += -Dcache-build=disabled \
+               --cross-file $(PREFIX)/share/cross-file.meson
+endif
+
+LIBDYLIB=$(PLATFORM)/build/src/$(BYPRODUCT)
 
 all: .installed-$(PLATFORM)
 
-$(TARBALLS_LOCATION)/$(ARCHIVE):
-	cd $(TARBALLS_LOCATION); $(RETRIEVE_TOOL) $(RETRIEVE_TOOL_FLAGS) $(BASE_URL)/$(ARCHIVE)
-
-$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE) $(DEPS)
+$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE).$(HASH_TYPE) $(DEPS)
 	rm -rf $(PLATFORM)/*; mkdir -p $(PLATFORM)
 	cd $(PLATFORM); $(ARCHIVE_TOOL) $(ARCHIVE_TOOL_FLAGS) $(TARBALLS_LOCATION)/$(ARCHIVE)
-	cd $(PLATFORM); patch -p1 < ../01-fontconfig-cross-compile-fix.patch
-	cd $(PLATFORM); patch -p1 < ../lconv.patch 
-	cd $(PLATFORM); $(AUTORECONF) -vif
-	cd $(PLATFORM); $(CONFIGURE)
+	cd $(PLATFORM); $(CONFIGURE) . build
 
 $(LIBDYLIB): $(PLATFORM)
-	$(MAKE) -C $(PLATFORM)
+	cd $(PLATFORM)/build; $(NATIVEPREFIX)/bin/ninja -v
 
 .installed-$(PLATFORM): $(LIBDYLIB)
-	$(MAKE) -C $(PLATFORM) install
+	cd $(PLATFORM)/build; $(NATIVEPREFIX)/bin/ninja -v install
 	touch $@
 
 clean:
@@ -42,4 +44,3 @@ clean:
 
 distclean::
 	rm -rf $(PLATFORM) .installed-$(PLATFORM)
-

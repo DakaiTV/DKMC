@@ -1,34 +1,27 @@
-include ../../Makefile.include
-DEPS= ../../Makefile.include Makefile
+include ../../Makefile.include LIBZIP-VERSION ../../download-files.include
+DEPS = ../../Makefile.include LIBZIP-VERSION Makefile ../../download-files.include
 
-# lib name, version
-LIBNAME=libzip
-VERSION=0.10
-SOURCE=$(LIBNAME)-$(VERSION)
-ARCHIVE=$(SOURCE).tar.gz
+CMAKE_OPTIONS=-DBUILD_DOC:BOOL=OFF \
+              -DBUILD_EXAMPLES:BOOL=OFF \
+              -DBUILD_REGRESS:BOOL=OFF \
+              -DBUILD_SHARED_LIBS:BOOL=OFF \
+              -DBUILD_TOOLS:BOOL=OFF \
+              -DCMAKE_BUILD_TYPE=Debug
 
-# configuration settings
-CONFIGURE=cp -f $(CONFIG_SUB) $(CONFIG_GUESS) .; \
-        ./configure --prefix=$(PREFIX) --disable-shared
-
-LIBDYLIB=$(PLATFORM)/lib/.libs/$(LIBNAME).a
+LIBDYLIB=$(PLATFORM)/build/lib/$(BYPRODUCT)
 
 all: .installed-$(PLATFORM)
 
-$(TARBALLS_LOCATION)/$(ARCHIVE):
-	cd $(TARBALLS_LOCATION); $(RETRIEVE_TOOL) $(RETRIEVE_TOOL_FLAGS) $(BASE_URL)/$(ARCHIVE)
-
-$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE) $(DEPS)
+$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE).$(HASH_TYPE) $(DEPS)
 	rm -rf $(PLATFORM)/*; mkdir -p $(PLATFORM)
 	cd $(PLATFORM); $(ARCHIVE_TOOL) $(ARCHIVE_TOOL_FLAGS) $(TARBALLS_LOCATION)/$(ARCHIVE)
-	cd $(PLATFORM); $(CONFIGURE)
+	cd $(PLATFORM); $(CMAKE) -B build ${CMAKE_OPTIONS}
 
 $(LIBDYLIB): $(PLATFORM)
-	$(MAKE) -C $(PLATFORM)
+	$(MAKE) -C $(PLATFORM)/build
 
 .installed-$(PLATFORM): $(LIBDYLIB)
-	$(MAKE) -C $(PLATFORM) install
-	rm -f $(PREFIX)/lib/libzip.la $(PREFIX)/lib/libzip*.so*
+	$(MAKE) -C $(PLATFORM)/build install
 	touch $@
 
 clean:

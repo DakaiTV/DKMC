@@ -1,51 +1,75 @@
-#pragma once
-
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
-#include "utils/StdString.h"
-#include "TextureBundleXPR.h"
+#pragma once
+
 #include "TextureBundleXBT.h"
+
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
+class CTexture;
 
 class CTextureBundle
 {
 public:
-  CTextureBundle(void);
-  ~CTextureBundle(void);
-
-  void Cleanup();
+  CTextureBundle();
+  explicit CTextureBundle(bool useXBT);
+  ~CTextureBundle() = default;
 
   void SetThemeBundle(bool themeBundle);
-  bool HasFile(const CStdString& Filename);
-  void GetTexturesFromPath(const CStdString &path, std::vector<CStdString> &textures);
-  static CStdString Normalize(const CStdString &name);
+  bool HasFile(const std::string& Filename);
+  std::vector<std::string> GetTexturesFromPath(const std::string& path);
+  static std::string Normalize(std::string name);
 
-  bool LoadTexture(const CStdString& Filename, CBaseTexture** ppTexture, int &width, int &height);
+  /*!
+   * \brief Load texture from bundle
+   *
+   * \param[in] filename name of the texture to load
+   * \param[out] texture holds the pointer to the texture after successful loading
+   * \param[out] width width of the loaded texture
+   * \param[out] height height of the loaded texture
+   * \return true if texture was loaded
+   *
+   * \todo With c++17 this should be changed to return a std::optional that's
+   *       wrapping a struct containing the output values. Same for
+   *       CTextureBundleXBT::LoadTexture.
+   */
+  bool LoadTexture(const std::string& filename,
+                   std::unique_ptr<CTexture>& texture,
+                   int& width,
+                   int& height);
 
-  int LoadAnim(const CStdString& Filename, CBaseTexture*** ppTextures, int &width, int &height, int& nLoops, int** ppDelays);
-
+  /*!
+   * \brief Load animation from bundle
+   *
+   * \param[in] filename name of the animation to load
+   * \param[out] texture vector of frames. Each frame is pair of a texture and
+   *                     the duration the frame
+   * \param[out] width width of the loaded textures
+   * \param[out] height height of the loaded textures
+   * \return true if animation was loaded
+   *
+   * \todo With c++17 this should be changed to return a std::optional that's
+   *       wrapping a struct containing the output values. Same for
+   *       CTextureBundleXBT::LoadAnim.
+   */
+  bool LoadAnim(const std::string& filename,
+                std::vector<std::pair<std::unique_ptr<CTexture>, int>>& textures,
+                int& width,
+                int& height,
+                int& nLoops);
+  void Close();
 private:
-  CTextureBundleXPR m_tbXPR;
   CTextureBundleXBT m_tbXBT;
 
-  bool m_useXPR;
   bool m_useXBT;
 };
 

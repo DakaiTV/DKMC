@@ -1,33 +1,26 @@
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
 #include "VisibleEffect.h"
+
+#include "GUIColorManager.h"
+#include "GUIControlFactory.h"
 #include "GUIInfoManager.h"
-#include "utils/log.h"
-#include "addons/Skin.h" // for the effect time adjustments
-#include "utils/StringUtils.h"
 #include "Tween.h"
+#include "addons/Skin.h" // for the effect time adjustments
+#include "guilib/GUIComponent.h"
+#include "utils/ColorUtils.h"
+#include "utils/StringUtils.h"
 #include "utils/XBMCTinyXML.h"
 #include "utils/XMLUtils.h"
+#include "utils/log.h"
 
-using namespace std;
+#include <utility>
 
 CAnimEffect::CAnimEffect(const TiXmlElement *node, EFFECT_TYPE effect)
 {
@@ -49,12 +42,10 @@ CAnimEffect::CAnimEffect(unsigned int delay, unsigned int length, EFFECT_TYPE ef
   m_delay = delay;
   m_length = length;
   m_effect = effect;
-  m_pTweener = boost::shared_ptr<Tweener>(new LinearTweener());
+  m_pTweener = std::shared_ptr<Tweener>(new LinearTweener());
 }
 
-CAnimEffect::~CAnimEffect()
-{
-}
+CAnimEffect::~CAnimEffect() = default;
 
 CAnimEffect::CAnimEffect(const CAnimEffect &src)
 {
@@ -96,37 +87,37 @@ void CAnimEffect::ApplyState(ANIMATION_STATE state, const CPoint &center)
   ApplyEffect(offset, center);
 }
 
-boost::shared_ptr<Tweener> CAnimEffect::GetTweener(const TiXmlElement *pAnimationNode)
+std::shared_ptr<Tweener> CAnimEffect::GetTweener(const TiXmlElement *pAnimationNode)
 {
-  boost::shared_ptr<Tweener> m_pTweener;
+  std::shared_ptr<Tweener> m_pTweener;
   const char *tween = pAnimationNode->Attribute("tween");
   if (tween)
   {
-    if (strcmpi(tween, "linear")==0)
-      m_pTweener = boost::shared_ptr<Tweener>(new LinearTweener());
-    else if (strcmpi(tween, "quadratic")==0)
-      m_pTweener = boost::shared_ptr<Tweener>(new QuadTweener());
-    else if (strcmpi(tween, "cubic")==0)
-      m_pTweener = boost::shared_ptr<Tweener>(new CubicTweener());
-    else if (strcmpi(tween, "sine")==0)
-      m_pTweener = boost::shared_ptr<Tweener>(new SineTweener());
-    else if (strcmpi(tween, "back")==0)
-      m_pTweener = boost::shared_ptr<Tweener>(new BackTweener());
-    else if (strcmpi(tween, "circle")==0)
-      m_pTweener = boost::shared_ptr<Tweener>(new CircleTweener());
-    else if (strcmpi(tween, "bounce")==0)
-      m_pTweener = boost::shared_ptr<Tweener>(new BounceTweener());
-    else if (strcmpi(tween, "elastic")==0)
-      m_pTweener = boost::shared_ptr<Tweener>(new ElasticTweener());
+    if (StringUtils::CompareNoCase(tween, "linear") == 0)
+      m_pTweener = std::shared_ptr<Tweener>(new LinearTweener());
+    else if (StringUtils::CompareNoCase(tween, "quadratic") == 0)
+      m_pTweener = std::shared_ptr<Tweener>(new QuadTweener());
+    else if (StringUtils::CompareNoCase(tween, "cubic") == 0)
+      m_pTweener = std::shared_ptr<Tweener>(new CubicTweener());
+    else if (StringUtils::CompareNoCase(tween, "sine") == 0)
+      m_pTweener = std::shared_ptr<Tweener>(new SineTweener());
+    else if (StringUtils::CompareNoCase(tween, "back") == 0)
+      m_pTweener = std::shared_ptr<Tweener>(new BackTweener());
+    else if (StringUtils::CompareNoCase(tween, "circle") == 0)
+      m_pTweener = std::shared_ptr<Tweener>(new CircleTweener());
+    else if (StringUtils::CompareNoCase(tween, "bounce") == 0)
+      m_pTweener = std::shared_ptr<Tweener>(new BounceTweener());
+    else if (StringUtils::CompareNoCase(tween, "elastic") == 0)
+      m_pTweener = std::shared_ptr<Tweener>(new ElasticTweener());
 
     const char *easing = pAnimationNode->Attribute("easing");
     if (m_pTweener && easing)
     {
-      if (strcmpi(easing, "in")==0)
+      if (StringUtils::CompareNoCase(easing, "in") == 0)
         m_pTweener->SetEasing(EASE_IN);
-      else if (strcmpi(easing, "out")==0)
+      else if (StringUtils::CompareNoCase(easing, "out") == 0)
         m_pTweener->SetEasing(EASE_OUT);
-      else if (strcmpi(easing, "inout")==0)
+      else if (StringUtils::CompareNoCase(easing, "inout") == 0)
         m_pTweener->SetEasing(EASE_INOUT);
     }
   }
@@ -139,17 +130,18 @@ boost::shared_ptr<Tweener> CAnimEffect::GetTweener(const TiXmlElement *pAnimatio
     // or quadratic if we have acceleration
     if (accel)
     {
-      m_pTweener = boost::shared_ptr<Tweener>(new QuadTweener(accel));
+      m_pTweener = std::shared_ptr<Tweener>(new QuadTweener(accel));
       m_pTweener->SetEasing(EASE_IN);
     }
     else
-      m_pTweener = boost::shared_ptr<Tweener>(new LinearTweener());
+      m_pTweener = std::shared_ptr<Tweener>(new LinearTweener());
   }
 
   return m_pTweener;
 }
 
-CFadeEffect::CFadeEffect(const TiXmlElement *node, bool reverseDefaults) : CAnimEffect(node, EFFECT_TYPE_FADE)
+CFadeEffect::CFadeEffect(const TiXmlElement* node, bool reverseDefaults, EFFECT_TYPE effect)
+  : CAnimEffect(node, effect)
 {
   if (reverseDefaults)
   { // out effect defaults
@@ -161,12 +153,36 @@ CFadeEffect::CFadeEffect(const TiXmlElement *node, bool reverseDefaults) : CAnim
     m_startAlpha = 0;
     m_endAlpha = 100.0f;
   }
-  node->QueryFloatAttribute("start", &m_startAlpha);
-  node->QueryFloatAttribute("end", &m_endAlpha);
-  if (m_startAlpha > 100.0f) m_startAlpha = 100.0f;
-  if (m_endAlpha > 100.0f) m_endAlpha = 100.0f;
-  if (m_startAlpha < 0) m_startAlpha = 0;
-  if (m_endAlpha < 0) m_endAlpha = 0;
+
+  m_startColor.alpha = m_startColor.red = m_startColor.green = m_startColor.blue = 1.0f;
+  m_endColor.alpha = m_endColor.red = m_endColor.green = m_endColor.blue = 1.0f;
+
+  if (effect == EFFECT_TYPE_FADE)
+  {
+    node->QueryFloatAttribute("start", &m_startAlpha);
+    node->QueryFloatAttribute("end", &m_endAlpha);
+    if (m_startAlpha > 100.0f)
+      m_startAlpha = 100.0f;
+    if (m_endAlpha > 100.0f)
+      m_endAlpha = 100.0f;
+    if (m_startAlpha < 0)
+      m_startAlpha = 0;
+    if (m_endAlpha < 0)
+      m_endAlpha = 0;
+    m_startColor.alpha = m_startAlpha * 0.01f;
+    m_endColor.alpha = m_endAlpha * 0.01f;
+  }
+  else if (effect == EFFECT_TYPE_FADE_DIFFUSE)
+  {
+    const char* start = node->Attribute("start");
+    const char* end = node->Attribute("end");
+    if (start)
+      m_startColor = UTILS::COLOR::ConvertToFloats(
+          CServiceBroker::GetGUI()->GetColorManager().GetColor(start));
+    if (end)
+      m_endColor =
+          UTILS::COLOR::ConvertToFloats(CServiceBroker::GetGUI()->GetColorManager().GetColor(end));
+  }
 }
 
 CFadeEffect::CFadeEffect(float start, float end, unsigned int delay, unsigned int length) : CAnimEffect(delay, length, EFFECT_TYPE_FADE)
@@ -175,9 +191,30 @@ CFadeEffect::CFadeEffect(float start, float end, unsigned int delay, unsigned in
   m_endAlpha = end;
 }
 
+CFadeEffect::CFadeEffect(UTILS::COLOR::Color start,
+                         UTILS::COLOR::Color end,
+                         unsigned int delay,
+                         unsigned int length)
+  : CAnimEffect(delay, length, EFFECT_TYPE_FADE_DIFFUSE)
+{
+  m_startAlpha = m_endAlpha = 1.0f;
+  m_startColor = UTILS::COLOR::ConvertToFloats(start);
+  m_endColor = UTILS::COLOR::ConvertToFloats(end);
+}
+
 void CFadeEffect::ApplyEffect(float offset, const CPoint &center)
 {
-  m_matrix.SetFader(((m_endAlpha - m_startAlpha) * offset + m_startAlpha) * 0.01f);
+  if (m_effect == EFFECT_TYPE_FADE)
+  {
+    m_matrix.SetFader(((m_endAlpha - m_startAlpha) * offset + m_startAlpha) * 0.01f);
+  }
+  else if (m_effect == EFFECT_TYPE_FADE_DIFFUSE)
+  {
+    m_matrix.SetFader(((m_endColor.alpha - m_startColor.alpha) * offset + m_startColor.alpha),
+                      ((m_endColor.red - m_startColor.red) * offset + m_startColor.red),
+                      ((m_endColor.green - m_startColor.green) * offset + m_startColor.green),
+                      ((m_endColor.blue - m_startColor.blue) * offset + m_startColor.blue));
+  }
 }
 
 CSlideEffect::CSlideEffect(const TiXmlElement *node) : CAnimEffect(node, EFFECT_TYPE_SLIDE)
@@ -187,7 +224,7 @@ CSlideEffect::CSlideEffect(const TiXmlElement *node) : CAnimEffect(node, EFFECT_
   const char *startPos = node->Attribute("start");
   if (startPos)
   {
-    vector<string> commaSeparated = StringUtils::Split(startPos, ",");
+    std::vector<std::string> commaSeparated = StringUtils::Split(startPos, ",");
     if (commaSeparated.size() > 1)
       m_startY = (float)atof(commaSeparated[1].c_str());
     if (!commaSeparated.empty())
@@ -196,7 +233,7 @@ CSlideEffect::CSlideEffect(const TiXmlElement *node) : CAnimEffect(node, EFFECT_
   const char *endPos = node->Attribute("end");
   if (endPos)
   {
-    vector<string> commaSeparated = StringUtils::Split(endPos, ",");
+    std::vector<std::string> commaSeparated = StringUtils::Split(endPos, ",");
     if (commaSeparated.size() > 1)
       m_endY = (float)atof(commaSeparated[1].c_str());
     if (!commaSeparated.empty())
@@ -223,11 +260,11 @@ CRotateEffect::CRotateEffect(const TiXmlElement *node, EFFECT_TYPE effect) : CAn
   const char *centerPos = node->Attribute("center");
   if (centerPos)
   {
-    if (strcmpi(centerPos, "auto") == 0)
+    if (StringUtils::CompareNoCase(centerPos, "auto") == 0)
       m_autoCenter = true;
     else
     {
-      vector<string> commaSeparated = StringUtils::Split(centerPos, ",");
+      std::vector<std::string> commaSeparated = StringUtils::Split(centerPos, ",");
       if (commaSeparated.size() > 1)
         m_center.y = (float)atof(commaSeparated[1].c_str());
       if (!commaSeparated.empty())
@@ -246,7 +283,7 @@ void CRotateEffect::ApplyEffect(float offset, const CPoint &center)
   else if (m_effect == EFFECT_TYPE_ROTATE_Y)
     m_matrix.SetYRotation(((m_endAngle - m_startAngle)*offset + m_startAngle) * degree_to_radian, m_center.x, m_center.y, 1.0f);
   else if (m_effect == EFFECT_TYPE_ROTATE_Z) // note coordinate aspect ratio is not generally square in the XY plane, so correct for it.
-    m_matrix.SetZRotation(((m_endAngle - m_startAngle)*offset + m_startAngle) * degree_to_radian, m_center.x, m_center.y, g_graphicsContext.GetScalingPixelRatio());
+    m_matrix.SetZRotation(((m_endAngle - m_startAngle)*offset + m_startAngle) * degree_to_radian, m_center.x, m_center.y, CServiceBroker::GetWinSystem()->GetGfxContext().GetScalingPixelRatio());
 }
 
 CZoomEffect::CZoomEffect(const TiXmlElement *node, const CRect &rect) : CAnimEffect(node, EFFECT_TYPE_ZOOM), m_center(CPoint(0,0))
@@ -261,30 +298,30 @@ CZoomEffect::CZoomEffect(const TiXmlElement *node, const CRect &rect) : CAnimEff
   float endPosX = rect.x1;
   float endPosY = rect.y1;
 
-  float width = max(rect.Width(), 0.001f);
-  float height = max(rect.Height(),0.001f);
+  float width = std::max(rect.Width(), 0.001f);
+  float height = std::max(rect.Height(),0.001f);
 
   const char *start = node->Attribute("start");
   if (start)
   {
-    vector<string> params = StringUtils::Split(start, ",");
+    std::vector<std::string> params = StringUtils::Split(start, ",");
     if (params.size() == 1)
     {
-      m_startX = (float)atof(params[0].c_str());
+      m_startX = CGUIControlFactory::ParsePosition(params[0].c_str(), rect.Width());
       m_startY = m_startX;
     }
     else if (params.size() == 2)
     {
-      m_startX = (float)atof(params[0].c_str());
-      m_startY = (float)atof(params[1].c_str());
+      m_startX = CGUIControlFactory::ParsePosition(params[0].c_str(), rect.Width());
+      m_startY = CGUIControlFactory::ParsePosition(params[1].c_str(), rect.Height());
     }
     else if (params.size() == 4)
     { // format is start="x,y,width,height"
       // use width and height from our rect to calculate our sizing
-      startPosX = (float)atof(params[0].c_str());
-      startPosY = (float)atof(params[1].c_str());
-      m_startX = (float)atof(params[2].c_str());
-      m_startY = (float)atof(params[3].c_str());
+      startPosX = CGUIControlFactory::ParsePosition(params[0].c_str(), rect.Width());
+      startPosY = CGUIControlFactory::ParsePosition(params[1].c_str(), rect.Height());
+      m_startX = CGUIControlFactory::ParsePosition(params[2].c_str(), rect.Width());
+      m_startY = CGUIControlFactory::ParsePosition(params[3].c_str(), rect.Height());
       m_startX *= 100.0f / width;
       m_startY *= 100.0f / height;
     }
@@ -292,24 +329,24 @@ CZoomEffect::CZoomEffect(const TiXmlElement *node, const CRect &rect) : CAnimEff
   const char *end = node->Attribute("end");
   if (end)
   {
-    vector<string> params = StringUtils::Split(end, ",");
+    std::vector<std::string> params = StringUtils::Split(end, ",");
     if (params.size() == 1)
     {
-      m_endX = (float)atof(params[0].c_str());
+      m_endX = CGUIControlFactory::ParsePosition(params[0].c_str(), rect.Width());
       m_endY = m_endX;
     }
     else if (params.size() == 2)
     {
-      m_endX = (float)atof(params[0].c_str());
-      m_endY = (float)atof(params[1].c_str());
+      m_endX = CGUIControlFactory::ParsePosition(params[0].c_str(), rect.Width());
+      m_endY = CGUIControlFactory::ParsePosition(params[1].c_str(), rect.Height());
     }
     else if (params.size() == 4)
     { // format is start="x,y,width,height"
       // use width and height from our rect to calculate our sizing
-      endPosX = (float)atof(params[0].c_str());
-      endPosY = (float)atof(params[1].c_str());
-      m_endX = (float)atof(params[2].c_str());
-      m_endY = (float)atof(params[3].c_str());
+      endPosX = CGUIControlFactory::ParsePosition(params[0].c_str(), rect.Width());
+      endPosY = CGUIControlFactory::ParsePosition(params[1].c_str(), rect.Height());
+      m_endX = CGUIControlFactory::ParsePosition(params[2].c_str(), rect.Width());
+      m_endY = CGUIControlFactory::ParsePosition(params[3].c_str(), rect.Height());
       m_endX *= 100.0f / width;
       m_endY *= 100.0f / height;
     }
@@ -317,15 +354,15 @@ CZoomEffect::CZoomEffect(const TiXmlElement *node, const CRect &rect) : CAnimEff
   const char *centerPos = node->Attribute("center");
   if (centerPos)
   {
-    if (strcmpi(centerPos, "auto") == 0)
+    if (StringUtils::CompareNoCase(centerPos, "auto") == 0)
       m_autoCenter = true;
     else
     {
-      vector<string> commaSeparated = StringUtils::Split(centerPos, ",");
+      std::vector<std::string> commaSeparated = StringUtils::Split(centerPos, ",");
       if (commaSeparated.size() > 1)
-        m_center.y = (float)atof(commaSeparated[1].c_str());
+        m_center.y = CGUIControlFactory::ParsePosition(commaSeparated[1].c_str(), rect.Height());
       if (!commaSeparated.empty())
-        m_center.x = (float)atof(commaSeparated[0].c_str());
+        m_center.x = CGUIControlFactory::ParsePosition(commaSeparated[0].c_str(), rect.Width());
     }
   }
   else
@@ -406,15 +443,17 @@ CAnimation &CAnimation::operator =(const CAnimation &src)
   {
     CAnimEffect *newEffect = NULL;
     if (src.m_effects[i]->GetType() == CAnimEffect::EFFECT_TYPE_FADE)
-      newEffect = new CFadeEffect(*(CFadeEffect *)src.m_effects[i]);
+      newEffect = new CFadeEffect(*static_cast<CFadeEffect*>(src.m_effects[i]));
+    else if (src.m_effects[i]->GetType() == CAnimEffect::EFFECT_TYPE_FADE_DIFFUSE)
+      newEffect = new CFadeEffect(*static_cast<CFadeEffect*>(src.m_effects[i]));
     else if (src.m_effects[i]->GetType() == CAnimEffect::EFFECT_TYPE_ZOOM)
-      newEffect = new CZoomEffect(*(CZoomEffect *)src.m_effects[i]);
+      newEffect = new CZoomEffect(*static_cast<CZoomEffect*>(src.m_effects[i]));
     else if (src.m_effects[i]->GetType() == CAnimEffect::EFFECT_TYPE_SLIDE)
-      newEffect = new CSlideEffect(*(CSlideEffect *)src.m_effects[i]);
+      newEffect = new CSlideEffect(*static_cast<CSlideEffect*>(src.m_effects[i]));
     else if (src.m_effects[i]->GetType() == CAnimEffect::EFFECT_TYPE_ROTATE_X ||
              src.m_effects[i]->GetType() == CAnimEffect::EFFECT_TYPE_ROTATE_Y ||
              src.m_effects[i]->GetType() == CAnimEffect::EFFECT_TYPE_ROTATE_Z)
-      newEffect = new CRotateEffect(*(CRotateEffect *)src.m_effects[i]);
+      newEffect = new CRotateEffect(*static_cast<CRotateEffect*>(src.m_effects[i]));
     if (newEffect)
       m_effects.push_back(newEffect);
   }
@@ -440,9 +479,8 @@ void CAnimation::Animate(unsigned int time, bool startAnim)
       m_start = time;
     m_currentProcess = ANIM_PROCESS_REVERSE;
   }
-  // reset the queued state once we've rendered to ensure allocation has occured
-  if (startAnim || m_queuedProcess == ANIM_PROCESS_REVERSE)
-    m_queuedProcess = ANIM_PROCESS_NONE;
+  // reset the queued state once we've rendered to ensure allocation has occurred
+  m_queuedProcess = ANIM_PROCESS_NONE;
 
   // Update our animation process
   if (m_currentProcess == ANIM_PROCESS_NORMAL)
@@ -581,14 +619,14 @@ CAnimation CAnimation::CreateFader(float start, float end, unsigned int delay, u
 
 bool CAnimation::CheckCondition()
 {
-  return !m_condition || m_condition->Get();
+  return !m_condition || m_condition->Get(INFO::DEFAULT_CONTEXT);
 }
 
 void CAnimation::UpdateCondition(const CGUIListItem *item)
 {
   if (!m_condition)
     return;
-  bool condition = m_condition->Get(item);
+  bool condition = m_condition->Get(INFO::DEFAULT_CONTEXT, item);
   if (condition && !m_lastCondition)
     QueueAnimation(ANIM_PROCESS_NORMAL);
   else if (!condition && m_lastCondition)
@@ -603,7 +641,7 @@ void CAnimation::UpdateCondition(const CGUIListItem *item)
 
 void CAnimation::SetInitialCondition()
 {
-  m_lastCondition = m_condition ? m_condition->Get() : false;
+  m_lastCondition = m_condition ? m_condition->Get(INFO::DEFAULT_CONTEXT) : false;
   if (m_lastCondition)
     ApplyAnimation();
   else
@@ -618,24 +656,24 @@ void CAnimation::Create(const TiXmlElement *node, const CRect &rect, int context
   // conditions and reversibility
   const char *condition = node->Attribute("condition");
   if (condition)
-    m_condition = g_infoManager.Register(condition, context);
+    m_condition = CServiceBroker::GetGUI()->GetInfoManager().Register(condition, context);
   const char *reverse = node->Attribute("reversible");
-  if (reverse && strcmpi(reverse, "false") == 0)
+  if (reverse && StringUtils::CompareNoCase(reverse, "false") == 0)
     m_reversible = false;
 
   const TiXmlElement *effect = node->FirstChildElement("effect");
 
-  CStdString type = node->FirstChild()->Value();
+  std::string type = node->FirstChild()->Value();
   m_type = ANIM_TYPE_CONDITIONAL;
   if (effect) // new layout
     type = XMLUtils::GetAttribute(node, "type");
 
   if (StringUtils::StartsWithNoCase(type, "visible")) m_type = ANIM_TYPE_VISIBLE;
-  else if (type.Equals("hidden")) m_type = ANIM_TYPE_HIDDEN;
-  else if (type.Equals("focus"))  m_type = ANIM_TYPE_FOCUS;
-  else if (type.Equals("unfocus"))  m_type = ANIM_TYPE_UNFOCUS;
-  else if (type.Equals("windowopen"))  m_type = ANIM_TYPE_WINDOW_OPEN;
-  else if (type.Equals("windowclose"))  m_type = ANIM_TYPE_WINDOW_CLOSE;
+  else if (StringUtils::EqualsNoCase(type, "hidden")) m_type = ANIM_TYPE_HIDDEN;
+  else if (StringUtils::EqualsNoCase(type, "focus"))  m_type = ANIM_TYPE_FOCUS;
+  else if (StringUtils::EqualsNoCase(type, "unfocus"))  m_type = ANIM_TYPE_UNFOCUS;
+  else if (StringUtils::EqualsNoCase(type, "windowopen"))  m_type = ANIM_TYPE_WINDOW_OPEN;
+  else if (StringUtils::EqualsNoCase(type, "windowclose"))  m_type = ANIM_TYPE_WINDOW_CLOSE;
   // sanity check
   if (m_type == ANIM_TYPE_CONDITIONAL)
   {
@@ -647,17 +685,17 @@ void CAnimation::Create(const TiXmlElement *node, const CRect &rect, int context
 
     // pulsed or loop animations
     const char *pulse = node->Attribute("pulse");
-    if (pulse && strcmpi(pulse, "true") == 0)
+    if (pulse && StringUtils::CompareNoCase(pulse, "true") == 0)
       m_repeatAnim = ANIM_REPEAT_PULSE;
     const char *loop = node->Attribute("loop");
-    if (loop && strcmpi(loop, "true") == 0)
+    if (loop && StringUtils::CompareNoCase(loop, "true") == 0)
       m_repeatAnim = ANIM_REPEAT_LOOP;
   }
 
   if (!effect)
   { // old layout:
     // <animation effect="fade" start="0" end="100" delay="10" time="2000" condition="blahdiblah" reversible="false">focus</animation>
-    CStdString type = XMLUtils::GetAttribute(node, "effect");
+    std::string type = XMLUtils::GetAttribute(node, "effect");
     AddEffect(type, node, rect);
   }
   while (effect)
@@ -666,51 +704,52 @@ void CAnimation::Create(const TiXmlElement *node, const CRect &rect, int context
     //   <effect type="fade" start="0" end="100" delay="10" time="2000" />
     //   ...
     // </animation>
-    CStdString type = XMLUtils::GetAttribute(effect, "type");
+    std::string type = XMLUtils::GetAttribute(effect, "type");
     AddEffect(type, effect, rect);
     effect = effect->NextSiblingElement("effect");
   }
   // compute the minimum delay and maximum length
   m_delay = 0xffffffff;
   unsigned int total = 0;
-  for (vector<CAnimEffect*>::const_iterator i = m_effects.begin(); i != m_effects.end(); ++i)
+  for (const auto& i : m_effects)
   {
-    m_delay = min(m_delay, (*i)->GetDelay());
-    total   = max(total, (*i)->GetLength());
+    m_delay = std::min(m_delay, i->GetDelay());
+    total = std::max(total, i->GetLength());
   }
   m_length = total - m_delay;
 }
 
-void CAnimation::AddEffect(const CStdString &type, const TiXmlElement *node, const CRect &rect)
+void CAnimation::AddEffect(const std::string &type, const TiXmlElement *node, const CRect &rect)
 {
   CAnimEffect *effect = NULL;
-  if (type.Equals("fade"))
-    effect = new CFadeEffect(node, m_type < 0);
-  else if (type.Equals("slide"))
+  if (StringUtils::EqualsNoCase(type, "fade"))
+    effect = new CFadeEffect(node, m_type < 0, CAnimEffect::EFFECT_TYPE_FADE);
+  else if (StringUtils::EqualsNoCase(type, "fadediffuse"))
+    effect = new CFadeEffect(node, m_type < 0, CAnimEffect::EFFECT_TYPE_FADE_DIFFUSE);
+  else if (StringUtils::EqualsNoCase(type, "slide"))
     effect = new CSlideEffect(node);
-  else if (type.Equals("rotate"))
+  else if (StringUtils::EqualsNoCase(type, "rotate"))
     effect = new CRotateEffect(node, CAnimEffect::EFFECT_TYPE_ROTATE_Z);
-  else if (type.Equals("rotatey"))
+  else if (StringUtils::EqualsNoCase(type, "rotatey"))
     effect = new CRotateEffect(node, CAnimEffect::EFFECT_TYPE_ROTATE_Y);
-  else if (type.Equals("rotatex"))
+  else if (StringUtils::EqualsNoCase(type, "rotatex"))
     effect = new CRotateEffect(node, CAnimEffect::EFFECT_TYPE_ROTATE_X);
-  else if (type.Equals("zoom"))
+  else if (StringUtils::EqualsNoCase(type, "zoom"))
     effect = new CZoomEffect(node, rect);
 
   if (effect)
     m_effects.push_back(effect);
 }
 
-CScroller::CScroller(unsigned int duration /* = 200 */, boost::shared_ptr<Tweener> tweener /* = NULL */)
+CScroller::CScroller(unsigned int duration /* = 200 */, std::shared_ptr<Tweener> tweener /* = NULL */)
 {
   m_scrollValue = 0;
   m_delta = 0;
   m_startTime = 0;
   m_startPosition = 0;
   m_hasResumePoint = false;
-  m_lastTime = 0;
   m_duration = duration > 0 ? duration : 1;
-  m_pTweener = tweener;
+  m_pTweener = std::move(tweener);
 }
 
 CScroller::CScroller(const CScroller& right)
@@ -728,25 +767,22 @@ CScroller& CScroller::operator=(const CScroller &right)
   m_startTime = right.m_startTime;
   m_startPosition = right.m_startPosition;
   m_hasResumePoint = right.m_hasResumePoint;
-  m_lastTime = right.m_lastTime;
   m_duration = right.m_duration;
   m_pTweener = right.m_pTweener;
   return *this;
 }
 
-CScroller::~CScroller()
-{
-}
+CScroller::~CScroller() = default;
 
 void CScroller::ScrollTo(float endPos)
 {
   float delta = endPos - m_scrollValue;
     // if there is scrolling running in same direction - set resume point
-  m_hasResumePoint = m_delta != 0 && delta * m_delta > 0 && m_pTweener ? m_pTweener->HasResumePoint() : 0;
+  m_hasResumePoint = m_delta != 0 && delta * m_delta > 0 && m_pTweener ? m_pTweener->HasResumePoint() : false;
 
   m_delta = delta;
   m_startPosition = m_scrollValue;
-  m_startTime = m_lastTime;
+  m_startTime = 0;
 }
 
 float CScroller::Tween(float progress)
@@ -769,7 +805,7 @@ float CScroller::Tween(float progress)
       // a = 2 , b = -1
       return (2 * m_pTweener->Tween(progress, 0, 1, 1) - 1);
     }
-    else 
+    else
       return m_pTweener->Tween(progress, 0, 1, 1);
   }
   else
@@ -778,7 +814,8 @@ float CScroller::Tween(float progress)
 
 bool CScroller::Update(unsigned int time)
 {
-  m_lastTime = time;
+  if (!m_startTime)
+    m_startTime = time;
   if (m_delta != 0)
   {
     if (time - m_startTime >= m_duration) // we are finished

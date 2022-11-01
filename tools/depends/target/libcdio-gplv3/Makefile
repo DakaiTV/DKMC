@@ -1,30 +1,30 @@
 include ../../Makefile.include
-DEPS= ../../Makefile.include Makefile
+DEPS = ../../Makefile.include Makefile osx.patch 01-fix-glob-on-android.patch ../../download-files.include
 
 # lib name, version
 LIBNAME=libcdio
-VERSION=0.90
+VERSION=2.1.0
 SOURCE=$(LIBNAME)-$(VERSION)
-ARCHIVE=$(SOURCE).tar.gz
+ARCHIVE=$(SOURCE).tar.bz2
+SHA512=c290821da55fd9ae366670a58857aa6efcebc9f25b7caea063cf12f9cbda84fe770c5f59f972227fda50517ca58c5f39c0137daa0f93179e3daa45303d8b610f
+include ../../download-files.include
+
 # configuration settings
 CONFIGURE=cp -f $(CONFIG_SUB) $(CONFIG_GUESS) .; \
-          ./configure --prefix=$(PREFIX)  --with-cd-drive=no --with-cd-info=no --with-cd-paranoia=no \
+          ./configure --prefix=$(PREFIX)  --with-cd-drive=no --with-cd-info=no \
           --with-cdda-player=no --with-cd-read=no --with-iso-info=no --with-iso-read=no --disable-example-progs \
-          --disable-cpp-progs --disable-cxx --disable-shared
+          --disable-cpp-progs --enable-cxx --disable-shared
 
 LIBDYLIB=$(PLATFORM)/lib/driver/.libs/$(LIBNAME).a
 
-CLEAN_FILES=$(ARCHIVE) $(PLATFORM)
-
 all: .installed-$(PLATFORM)
 
-$(TARBALLS_LOCATION)/$(ARCHIVE):
-	cd $(TARBALLS_LOCATION); $(RETRIEVE_TOOL) $(RETRIEVE_TOOL_FLAGS) $(BASE_URL)/$(ARCHIVE)
 
-$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE) $(DEPS)
+$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE).$(HASH_TYPE) $(DEPS)
 	rm -rf $(PLATFORM)/*; mkdir -p $(PLATFORM)
 	cd $(PLATFORM); $(ARCHIVE_TOOL) $(ARCHIVE_TOOL_FLAGS) $(TARBALLS_LOCATION)/$(ARCHIVE)
-	cd $(PLATFORM); patch -p0 < ../osx.patch
+	cd $(PLATFORM); patch -p1 -i ../osx.patch
+	cd $(PLATFORM); patch -p1 -i ../01-fix-glob-on-android.patch
 	cd $(PLATFORM); $(AUTORECONF) -vif
 	cd $(PLATFORM); $(CONFIGURE)
 
@@ -35,7 +35,6 @@ $(LIBDYLIB): $(PLATFORM)
 	$(MAKE) -C $(PLATFORM)/lib install
 	$(MAKE) -C $(PLATFORM)/include install
 	$(MAKE) -C $(PLATFORM) install-data-am
-	cp $(PLATFORM)/include/cdio/cdtext.h $(PREFIX)/include/cdio/
 	touch $@
 
 clean:
@@ -44,4 +43,3 @@ clean:
 
 distclean::
 	rm -rf $(PLATFORM) .installed-$(PLATFORM)
-

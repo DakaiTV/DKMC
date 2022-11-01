@@ -1,38 +1,32 @@
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
 #include "RssManager.h"
+
+#include "ServiceBroker.h"
 #include "addons/AddonInstaller.h"
 #include "addons/AddonManager.h"
-#include "dialogs/GUIDialogYesNo.h"
-#include "filesystem/File.h"
-#include "interfaces/Builtins.h"
-#include "profiles/ProfilesManager.h"
+#include "addons/addoninfo/AddonType.h"
+#include "interfaces/builtins/Builtins.h"
+#include "profiles/ProfileManager.h"
+#include "settings/Settings.h"
+#include "settings/SettingsComponent.h"
 #include "settings/lib/Setting.h"
-#include "threads/SingleLock.h"
-#include "utils/log.h"
+#include "utils/FileUtils.h"
 #include "utils/RssReader.h"
 #include "utils/StringUtils.h"
+#include "utils/log.h"
 
-using namespace std;
-using namespace XFILE;
+#include <mutex>
+#include <utility>
+
+using namespace KODI::MESSAGING;
+
 
 CRssManager::CRssManager()
 {
@@ -44,7 +38,7 @@ CRssManager::~CRssManager()
   Stop();
 }
 
-CRssManager& CRssManager::Get()
+CRssManager& CRssManager::GetInstance()
 {
   static CRssManager sRssManager;
   return sRssManager;
@@ -60,23 +54,23 @@ void CRssManager::OnSettingsUnloaded()
   Clear();
 }
 
-void CRssManager::OnSettingAction(const CSetting *setting)
+void CRssManager::OnSettingAction(const std::shared_ptr<const CSetting>& setting)
 {
   if (setting == NULL)
     return;
 
   const std::string &settingId = setting->GetId();
-  if (settingId == "lookandfeel.rssedit")
+  if (settingId == CSettings::SETTING_LOOKANDFEEL_RSSEDIT)
   {
     ADDON::AddonPtr addon;
-    ADDON::CAddonMgr::Get().GetAddon("script.rss.editor",addon);
-    if (!addon)
+    if (!CServiceBroker::GetAddonMgr().GetAddon("script.rss.editor", addon,
+                                                ADDON::OnlyEnabled::CHOICE_YES))
     {
-      if (!CGUIDialogYesNo::ShowAndGetInput(g_localizeStrings.Get(24076), g_localizeStrings.Get(24100), "RSS Editor", g_localizeStrings.Get(24101)))
+      if (!ADDON::CAddonInstaller::GetInstance().InstallModal(
+              "script.rss.editor", addon, ADDON::InstallModalPrompt::CHOICE_YES))
         return;
-      CAddonInstaller::Get().Install("script.rss.editor", true, "", false);
     }
-    CBuiltins::Execute("RunScript(script.rss.editor)");
+    CBuiltins::GetInstance().Execute("RunScript(script.rss.editor)");
   }
 }
 
@@ -87,7 +81,7 @@ void CRssManager::Start()
 
 void CRssManager::Stop()
 {
-  CSingleLock lock(m_critical);
+  std::unique_lock<CCriticalSection> lock(m_critical);
   m_bActive = false;
   for (unsigned int i = 0; i < m_readers.size(); i++)
   {
@@ -99,22 +93,26 @@ void CRssManager::Stop()
 
 bool CRssManager::Load()
 {
-  CSingleLock lock(m_critical);
-  string rssXML = CProfilesManager::Get().GetUserDataItem("RssFeeds.xml");
-  if (!CFile::Exists(rssXML))
+  const std::shared_ptr<CProfileManager> profileManager = CServiceBroker::GetSettingsComponent()->GetProfileManager();
+
+  std::unique_lock<CCriticalSection> lock(m_critical);
+
+  std::string rssXML = profileManager->GetUserDataItem("RssFeeds.xml");
+  if (!CFileUtils::Exists(rssXML))
     return false;
 
   CXBMCTinyXML rssDoc;
   if (!rssDoc.LoadFile(rssXML))
   {
-    CLog::Log(LOGERROR, "CRssManager: error loading %s, Line %d\n%s", rssXML.c_str(), rssDoc.ErrorRow(), rssDoc.ErrorDesc());
+    CLog::Log(LOGERROR, "CRssManager: error loading {}, Line {}\n{}", rssXML, rssDoc.ErrorRow(),
+              rssDoc.ErrorDesc());
     return false;
   }
 
   const TiXmlElement *pRootElement = rssDoc.RootElement();
   if (pRootElement == NULL || !StringUtils::EqualsNoCase(pRootElement->ValueStr(), "rssfeeds"))
   {
-    CLog::Log(LOGERROR, "CRssManager: error loading %s, no <rssfeeds> node", rssXML.c_str());
+    CLog::Log(LOGERROR, "CRssManager: error loading {}, no <rssfeeds> node", rssXML);
     return false;
   }
 
@@ -126,7 +124,8 @@ bool CRssManager::Load()
     if (pSet->QueryIntAttribute("id", &iId) == TIXML_SUCCESS)
     {
       RssSet set;
-      set.rtl = pSet->Attribute("rtl") != NULL && strcasecmp(pSet->Attribute("rtl"), "true") == 0;
+      set.rtl = pSet->Attribute("rtl") != NULL &&
+                StringUtils::CompareNoCase(pSet->Attribute("rtl"), "true") == 0;
       const TiXmlElement* pFeed = pSet->FirstChildElement("feed");
       while (pFeed != NULL)
       {
@@ -139,16 +138,16 @@ bool CRssManager::Load()
 
         if (pFeed->FirstChild() != NULL)
         {
-          // TODO: UTF-8: Do these URLs need to be converted to UTF-8?
-          //              What about the xml encoding?
-          string strUrl = pFeed->FirstChild()->ValueStr();
+          //! @todo UTF-8: Do these URLs need to be converted to UTF-8?
+          //!              What about the xml encoding?
+          std::string strUrl = pFeed->FirstChild()->ValueStr();
           set.url.push_back(strUrl);
           set.interval.push_back(iInterval);
         }
         pFeed = pFeed->NextSiblingElement("feed");
       }
 
-      m_mapRssUrls.insert(make_pair(iId,set));
+      m_mapRssUrls.insert(std::make_pair(iId,set));
     }
     else
       CLog::Log(LOGERROR, "CRssManager: found rss url set with no id in RssFeeds.xml, ignored");
@@ -171,14 +170,14 @@ bool CRssManager::Reload()
 
 void CRssManager::Clear()
 {
-  CSingleLock lock(m_critical);
+  std::unique_lock<CCriticalSection> lock(m_critical);
   m_mapRssUrls.clear();
 }
 
 // returns true if the reader doesn't need creating, false otherwise
 bool CRssManager::GetReader(int controlID, int windowID, IRssObserver* observer, CRssReader *&reader)
 {
-  CSingleLock lock(m_critical);
+  std::unique_lock<CCriticalSection> lock(m_critical);
   // check to see if we've already created this reader
   for (unsigned int i = 0; i < m_readers.size(); i++)
   {

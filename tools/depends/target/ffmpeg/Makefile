@@ -1,77 +1,57 @@
 include ../../Makefile.include
-include FFMPEG-VERSION
-DEPS= ../../Makefile.include FFMPEG-VERSION Makefile
+include FFMPEG-VERSION ../../download-files.include
+DEPS = ../../Makefile.include FFMPEG-VERSION Makefile ../../download-files.include
 
-# set to "yes" to enable patching
-# we don't apply patches until we move to a vanilla ffmpeg tarball
-APPLY_PATCHES=no
+BUILD_TYPE = Release
+ifeq ($(DEBUG_BUILD),yes)
+  BUILD_TYPE = Debug
+endif
 
-# configuration settings
-ffmpg_config = --prefix=$(PREFIX) --extra-version="xbmc-$(VERSION)"
-ffmpg_config += --cc=$(CC) --cxx=$(CXX)
-ffmpg_config += --disable-devices --disable-doc
-ffmpg_config += --disable-ffplay --disable-ffmpeg
-ffmpg_config += --disable-ffprobe --disable-ffserver
-ffmpg_config += --enable-gpl --enable-runtime-cpudetect
-ffmpg_config += --enable-postproc --enable-pthreads
-ffmpg_config += --enable-muxer=spdif --enable-muxer=adts
-ffmpg_config += --enable-muxer=asf --enable-muxer=ipod
-ffmpg_config += --enable-encoder=ac3 --enable-encoder=aac
-ffmpg_config += --enable-encoder=wmav2 --enable-protocol=http
+CMAKE_ARGS=-DCMAKE_BUILD_TYPE=$(BUILD_TYPE) \
+           -DCMAKE_MODULE_PATH="$(CMAKE_SOURCE_DIR)/cmake/modules;$(CMAKE_SOURCE_DIR)/cmake/modules/buildtools" \
+           -DPKG_CONFIG_PATH=$(PREFIX)/lib/pkgconfig \
+           -DCMAKE_INSTALL_PREFIX=$(PREFIX) \
+           -DFFMPEG_VER=$(VERSION) \
+           -DENABLE_DAV1D=ON \
+           -DEXTRA_FLAGS="$(FFMPEG_CONFIGURE_OPTIONS)"
+
+ifeq ($(USE_CCACHE), yes)
+  CMAKE_ARGS+= -DENABLE_CCACHE=$(USE_CCACHE) \
+               -DCCACHE_PROGRAM=$(CCACHE)
+endif
+
 ifeq ($(CROSS_COMPILING), yes)
-  ffmpg_config += --arch=$(CPU) --enable-cross-compile
+  CMAKE_ARGS+= -DPKG_CONFIG_EXECUTABLE=$(NATIVEPREFIX)/bin/pkg-config \
+               -DCROSSCOMPILING=$(CROSS_COMPILING)
+               -DCMAKE_AR=$(AR) \
+               -DCMAKE_RANLIB=$(RANLIB) \
+               -DCMAKE_STRIP=$(STRIP)
 endif
-ifeq ($(OS), linux)
-  ffmpg_config += --target-os=$(OS) --cpu=$(CPU)
-  ffmpg_config += --enable-vdpau --enable-vaapi --enable-gnutls
-  ffmpg_config += --enable-libvorbis --enable-muxer=ogg --enable-encoder=libvorbis
-endif
+
 ifeq ($(OS), android)
-  ifeq ($(findstring arm, $(CPU)), arm)
-    ffmpg_config += --cpu=cortex-a9
-  else
-    ffmpg_config += --cpu=i686 --disable-mmx
+  ifeq ($(findstring arm64, $(CPU)), arm64)
+  CMAKE_ARGS+= -DENABLE_NEON=YES
   endif
-  ffmpg_config += --target-os=linux
 endif
-ifeq ($(OS), ios)
-  ffmpg_config += --cpu=cortex-a8 --yasmexe=$(NATIVEPREFIX)/bin/yasm
-  ffmpg_config += --disable-decoder=mpeg_xvmc --enable-vda --disable-crystalhd
-  ffmpg_config += --target-os=darwin
-endif
-ifeq ($(OS), osx)
-  ffmpg_config += --disable-outdev=sdl
-  ffmpg_config += --disable-decoder=mpeg_xvmc --enable-vda --disable-crystalhd
-  ffmpg_config += --target-os=darwin
-endif
-ifeq ($(findstring arm, $(CPU)), arm)
-  ffmpg_config += --enable-pic --disable-armv5te --disable-armv6t2
-endif
-ifeq ($(Configuration), Release)
-  ffmpg_config += --disable-debug
-endif
-
-
-CLEAN_FILES=$(ARCHIVE) $(PLATFORM)
 
 all: .installed-$(PLATFORM)
 
 $(TARBALLS_LOCATION)/$(ARCHIVE):
-	cd $(TARBALLS_LOCATION); $(RETRIEVE_TOOL) -Ls --create-dirs -f -o $(TARBALLS_LOCATION)/$(ARCHIVE) $(BASE_URL)/$(VERSION).tar.gz
+	cd $(TARBALLS_LOCATION); $(RETRIEVE_TOOL) -Ls --create-dirs -f -o $(TARBALLS_LOCATION)/$(ARCHIVE) $(BASE_URL)/archive/$(VERSION).tar.gz
 
-$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE) $(DEPS)
+$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE).$(HASH_TYPE) $(DEPS)
 	rm -rf $(PLATFORM); mkdir -p $(PLATFORM)
+	rm -rf $(PLATFORM); mkdir -p $(PLATFORM)/build
 	cd $(PLATFORM); $(ARCHIVE_TOOL) $(ARCHIVE_TOOL_FLAGS) $(TARBALLS_LOCATION)/$(ARCHIVE)
-	cd $(PLATFORM); sed -i".bak" -e "s%pkg_config_default=pkg-config%export PKG_CONFIG_LIBDIR=$(PREFIX)/lib/pkgconfig \&\& pkg_config_default=$(NATIVEPREFIX)/bin/pkg-config%" configure
-	cd $(PLATFORM);\
-	CFLAGS="$(CFLAGS)" CXXFLAGS="$(CXXFLAGS)" CPPFLAGS="$(CPPFLAGS)" LDFLAGS="$(LDFLAGS)" \
-	./configure $(ffmpg_config)
+	cd $(PLATFORM); cp ../CMakeLists.txt ./
+	cd $(PLATFORM)/build; $(CMAKE) $(CMAKE_ARGS) ..
 
-build: $(PLATFORM)
-	$(MAKE) -C $(PLATFORM)
+.build-$(PLATFORM): $(PLATFORM)
+	$(MAKE) -C $(PLATFORM)/build
+	touch $@
 
-.installed-$(PLATFORM): build
-	$(MAKE) -C $(PLATFORM) install
+.installed-$(PLATFORM): .build-$(PLATFORM)
+	$(MAKE) -C $(PLATFORM)/build install
 	touch $@
 
 clean:
@@ -80,4 +60,3 @@ clean:
 
 distclean::
 	rm -rf $(PLATFORM) .installed-$(PLATFORM)
-

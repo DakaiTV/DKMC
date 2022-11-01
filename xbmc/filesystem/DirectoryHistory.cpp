@@ -1,29 +1,18 @@
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
 #include "DirectoryHistory.h"
-#include "utils/log.h"
+
 #include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
+#include "utils/log.h"
 
-using namespace std;
+#include <algorithm>
 
 const std::string& CDirectoryHistory::CPathHistoryItem::GetPath(bool filter /* = false */) const
 {
@@ -50,10 +39,10 @@ void CDirectoryHistory::SetSelectedItem(const std::string& strSelectedItem, cons
 {
   if (strSelectedItem.empty())
     return;
-  
+
   std::string strDir = preparePath(strDirectory);
   std::string strItem = preparePath(strSelectedItem, false);
-  
+
   HistoryMap::iterator iter = m_vecHistory.find(strDir);
   if (iter != m_vecHistory.end())
   {
@@ -79,7 +68,11 @@ const std::string& CDirectoryHistory::GetSelectedItem(const std::string& strDire
 void CDirectoryHistory::AddPath(const std::string& strPath, const std::string &strFilterPath /* = "" */)
 {
   if (!m_vecPathHistory.empty() && m_vecPathHistory.back().m_strPath == strPath)
+  {
+    if (!strFilterPath.empty())
+      m_vecPathHistory.back().m_strFilterPath = strFilterPath;
     return;
+  }
 
   CPathHistoryItem item;
   item.m_strPath = strPath;
@@ -107,7 +100,7 @@ bool CDirectoryHistory::IsInHistory(const std::string &path) const
 {
   std::string slashEnded(path);
   URIUtils::AddSlashAtEnd(slashEnded);
-  for (vector<CPathHistoryItem>::const_iterator i = m_vecPathHistory.begin(); i != m_vecPathHistory.end(); ++i)
+  for (std::vector<CPathHistoryItem>::const_iterator i = m_vecPathHistory.begin(); i != m_vecPathHistory.end(); ++i)
   {
     std::string testPath(i->GetPath());
     URIUtils::AddSlashAtEnd(testPath);
@@ -147,7 +140,8 @@ void CDirectoryHistory::DumpPathHistory()
   // debug log
   CLog::Log(LOGDEBUG,"Current m_vecPathHistory:");
   for (int i = 0; i < (int)m_vecPathHistory.size(); ++i)
-    CLog::Log(LOGDEBUG, "  %02i.[%s; %s]", i, m_vecPathHistory[i].m_strPath.c_str(), m_vecPathHistory[i].m_strFilterPath.c_str());
+    CLog::Log(LOGDEBUG, "  {:02}.[{}; {}]", i, m_vecPathHistory[i].m_strPath,
+              m_vecPathHistory[i].m_strFilterPath);
 }
 
 std::string CDirectoryHistory::preparePath(const std::string &strDirectory, bool tolower /* = true */)

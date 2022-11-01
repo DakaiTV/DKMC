@@ -1,40 +1,43 @@
-include ../../Makefile.include
-DEPS= ../../Makefile.include Makefile
-
-# lib name, version
-LIBNAME=libpng
-#VERSION=1.4.4
-VERSION=1.5.13
-SOURCE=$(LIBNAME)-$(VERSION)
-ARCHIVE=$(SOURCE).tar.gz
+include ../../Makefile.include LIBPNG-VERSION ../../download-files.include
+DEPS = ../../Makefile.include Makefile LIBPNG-VERSION ../../download-files.include
 
 # configuration settings
-CONFIGURE=cp -f $(CONFIG_SUB) $(CONFIG_GUESS) .; \
-          ./configure --prefix=$(PREFIX) --disable-shared
+CMAKE_OPTIONS=-DPNG_SHARED=OFF \
+              -DPNG_STATIC=ON \
+              -DPNG_TESTS=OFF \
+              -DPNG_DEBUG=OFF
 
-LIBDYLIB=$(PLATFORM)/.libs/$(LIBNAME)15.a
+ifeq ($(findstring apple-darwin, $(HOST)), apple-darwin)
+  # hardware optimizations require NEON instructions that
+  # fail on m1 hardware and ios/tvos, so just disable for any arm64 target cpu on
+  # an apple-darwin target
+  ifeq ($(CPU), arm64)
+    CMAKE_OPTIONS+= -DPNG_HARDWARE_OPTIMIZATIONS=OFF
+  else
+    CMAKE_OPTIONS+= -DPNG_HARDWARE_OPTIMIZATIONS=ON
+  endif
+else
+  CMAKE_OPTIONS+= -DPNG_HARDWARE_OPTIMIZATIONS=ON \
+                  -DPNG_BUILD_ZLIB=ON \
+                  -DZLIB_LIBRARY=$(PREFIX)/lib/libz.a \
+                  -DZLIB_INCLUDE_DIR=$(PREFIX)/include
+endif
 
-CLEAN_FILES=$(ARCHIVE) $(PLATFORM)
+LIBDYLIB=$(PLATFORM)/build/$(BYPRODUCT)
 
 all: .installed-$(PLATFORM)
 
-$(TARBALLS_LOCATION)/$(ARCHIVE):
-	cd $(TARBALLS_LOCATION); $(RETRIEVE_TOOL) $(RETRIEVE_TOOL_FLAGS) $(BASE_URL)/$(ARCHIVE)
-
-$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE) $(DEPS)
-	rm -rf $(PLATFORM)/*; mkdir -p $(PLATFORM)
+$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE).$(HASH_TYPE) $(DEPS)
+	rm -rf $(PLATFORM); mkdir -p $(PLATFORM)/build
 	cd $(PLATFORM); $(ARCHIVE_TOOL) $(ARCHIVE_TOOL_FLAGS) $(TARBALLS_LOCATION)/$(ARCHIVE)
-	cd $(PLATFORM); $(CONFIGURE)
+	cd $(PLATFORM)/build; $(CMAKE) $(CMAKE_OPTIONS) ..
 
-$(LIBDYLIB): $(PLATFORM)
-	$(MAKE) -C $(PLATFORM)
-
-.installed-$(PLATFORM): $(LIBDYLIB)
-	$(MAKE) -C $(PLATFORM) install
+.installed-$(PLATFORM): $(PLATFORM)
+	$(MAKE) -C $(PLATFORM)/build install
 	touch $@
 
 clean:
-	$(MAKE) -C $(PLATFORM) clean
+	$(MAKE) -C $(PLATFORM)/build clean
 	rm -f .installed-$(PLATFORM)
 
 distclean::

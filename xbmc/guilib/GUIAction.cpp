@@ -1,78 +1,104 @@
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
 #include "GUIAction.h"
-#include "utils/StringUtils.h"
-#include "GUIWindowManager.h"
-#include "GUIControl.h"
+
+#include "GUIComponent.h"
 #include "GUIInfoManager.h"
+#include "GUIWindowManager.h"
+#include "ServiceBroker.h"
+#include "utils/StringUtils.h"
 
-using namespace std;
-
-CGUIAction::CGUIAction()
+namespace
 {
-  m_sendThreadMessages = false;
+constexpr int DEFAULT_CONTROL_ID = 0;
+}
+
+CGUIAction::CExecutableAction::CExecutableAction(const std::string& action) : m_action{action}
+{
+}
+
+CGUIAction::CExecutableAction::CExecutableAction(const std::string& condition,
+                                                 const std::string& action)
+  : m_condition{condition}, m_action{action}
+{
+}
+
+std::string CGUIAction::CExecutableAction::GetCondition() const
+{
+  return m_condition;
+}
+
+std::string CGUIAction::CExecutableAction::GetAction() const
+{
+  return m_action;
+}
+
+bool CGUIAction::CExecutableAction::HasCondition() const
+{
+  return !m_condition.empty();
+}
+
+void CGUIAction::CExecutableAction::SetAction(const std::string& action)
+{
+  m_action = action;
 }
 
 CGUIAction::CGUIAction(int controlID)
 {
-  m_sendThreadMessages = false;
   SetNavigation(controlID);
 }
 
-bool CGUIAction::ExecuteActions(int controlID, int parentID) const
+bool CGUIAction::ExecuteActions() const
 {
-  if (m_actions.size() == 0) return false;
+  return ExecuteActions(DEFAULT_CONTROL_ID, DEFAULT_CONTROL_ID);
+}
+
+bool CGUIAction::ExecuteActions(int controlID, int parentID, const CGUIListItemPtr &item /* = NULL */) const
+{
+  if (m_actions.empty())
+    return false;
+
+  CGUIInfoManager& infoMgr = CServiceBroker::GetGUI()->GetInfoManager();
   // take a copy of actions that satisfy our conditions
-  vector<CStdString> actions;
-  for (ciActions it = m_actions.begin() ; it != m_actions.end() ; ++it)
+  std::vector<std::string> actions;
+  for (const auto &i : m_actions)
   {
-    if (it->condition.empty() || g_infoManager.EvaluateBool(it->condition))
+    if (!i.HasCondition() || infoMgr.EvaluateBool(i.GetCondition(), 0, item))
     {
-      if (!StringUtils::IsInteger(it->action))
-        actions.push_back(it->action);
+      if (!StringUtils::IsInteger(i.GetAction()))
+        actions.emplace_back(i.GetAction());
     }
   }
   // execute them
   bool retval = false;
-  for (vector<CStdString>::iterator i = actions.begin(); i != actions.end(); ++i)
+  for (const auto &i : actions)
   {
-    CGUIMessage msg(GUI_MSG_EXECUTE, controlID, parentID);
-    msg.SetStringParam(*i);
+    CGUIMessage msg(GUI_MSG_EXECUTE, controlID, parentID, 0, 0, item);
+    msg.SetStringParam(i);
     if (m_sendThreadMessages)
-      g_windowManager.SendThreadMessage(msg);
+      CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
     else
-      g_windowManager.SendMessage(msg);
-    retval |= true;
+      CServiceBroker::GetGUI()->GetWindowManager().SendMessage(msg);
+    retval = true;
   }
   return retval;
 }
 
 int CGUIAction::GetNavigation() const
 {
-  for (ciActions it = m_actions.begin() ; it != m_actions.end() ; ++it)
+  CGUIInfoManager& infoMgr = CServiceBroker::GetGUI()->GetInfoManager();
+  for (const auto &i : m_actions)
   {
-    if (StringUtils::IsInteger(it->action))
+    if (StringUtils::IsInteger(i.GetAction()))
     {
-      if (it->condition.empty() || g_infoManager.EvaluateBool(it->condition))
-        return atoi(it->action.c_str());
+      if (!i.HasCondition() || infoMgr.EvaluateBool(i.GetCondition(), INFO::DEFAULT_CONTEXT))
+        return std::stoi(i.GetAction());
     }
   }
   return 0;
@@ -80,27 +106,48 @@ int CGUIAction::GetNavigation() const
 
 void CGUIAction::SetNavigation(int id)
 {
-  if (id == 0) return;
-  CStdString strId = StringUtils::Format("%i", id);
-  for (iActions it = m_actions.begin() ; it != m_actions.end() ; ++it)
+  if (id == 0)
+    return;
+
+  std::string strId = std::to_string(id);
+  for (auto &i : m_actions)
   {
-    if (StringUtils::IsInteger(it->action) && it->condition.empty())
+    if (StringUtils::IsInteger(i.GetAction()) && !i.HasCondition())
     {
-      it->action = strId;
+      i.SetAction(strId);
       return;
     }
   }
-  cond_action_pair pair;
-  pair.action = strId;
-  m_actions.push_back(pair);
+  m_actions.emplace_back(std::move(strId));
 }
 
 bool CGUIAction::HasActionsMeetingCondition() const
 {
-  for (ciActions it = m_actions.begin() ; it != m_actions.end() ; ++it)
+  CGUIInfoManager& infoMgr = CServiceBroker::GetGUI()->GetInfoManager();
+  for (const auto &i : m_actions)
   {
-    if (it->condition.empty() || g_infoManager.EvaluateBool(it->condition))
+    if (!i.HasCondition() || infoMgr.EvaluateBool(i.GetCondition(), INFO::DEFAULT_CONTEXT))
       return true;
   }
   return false;
+}
+
+bool CGUIAction::HasAnyActions() const
+{
+  return m_actions.size() > 0;
+}
+
+void CGUIAction::Append(const CExecutableAction& action)
+{
+  m_actions.emplace_back(action);
+}
+
+void CGUIAction::EnableSendThreadMessageMode()
+{
+  m_sendThreadMessages = true;
+}
+
+void CGUIAction::Reset()
+{
+  m_actions.clear();
 }

@@ -1,32 +1,21 @@
 /*
- *      Copyright (C) 2011-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2011-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
 #include "PipeFile.h"
-#include "threads/SingleLock.h"
+
 #include "PipesManager.h"
-#include "utils/StringUtils.h"
 #include "URL.h"
+
+#include <mutex>
 
 using namespace XFILE;
 
-CPipeFile::CPipeFile() : m_pos(0), m_length(-1), m_pipe(NULL)
+CPipeFile::CPipeFile() : m_pipe(NULL)
 {
 }
 
@@ -72,7 +61,10 @@ int CPipeFile::Stat(const CURL& url, struct __stat64* buffer)
 
 int CPipeFile::Stat(struct __stat64* buffer)
 {
-  memset(buffer,0,sizeof(struct __stat64));
+  if (!buffer)
+    return -1;
+
+  *buffer = {};
   buffer->st_size = m_length;
   return 0;
 }
@@ -81,7 +73,7 @@ ssize_t CPipeFile::Read(void* lpBuf, size_t uiBufSize)
 {
   if (!m_pipe)
     return -1;
-  
+
   if (uiBufSize > SSIZE_MAX)
     uiBufSize = SSIZE_MAX;
 
@@ -92,7 +84,7 @@ ssize_t CPipeFile::Write(const void* lpBuf, size_t uiBufSize)
 {
   if (!m_pipe)
     return -1;
-  
+
   // m_pipe->Write return bool. either all was written or not.
   return m_pipe->Write((const char *)lpBuf,uiBufSize) ? uiBufSize : -1;
 }
@@ -128,7 +120,7 @@ void CPipeFile::Close()
   if (m_pipe)
   {
     m_pipe->RemoveListener(this);
-    PipesManager::GetInstance().ClosePipe(m_pipe);    
+    PipesManager::GetInstance().ClosePipe(m_pipe);
   }
   m_pipe = NULL;
 }
@@ -164,7 +156,7 @@ bool CPipeFile::Rename(const CURL& url, const CURL& urlnew)
   return false;
 }
 
-int CPipeFile::IoControl(int request, void* param)
+int CPipeFile::IoControl(EIoControl, void* param)
 {
   return -1;
 }
@@ -178,7 +170,7 @@ std::string CPipeFile::GetName() const
 
 void CPipeFile::OnPipeOverFlow()
 {
-  CSingleLock lock(m_lock);
+  std::unique_lock<CCriticalSection> lock(m_lock);
   for (size_t l=0; l<m_listeners.size(); l++)
     m_listeners[l]->OnPipeOverFlow();
 }
@@ -196,7 +188,7 @@ void CPipeFile::OnPipeUnderFlow()
 
 void CPipeFile::AddListener(IPipeListener *l)
 {
-  CSingleLock lock(m_lock);
+  std::unique_lock<CCriticalSection> lock(m_lock);
   for (size_t i=0; i<m_listeners.size(); i++)
   {
     if (m_listeners[i] == l)
@@ -207,19 +199,19 @@ void CPipeFile::AddListener(IPipeListener *l)
 
 void CPipeFile::RemoveListener(IPipeListener *l)
 {
-  CSingleLock lock(m_lock);
+  std::unique_lock<CCriticalSection> lock(m_lock);
   std::vector<XFILE::IPipeListener *>::iterator i = m_listeners.begin();
   while(i != m_listeners.end())
   {
     if ( (*i) == l)
       i = m_listeners.erase(i);
     else
-      i++;
+      ++i;
   }
 }
 
-void CPipeFile::SetOpenThreashold(int threashold)
+void CPipeFile::SetOpenThreshold(int threshold)
 {
-  m_pipe->SetOpenThreashold(threashold);
+  m_pipe->SetOpenThreshold(threshold);
 }
 

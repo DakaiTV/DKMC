@@ -1,40 +1,33 @@
 /*
- *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2012-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
 
 #include "ZeroconfBrowserMDNS.h"
-#include <utils/log.h>
-#include <threads/SingleLock.h>
-#include "guilib/GUIWindowManager.h"
-#include "guilib/GUIMessage.h"
-#include "GUIUserMessages.h"
-#if defined(TARGET_WINDOWS)
-#include "win32/WIN32Util.h"
-#endif //TARGET_WINDOWS
-#include "network/DNSNameCache.h"
-#include <netinet/in.h>
-#include <arpa/inet.h>
 
-#pragma comment(lib, "dnssd.lib")
+#include "GUIUserMessages.h"
+#include "ServiceBroker.h"
+#include "guilib/GUIComponent.h"
+#include "guilib/GUIMessage.h"
+#include "guilib/GUIWindowManager.h"
+#include "network/DNSNameCache.h"
+#include "utils/log.h"
+
+#include <mutex>
+
+#include <arpa/inet.h>
+#include <netinet/in.h>
+
+#if defined(TARGET_WINDOWS)
+#include "platform/win32/WIN32Util.h"
+#endif //TARGET_WINDOWS
+
+using namespace std::chrono_literals;
 
 extern HWND g_hWnd;
-
 
 CZeroconfBrowserMDNS::CZeroconfBrowserMDNS()
 {
@@ -43,13 +36,16 @@ CZeroconfBrowserMDNS::CZeroconfBrowserMDNS()
 
 CZeroconfBrowserMDNS::~CZeroconfBrowserMDNS()
 {
-  CSingleLock lock(m_data_guard);
+  std::unique_lock<CCriticalSection> lock(m_data_guard);
   //make sure there are no browsers anymore
-  for(tBrowserMap::iterator it = m_service_browsers.begin(); it != m_service_browsers.end(); ++it )
-    doRemoveServiceType(it->first);
+  for (const auto& it : m_service_browsers)
+    doRemoveServiceType(it.first);
 
-#if defined(TARGET_WINDOWS)
+#if defined(TARGET_WINDOWS_DESKTOP)
   WSAAsyncSelect( (SOCKET) DNSServiceRefSockFD( m_browser ), g_hWnd, BONJOUR_BROWSER_EVENT, 0 );
+#elif  defined(TARGET_WINDOWS_STORE)
+  // need to modify this code to use WSAEventSelect since WSAAsyncSelect is not supported
+  CLog::Log(LOGDEBUG, "{} is not implemented for TARGET_WINDOWS_STORE", __FUNCTION__);
 #endif //TARGET_WINDOWS
 
   if (m_browser)
@@ -76,25 +72,32 @@ void DNSSD_API CZeroconfBrowserMDNS::BrowserCallback(DNSServiceRef browser,
 
     if (flags & kDNSServiceFlagsAdd)
     {
-      CLog::Log(LOGDEBUG, "ZeroconfBrowserMDNS::BrowserCallback found service named: %s, type: %s, domain: %s", s.GetName().c_str(), s.GetType().c_str(), s.GetDomain().c_str());
+      CLog::Log(
+          LOGDEBUG,
+          "ZeroconfBrowserMDNS::BrowserCallback found service named: {}, type: {}, domain: {}",
+          s.GetName(), s.GetType(), s.GetDomain());
       p_this->addDiscoveredService(browser, s);
     }
     else
     {
-      CLog::Log(LOGDEBUG, "ZeroconfBrowserMDNS::BrowserCallback service named: %s, type: %s, domain: %s disappeared", s.GetName().c_str(), s.GetType().c_str(), s.GetDomain().c_str());
+      CLog::Log(LOGDEBUG,
+                "ZeroconfBrowserMDNS::BrowserCallback service named: {}, type: {}, domain: {} "
+                "disappeared",
+                s.GetName(), s.GetType(), s.GetDomain());
       p_this->removeDiscoveredService(browser, s);
     }
     if(! (flags & kDNSServiceFlagsMoreComing) )
     {
       CGUIMessage message(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_UPDATE_PATH);
       message.SetStringParam("zeroconf://");
-      g_windowManager.SendThreadMessage(message);
+      CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(message);
       CLog::Log(LOGDEBUG, "ZeroconfBrowserMDNS::BrowserCallback sent gui update for path zeroconf://");
     }
   }
   else
   {
-    CLog::Log(LOGERROR, "ZeroconfBrowserMDNS::BrowserCallback returned (error = %ld)\n", (int)errorCode);
+    CLog::Log(LOGERROR, "ZeroconfBrowserMDNS::BrowserCallback returned (error = {})",
+              (int)errorCode);
   }
 }
 
@@ -111,7 +114,8 @@ void DNSSD_API CZeroconfBrowserMDNS::GetAddrInfoCallback(DNSServiceRef          
 
   if (errorCode)
   {
-    CLog::Log(LOGERROR, "ZeroconfBrowserMDNS: GetAddrInfoCallback failed with error = %ld", (int) errorCode);
+    CLog::Log(LOGERROR, "ZeroconfBrowserMDNS: GetAddrInfoCallback failed with error = {}",
+              (int)errorCode);
     return;
   }
 
@@ -140,12 +144,13 @@ void DNSSD_API CZeroconfBrowserMDNS::ResolveCallback(DNSServiceRef              
 
   if (errorCode)
   {
-    CLog::Log(LOGERROR, "ZeroconfBrowserMDNS: ResolveCallback failed with error = %ld", (int) errorCode);
+    CLog::Log(LOGERROR, "ZeroconfBrowserMDNS: ResolveCallback failed with error = {}",
+              (int)errorCode);
     return;
   }
 
   DNSServiceErrorType err;
-  CZeroconfBrowser::ZeroconfService::tTxtRecordMap recordMap; 
+  CZeroconfBrowser::ZeroconfService::tTxtRecordMap recordMap;
   std::string strIP;
   CZeroconfBrowserMDNS* p_instance = static_cast<CZeroconfBrowserMDNS*> ( context );
 
@@ -174,7 +179,7 @@ void DNSSD_API CZeroconfBrowserMDNS::ResolveCallback(DNSServiceRef              
 /// adds the service to list of found services
 void CZeroconfBrowserMDNS::addDiscoveredService(DNSServiceRef browser, CZeroconfBrowser::ZeroconfService const& fcr_service)
 {
-  CSingleLock lock(m_data_guard);
+  std::unique_lock<CCriticalSection> lock(m_data_guard);
   tDiscoveredServicesMap::iterator browserIt = m_discovered_services.find(browser);
   if(browserIt == m_discovered_services.end())
   {
@@ -197,7 +202,7 @@ void CZeroconfBrowserMDNS::addDiscoveredService(DNSServiceRef browser, CZeroconf
 
 void CZeroconfBrowserMDNS::removeDiscoveredService(DNSServiceRef browser, CZeroconfBrowser::ZeroconfService const& fcr_service)
 {
-  CSingleLock lock(m_data_guard);
+  std::unique_lock<CCriticalSection> lock(m_data_guard);
   tDiscoveredServicesMap::iterator browserIt = m_discovered_services.find(browser);
   //search this service
   std::vector<std::pair<ZeroconfService, unsigned int> >& services = browserIt->second;
@@ -232,19 +237,23 @@ bool CZeroconfBrowserMDNS::doAddServiceType(const std::string& fcr_service_type)
     err = DNSServiceCreateConnection(&m_browser);
     if (err != kDNSServiceErr_NoError)
     {
-      CLog::Log(LOGERROR, "ZeroconfBrowserMDNS: DNSServiceCreateConnection failed with error = %ld", (int) err);
+      CLog::Log(LOGERROR, "ZeroconfBrowserMDNS: DNSServiceCreateConnection failed with error = {}",
+                (int)err);
       return false;
     }
-#if defined(TARGET_WINDOWS)
+#if defined(TARGET_WINDOWS_DESKTOP)
     err = WSAAsyncSelect( (SOCKET) DNSServiceRefSockFD( m_browser ), g_hWnd, BONJOUR_BROWSER_EVENT, FD_READ | FD_CLOSE );
     if (err != kDNSServiceErr_NoError)
-      CLog::Log(LOGERROR, "ZeroconfBrowserMDNS: WSAAsyncSelect failed with error = %ld", (int) err);
-#endif //TARGET_WINDOWS
+      CLog::Log(LOGERROR, "ZeroconfBrowserMDNS: WSAAsyncSelect failed with error = {}", (int)err);
+#elif defined(TARGET_WINDOWS_STORE)
+    // need to modify this code to use WSAEventSelect since WSAAsyncSelect is not supported
+    CLog::Log(LOGERROR, "{} is not implemented for TARGET_WINDOWS_STORE", __FUNCTION__);
+#endif // TARGET_WINDOWS_STORE
   }
 #endif //!HAS_MDNS_EMBEDDED
 
   {
-    CSingleLock lock(m_data_guard);
+    std::unique_lock<CCriticalSection> lock(m_data_guard);
     browser = m_browser;
     err = DNSServiceBrowse(&browser, kDNSServiceFlagsShareConnection, kDNSServiceInterfaceIndexAny, fcr_service_type.c_str(), NULL, BrowserCallback, this);
   }
@@ -254,13 +263,13 @@ bool CZeroconfBrowserMDNS::doAddServiceType(const std::string& fcr_service_type)
     if (browser)
       DNSServiceRefDeallocate(browser);
 
-    CLog::Log(LOGERROR, "ZeroconfBrowserMDNS: DNSServiceBrowse returned (error = %ld)", (int) err);
+    CLog::Log(LOGERROR, "ZeroconfBrowserMDNS: DNSServiceBrowse returned (error = {})", (int)err);
     return false;
   }
 
   //store the browser
   {
-    CSingleLock lock(m_data_guard);
+    std::unique_lock<CCriticalSection> lock(m_data_guard);
     m_service_browsers.insert(std::make_pair(fcr_service_type, browser));
   }
 
@@ -272,7 +281,7 @@ bool CZeroconfBrowserMDNS::doRemoveServiceType(const std::string& fcr_service_ty
   //search for this browser and remove it from the map
   DNSServiceRef browser = 0;
   {
-    CSingleLock lock(m_data_guard);
+    std::unique_lock<CCriticalSection> lock(m_data_guard);
     tBrowserMap::iterator it = m_service_browsers.find(fcr_service_type);
     if(it == m_service_browsers.end())
     {
@@ -284,7 +293,7 @@ bool CZeroconfBrowserMDNS::doRemoveServiceType(const std::string& fcr_service_ty
 
   //remove the services of this browser
   {
-    CSingleLock lock(m_data_guard);
+    std::unique_lock<CCriticalSection> lock(m_data_guard);
     tDiscoveredServicesMap::iterator it = m_discovered_services.find(browser);
     if(it != m_discovered_services.end())
       m_discovered_services.erase(it);
@@ -299,11 +308,10 @@ bool CZeroconfBrowserMDNS::doRemoveServiceType(const std::string& fcr_service_ty
 std::vector<CZeroconfBrowser::ZeroconfService> CZeroconfBrowserMDNS::doGetFoundServices()
 {
   std::vector<CZeroconfBrowser::ZeroconfService> ret;
-  CSingleLock lock(m_data_guard);
-  for(tDiscoveredServicesMap::const_iterator it = m_discovered_services.begin();
-      it != m_discovered_services.end(); ++it)
+  std::unique_lock<CCriticalSection> lock(m_data_guard);
+  for (const auto& it : m_discovered_services)
   {
-    const std::vector<std::pair<CZeroconfBrowser::ZeroconfService, unsigned int> >& services = it->second;
+    auto& services = it.second;
     for(unsigned int i = 0; i < services.size(); ++i)
     {
       ret.push_back(services[i].first);
@@ -316,7 +324,7 @@ bool CZeroconfBrowserMDNS::doResolveService(CZeroconfBrowser::ZeroconfService& f
 {
   DNSServiceErrorType err;
   DNSServiceRef sdRef = NULL;
-  
+
   //start resolving
   m_resolving_service = fr_service;
   m_resolved_event.Reset();
@@ -328,20 +336,22 @@ bool CZeroconfBrowserMDNS::doResolveService(CZeroconfBrowser::ZeroconfService& f
     if (sdRef)
       DNSServiceRefDeallocate(sdRef);
 
-    CLog::Log(LOGERROR, "ZeroconfBrowserMDNS: DNSServiceResolve returned (error = %ld)", (int) err);
+    CLog::Log(LOGERROR, "ZeroconfBrowserMDNS: DNSServiceResolve returned (error = {})", (int)err);
     return false;
   }
 
   err = DNSServiceProcessResult(sdRef);
 
   if (err != kDNSServiceErr_NoError)
-      CLog::Log(LOGERROR, "ZeroconfBrowserMDNS::doResolveService DNSServiceProcessResult returned (error = %ld)", (int) err);
+    CLog::Log(LOGERROR,
+              "ZeroconfBrowserMDNS::doResolveService DNSServiceProcessResult returned (error = {})",
+              (int)err);
 
 #if defined(HAS_MDNS_EMBEDDED)
   // when using the embedded mdns service the call to DNSServiceProcessResult
   // above will not block until the resolving was finished - instead we have to
-  // wait for resolve to return or timeout  
-  m_resolved_event.WaitMSec(f_timeout * 1000);
+  // wait for resolve to return or timeout
+  m_resolved_event.Wait(std::chrono::duration<double, std::milli>(f_timeout * 1000));
 #endif //HAS_MDNS_EMBEDDED
   fr_service = m_resolving_service;
 
@@ -360,12 +370,16 @@ bool CZeroconfBrowserMDNS::doResolveService(CZeroconfBrowser::ZeroconfService& f
     err = DNSServiceGetAddrInfo(&sdRef, 0, kDNSServiceInterfaceIndexAny, kDNSServiceProtocol_IPv4, fr_service.GetHostname().c_str(), GetAddrInfoCallback, this);
 
     if (err != kDNSServiceErr_NoError)
-      CLog::Log(LOGERROR, "ZeroconfBrowserMDNS: DNSServiceGetAddrInfo returned (error = %ld)", (int) err);
+      CLog::Log(LOGERROR, "ZeroconfBrowserMDNS: DNSServiceGetAddrInfo returned (error = {})",
+                (int)err);
 
     err = DNSServiceProcessResult(sdRef);
 
     if (err != kDNSServiceErr_NoError)
-      CLog::Log(LOGERROR, "ZeroconfBrowserMDNS::doResolveService DNSServiceProcessResult returned (error = %ld)", (int) err);
+      CLog::Log(
+          LOGERROR,
+          "ZeroconfBrowserMDNS::doResolveService DNSServiceProcessResult returned (error = {})",
+          (int)err);
 
 #if defined(HAS_MDNS_EMBEDDED)
     // when using the embedded mdns service the call to DNSServiceProcessResult
@@ -373,7 +387,7 @@ bool CZeroconfBrowserMDNS::doResolveService(CZeroconfBrowser::ZeroconfService& f
     // wait for resolve to return or timeout
     // give it 2 secs for resolving (resolving in mdns is cached and queued
     // in timeslices off 1 sec
-    m_addrinfo_event.WaitMSec(2000);
+    m_addrinfo_event.Wait(2000ms);
 #endif //HAS_MDNS_EMBEDDED
     fr_service = m_resolving_service;
 
@@ -383,11 +397,14 @@ bool CZeroconfBrowserMDNS::doResolveService(CZeroconfBrowser::ZeroconfService& f
     // fall back to our resolver
     if (fr_service.GetIP().empty())
     {
-      CLog::Log(LOGWARNING, "ZeroconfBrowserMDNS: Could not resolve hostname %s falling back to CDNSNameCache", fr_service.GetHostname().c_str());
+      CLog::Log(LOGWARNING,
+                "ZeroconfBrowserMDNS: Could not resolve hostname {} falling back to CDNSNameCache",
+                fr_service.GetHostname());
       if (CDNSNameCache::Lookup(fr_service.GetHostname(), strIP))
         fr_service.SetIP(strIP);
       else
-        CLog::Log(LOGERROR, "ZeroconfBrowserMDNS: Could not resolve hostname %s", fr_service.GetHostname().c_str());
+        CLog::Log(LOGERROR, "ZeroconfBrowserMDNS: Could not resolve hostname {}",
+                  fr_service.GetHostname());
     }
   }
 
@@ -396,8 +413,8 @@ bool CZeroconfBrowserMDNS::doResolveService(CZeroconfBrowser::ZeroconfService& f
 
 void CZeroconfBrowserMDNS::ProcessResults()
 {
-  CSingleLock lock(m_data_guard);
+  std::unique_lock<CCriticalSection> lock(m_data_guard);
   DNSServiceErrorType err = DNSServiceProcessResult(m_browser);
   if (err != kDNSServiceErr_NoError)
-    CLog::Log(LOGERROR, "ZeroconfWIN: DNSServiceProcessResult returned (error = %ld)", (int) err);
+    CLog::Log(LOGERROR, "ZeroconfWIN: DNSServiceProcessResult returned (error = {})", (int)err);
 }

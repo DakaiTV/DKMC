@@ -1,39 +1,37 @@
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *  Copyright (C) 2005-2018 Team Kodi
+ *  This file is part of Kodi - https://kodi.tv
  *
- *  This Program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This Program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with XBMC; see the file COPYING.  If not, see
- *  <http://www.gnu.org/licenses/>.
- *
+ *  SPDX-License-Identifier: GPL-2.0-or-later
+ *  See LICENSES/README.md for more information.
  */
-#include "system.h" //HAS_ZEROCONF define
 #include "ZeroconfBrowser.h"
-#include <stdexcept>
+
 #include "utils/log.h"
 
+#include <cassert>
+#include <mutex>
+#include <stdexcept>
+
 #if defined (HAS_AVAHI)
-#include "linux/ZeroconfBrowserAvahi.h"
+#include "platform/linux/network/zeroconf/ZeroconfBrowserAvahi.h"
 #elif defined(TARGET_DARWIN)
 //on osx use the native implementation
-#include "osx/ZeroconfBrowserOSX.h"
+#include "platform/darwin/network/ZeroconfBrowserDarwin.h"
+#elif defined(TARGET_ANDROID)
+#include "platform/android/network/ZeroconfBrowserAndroid.h"
 #elif defined(HAS_MDNS)
 #include "mdns/ZeroconfBrowserMDNS.h"
 #endif
 
 #include "threads/CriticalSection.h"
-#include "threads/SingleLock.h"
-#include "threads/Atomics.h"
+
+namespace
+{
+
+std::mutex singletonMutex;
+
+}
 
 #if !defined(HAS_ZEROCONF)
 //dummy implementation used if no zeroconf is present
@@ -47,25 +45,18 @@ class CZeroconfBrowserDummy : public CZeroconfBrowser
 };
 #endif
 
-long CZeroconfBrowser::sm_singleton_guard = 0;
 CZeroconfBrowser* CZeroconfBrowser::smp_instance = 0;
 
-CZeroconfBrowser::CZeroconfBrowser():mp_crit_sec(new CCriticalSection),m_started(false)
+CZeroconfBrowser::CZeroconfBrowser():mp_crit_sec(new CCriticalSection)
 {
 #ifdef HAS_FILESYSTEM_SMB
   AddServiceType("_smb._tcp.");
 #endif
   AddServiceType("_ftp._tcp.");
-  AddServiceType("_htsp._tcp.");
-  AddServiceType("_daap._tcp.");
   AddServiceType("_webdav._tcp.");
 #ifdef HAS_FILESYSTEM_NFS
-  AddServiceType("_nfs._tcp.");  
+  AddServiceType("_nfs._tcp.");
 #endif// HAS_FILESYSTEM_NFS
-#ifdef HAS_FILESYSTEM_AFP
-  AddServiceType("_afpovertcp._tcp.");   
-#endif
-  AddServiceType("_sftp-ssh._tcp.");
 }
 
 CZeroconfBrowser::~CZeroconfBrowser()
@@ -75,27 +66,27 @@ CZeroconfBrowser::~CZeroconfBrowser()
 
 void CZeroconfBrowser::Start()
 {
-  CSingleLock lock(*mp_crit_sec);
+  std::unique_lock<CCriticalSection> lock(*mp_crit_sec);
   if(m_started)
     return;
   m_started = true;
-  for(tServices::const_iterator it = m_services.begin(); it != m_services.end(); ++it)
-    doAddServiceType(*it);
+  for (const auto& it : m_services)
+    doAddServiceType(it);
 }
 
 void CZeroconfBrowser::Stop()
 {
-  CSingleLock lock(*mp_crit_sec);
+  std::unique_lock<CCriticalSection> lock(*mp_crit_sec);
   if(!m_started)
     return;
-  for(tServices::iterator it = m_services.begin(); it != m_services.end(); ++it)
-    RemoveServiceType(*it);
+  for (const auto& it : m_services)
+    RemoveServiceType(it);
   m_started = false;
 }
 
 bool CZeroconfBrowser::AddServiceType(const std::string& fcr_service_type /*const std::string& domain*/ )
 {
-  CSingleLock lock(*mp_crit_sec);
+  std::unique_lock<CCriticalSection> lock(*mp_crit_sec);
   std::pair<tServices::iterator, bool> ret = m_services.insert(fcr_service_type);
   if(!ret.second)
   {
@@ -110,7 +101,7 @@ bool CZeroconfBrowser::AddServiceType(const std::string& fcr_service_type /*cons
 
 bool CZeroconfBrowser::RemoveServiceType(const std::string& fcr_service_type)
 {
-  CSingleLock lock(*mp_crit_sec);
+  std::unique_lock<CCriticalSection> lock(*mp_crit_sec);
   tServices::iterator ret = m_services.find(fcr_service_type);
   if(ret == m_services.end())
     return false;
@@ -122,7 +113,7 @@ bool CZeroconfBrowser::RemoveServiceType(const std::string& fcr_service_type)
 
 std::vector<CZeroconfBrowser::ZeroconfService> CZeroconfBrowser::GetFoundServices()
 {
-  CSingleLock lock(*mp_crit_sec);
+  std::unique_lock<CCriticalSection> lock(*mp_crit_sec);
   if(m_started)
     return doGetFoundServices();
   else
@@ -134,7 +125,7 @@ std::vector<CZeroconfBrowser::ZeroconfService> CZeroconfBrowser::GetFoundService
 
 bool CZeroconfBrowser::ResolveService(ZeroconfService& fr_service, double f_timeout)
 {
-  CSingleLock lock(*mp_crit_sec);
+  std::unique_lock<CCriticalSection> lock(*mp_crit_sec);
   if(m_started)
   {
     return doResolveService(fr_service, f_timeout);
@@ -145,24 +136,24 @@ bool CZeroconfBrowser::ResolveService(ZeroconfService& fr_service, double f_time
 
 CZeroconfBrowser*  CZeroconfBrowser::GetInstance()
 {
+  std::lock_guard<std::mutex> lock(singletonMutex);
+
   if(!smp_instance)
   {
-    //use double checked locking
-    CAtomicSpinLock lock(sm_singleton_guard);
-    if(!smp_instance)
-    {
 #if !defined(HAS_ZEROCONF)
-      smp_instance = new CZeroconfBrowserDummy;
+    smp_instance = new CZeroconfBrowserDummy;
 #else
 #if defined(TARGET_DARWIN)
-      smp_instance = new CZeroconfBrowserOSX;
+    smp_instance = new CZeroconfBrowserDarwin;
 #elif defined(HAS_AVAHI)
-      smp_instance  = new CZeroconfBrowserAvahi;
+    smp_instance = new CZeroconfBrowserAvahi;
+#elif defined(TARGET_ANDROID)
+    // WIP
+    smp_instance = new CZeroconfBrowserAndroid;
 #elif defined(HAS_MDNS)
-      smp_instance  = new CZeroconfBrowserMDNS;
+    smp_instance = new CZeroconfBrowserMDNS;
 #endif
 #endif
-    }
   }
   assert(smp_instance);
   return smp_instance;
@@ -170,18 +161,16 @@ CZeroconfBrowser*  CZeroconfBrowser::GetInstance()
 
 void CZeroconfBrowser::ReleaseInstance()
 {
-  CAtomicSpinLock lock(sm_singleton_guard);
+  std::lock_guard<std::mutex> lock(singletonMutex);
+
   delete smp_instance;
   smp_instance = 0;
 }
 
 
-CZeroconfBrowser::ZeroconfService::ZeroconfService():m_port(0){}
-
 CZeroconfBrowser::ZeroconfService::ZeroconfService(const std::string& fcr_name, const std::string& fcr_type, const std::string& fcr_domain):
   m_name(fcr_name),
-  m_domain(fcr_domain),
-  m_port(0)
+  m_domain(fcr_domain)
 {
   SetType(fcr_type);
 }
@@ -224,11 +213,11 @@ void CZeroconfBrowser::ZeroconfService::SetPort(int f_port)
 void CZeroconfBrowser::ZeroconfService::SetTxtRecords(const tTxtRecordMap& txt_records)
 {
   m_txtrecords_map = txt_records;
-  
+
   CLog::Log(LOGDEBUG,"CZeroconfBrowser: dump txt-records");
-  for(tTxtRecordMap::const_iterator it = m_txtrecords_map.begin(); it != m_txtrecords_map.end(); ++it)
+  for (const auto& it : m_txtrecords_map)
   {
-    CLog::Log(LOGDEBUG,"CZeroconfBrowser:  key: %s value: %s",it->first.c_str(), it->second.c_str());
+    CLog::Log(LOGDEBUG, "CZeroconfBrowser:  key: {} value: {}", it.first, it.second);
   }
 }
 
