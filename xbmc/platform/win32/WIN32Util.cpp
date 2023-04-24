@@ -1424,6 +1424,104 @@ HDR_STATUS CWIN32Util::GetWindowsHDRStatus()
   return status;
 }
 
+/*!
+ * \brief Retrieve from the system the max luminance of SDR content in HDR.
+ *
+ * Retrieve from the system the max luminance of SDR content in HDR.
+ * Note: always returns 80 nits when the screen is in SDR mode.
+ *
+ * \param gdiDeviceName The screen to retrieve the information for
+ * \param sdrWhiteLevel Max luminance in nits, clamped to 10000
+ * \return true if a value could be read from the system and copied to sdrWhiteLevel, false otherwise
+*/
+bool CWIN32Util::GetSystemSdrWhiteLevel(const std::wstring& gdiDeviceName, float* sdrWhiteLevel)
+{
+#ifdef TARGET_WINDOWS_STORE
+  auto displayInformation = DisplayInformation::GetForCurrentView();
+
+  if (displayInformation)
+  {
+    auto advancedColorInfo = displayInformation.GetAdvancedColorInfo();
+
+    if (advancedColorInfo)
+    {
+      const float sdrNits = advancedColorInfo.SdrWhiteLevelInNits();
+      if (sdrWhiteLevel)
+      {
+        if (sdrNits > 10000.0f)
+          *sdrWhiteLevel = 10000.0f;
+        else
+          *sdrWhiteLevel = sdrNits;
+      }
+      return true;
+    }
+  }
+  return false;
+#else
+  // DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL was added in Windows 10 1709
+
+  uint32_t pathCount{0};
+  uint32_t modeCount{0};
+  std::vector<DISPLAYCONFIG_PATH_INFO> paths;
+  std::vector<DISPLAYCONFIG_MODE_INFO> modes;
+
+  uint32_t flags = QDC_ONLY_ACTIVE_PATHS;
+  LONG result = ERROR_SUCCESS;
+
+  do
+  {
+    if (GetDisplayConfigBufferSizes(flags, &pathCount, &modeCount) != ERROR_SUCCESS)
+      return false;
+
+    paths.resize(pathCount);
+    modes.resize(modeCount);
+
+    result = QueryDisplayConfig(flags, &pathCount, paths.data(), &modeCount, modes.data(), nullptr);
+  } while (result == ERROR_INSUFFICIENT_BUFFER);
+
+  if (result == ERROR_SUCCESS)
+  {
+    paths.resize(pathCount);
+    modes.resize(modeCount);
+
+    for (const auto& path : paths)
+    {
+      DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};
+      source.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+      source.header.size = sizeof(source);
+      source.header.adapterId = path.sourceInfo.adapterId;
+      source.header.id = path.sourceInfo.id;
+
+      if (DisplayConfigGetDeviceInfo(&source.header) == ERROR_SUCCESS)
+      {
+        if (gdiDeviceName == source.viewGdiDeviceName)
+        {
+          DISPLAYCONFIG_SDR_WHITE_LEVEL config{};
+          config.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL;
+          config.header.size = sizeof(config);
+          config.header.adapterId = path.targetInfo.adapterId;
+          config.header.id = path.targetInfo.id;
+          if (DisplayConfigGetDeviceInfo(&config.header) == ERROR_SUCCESS)
+          {
+            if (sdrWhiteLevel)
+            {
+              const float sdrNits = static_cast<const float>(config.SDRWhiteLevel * 80 / 1000);
+              if (sdrNits > 10000.0f)
+                *sdrWhiteLevel = 10000.0f;
+              else
+                *sdrWhiteLevel = sdrNits;
+            }
+            return true;
+          }
+          break;
+        }
+      }
+    }
+  }
+  return (false);
+#endif
+}
+
 void CWIN32Util::PlatformSyslog()
 {
   CLog::Log(LOGINFO, "System has {:.1f} GB of RAM installed",
@@ -1502,9 +1600,9 @@ VideoDriverInfo CWIN32Util::GetVideoDriverInfo(const UINT vendorId, const std::w
       info.majorVersion = std::stoi(ver.substr(ver.length() - 5, 3));
       info.minorVersion = std::stoi(ver.substr(ver.length() - 2, 2));
     }
-    else // for Intel/AMD fill major version only
+    else // for Intel/AMD fill major version only. Single-digit for WDDM < 1.3.
     {
-      info.majorVersion = std::stoi(info.version.substr(0, 2));
+      info.majorVersion = std::stoi(info.version.substr(0, info.version.find('.')));
     }
 
   } while (sta == ERROR_SUCCESS && !info.valid);
@@ -1513,4 +1611,64 @@ VideoDriverInfo CWIN32Util::GetVideoDriverInfo(const UINT vendorId, const std::w
 #endif
 
   return info;
+}
+
+std::wstring CWIN32Util::GetDisplayFriendlyName(const std::wstring& gdiDeviceName)
+{
+#ifdef TARGET_WINDOWS_STORE
+  // Not supported
+  return std::wstring();
+#else
+
+  uint32_t pathCount{};
+  uint32_t modeCount{};
+  std::vector<DISPLAYCONFIG_PATH_INFO> paths;
+  std::vector<DISPLAYCONFIG_MODE_INFO> modes;
+
+  uint32_t flags = QDC_ONLY_ACTIVE_PATHS;
+  LONG result = ERROR_SUCCESS;
+
+  do
+  {
+    if (GetDisplayConfigBufferSizes(flags, &pathCount, &modeCount) != ERROR_SUCCESS)
+      return std::wstring();
+
+    paths.resize(pathCount);
+    modes.resize(modeCount);
+
+    result = QueryDisplayConfig(flags, &pathCount, paths.data(), &modeCount, modes.data(), nullptr);
+  } while (result == ERROR_INSUFFICIENT_BUFFER);
+
+  if (result == ERROR_SUCCESS)
+  {
+    paths.resize(pathCount);
+    modes.resize(modeCount);
+
+    for (const auto& path : paths)
+    {
+      DISPLAYCONFIG_SOURCE_DEVICE_NAME source = {};
+      source.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+      source.header.size = sizeof(source);
+      source.header.adapterId = path.sourceInfo.adapterId;
+      source.header.id = path.sourceInfo.id;
+
+      if (DisplayConfigGetDeviceInfo(&source.header) == ERROR_SUCCESS)
+      {
+        if (gdiDeviceName == source.viewGdiDeviceName)
+        {
+          DISPLAYCONFIG_TARGET_DEVICE_NAME target = {};
+          target.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
+          target.header.size = sizeof(target);
+          target.header.adapterId = path.targetInfo.adapterId;
+          target.header.id = path.targetInfo.id;
+          if (DisplayConfigGetDeviceInfo(&target.header) == ERROR_SUCCESS)
+            return target.monitorFriendlyDeviceName;
+
+          break;
+        }
+      }
+    }
+  }
+  return std::wstring();
+#endif
 }

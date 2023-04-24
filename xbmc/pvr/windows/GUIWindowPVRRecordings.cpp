@@ -28,7 +28,7 @@
 #include "settings/SettingsComponent.h"
 #include "utils/URIUtils.h"
 #include "video/VideoLibraryQueue.h"
-#include "video/windows/GUIWindowVideoNav.h"
+#include "video/windows/GUIWindowVideoBase.h"
 
 #include <memory>
 #include <mutex>
@@ -119,6 +119,17 @@ bool CGUIWindowPVRRecordingsBase::OnAction(const CAction& action)
   }
 
   return CGUIWindowPVRBase::OnAction(action);
+}
+
+bool CGUIWindowPVRRecordingsBase::OnPopupMenu(int iItem)
+{
+  if (iItem >= 0 && iItem < m_vecItems->Size())
+  {
+    const auto item = m_vecItems->Get(iItem);
+    item->SetProperty("CheckAutoPlayNextItem", true);
+  }
+
+  return CGUIWindowPVRBase::OnPopupMenu(iItem);
 }
 
 bool CGUIWindowPVRRecordingsBase::OnContextButton(int itemNumber, CONTEXT_BUTTON button)
@@ -235,18 +246,23 @@ bool CGUIWindowPVRRecordingsBase::OnMessage(CGUIMessage& message)
                 break;
               }
 
-              if (item->m_bIsFolder)
+              if (!item->IsParentFolder() && message.GetParam1() == ACTION_PLAYER_PLAY)
+              {
+                if (item->m_bIsFolder)
+                {
+                  CServiceBroker::GetPVRManager().Get<PVR::GUI::Playback>().PlayRecordingFolder(
+                      *item, true /* check resume */);
+                }
+                else
+                  CServiceBroker::GetPVRManager().Get<PVR::GUI::Playback>().PlayRecording(
+                      *item, true /* check resume */);
+
+                bReturn = true;
+              }
+              else if (item->m_bIsFolder)
               {
                 // recording folders and ".." folders in subfolders are handled by base class.
                 bReturn = false;
-                break;
-              }
-
-              if (message.GetParam1() == ACTION_PLAYER_PLAY)
-              {
-                CServiceBroker::GetPVRManager().Get<PVR::GUI::Playback>().PlayRecording(
-                    *item, true /* check resume */);
-                bReturn = true;
               }
               else
               {
@@ -379,7 +395,7 @@ void CGUIWindowPVRRecordingsBase::OnPrepareFileItems(CFileItemList& items)
   {
     if (m_database.Open())
     {
-      CGUIWindowVideoNav::LoadVideoInfo(files, m_database, false);
+      CGUIWindowVideoBase::LoadVideoInfo(files, m_database, false);
       m_database.Close();
     }
     m_thumbLoader.Load(files);

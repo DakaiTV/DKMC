@@ -41,7 +41,9 @@ CRPProcessInfo::CRPProcessInfo(std::string platformName)
                                        CServiceBroker::GetWinSystem(),
                                        CServiceBroker::GetWinSystem()->GetGfxContext(),
                                        CDisplaySettings::GetInstance(),
-                                       CMediaSettings::GetInstance()))
+                                       CMediaSettings::GetInstance(),
+                                       CServiceBroker::GetGameServices(),
+                                       CServiceBroker::GetGUI()))
 {
   for (auto& rendererFactory : m_rendererFactories)
   {
@@ -63,9 +65,9 @@ CRPProcessInfo::CRPProcessInfo(std::string platformName)
 
 CRPProcessInfo::~CRPProcessInfo() = default;
 
-CRPProcessInfo* CRPProcessInfo::CreateInstance()
+std::unique_ptr<CRPProcessInfo> CRPProcessInfo::CreateInstance()
 {
-  CRPProcessInfo* processInfo = nullptr;
+  std::unique_ptr<CRPProcessInfo> processInfo;
 
   std::unique_lock<CCriticalSection> lock(m_createSection);
 
@@ -73,7 +75,7 @@ CRPProcessInfo* CRPProcessInfo::CreateInstance()
   {
     processInfo = m_processControl();
 
-    if (processInfo != nullptr)
+    if (processInfo)
       CLog::Log(LOGINFO, "RetroPlayer[PROCESS]: Created process info for {}",
                 processInfo->GetPlatformName());
     else
@@ -87,23 +89,9 @@ CRPProcessInfo* CRPProcessInfo::CreateInstance()
   return processInfo;
 }
 
-void CRPProcessInfo::RegisterProcessControl(CreateRPProcessControl createFunc)
+void CRPProcessInfo::RegisterProcessControl(const CreateRPProcessControl& createFunc)
 {
-  std::unique_ptr<CRPProcessInfo> processInfo(createFunc());
-
-  std::unique_lock<CCriticalSection> lock(m_createSection);
-
-  if (processInfo)
-  {
-    CLog::Log(LOGINFO, "RetroPlayer[PROCESS]: Registering process control for {}",
-              processInfo->GetPlatformName());
-    m_processControl = createFunc;
-  }
-  else
-  {
-    CLog::Log(LOGERROR, "RetroPlayer[PROCESS]: Failed to register process control");
-    m_processControl = nullptr;
-  }
+  m_processControl = createFunc;
 }
 
 void CRPProcessInfo::RegisterRendererFactory(IRendererFactory* factory)

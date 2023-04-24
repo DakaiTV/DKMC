@@ -3,17 +3,15 @@
 # Android build guide
 This guide has been tested with Ubuntu 16.04 (Xenial) x86_64. It is meant to cross-compile Kodi for Android using **[Kodi's unified depends build system](../tools/depends/README.md)**. Please read it in full before you proceed to familiarize yourself with the build procedure.
 
-It should work if you're using macOS. If that is the case, read **[macOS specific prerequisites](#35-macos-specific-prerequisites)** first.
+It should work if you're using macOS. If that is the case, read **[macOS specific prerequisites](#34-macos-specific-prerequisites)** first.
 
 ## Table of Contents
 1. **[Document conventions](#1-document-conventions)**
 2. **[Install the required packages](#2-install-the-required-packages)**
 3. **[Prerequisites](#3-prerequisites)**  
   3.1. **[Extract Android SDK and NDK](#31-extract-android-sdk-and-ndk)**  
-  3.2. **[Configure Android SDK](#32-configure-android-sdk)**  
-  3.3. **[Set up the Android toolchain](#33-set-up-the-android-toolchain)**  
-  3.4. **[Create a key to sign debug APKs](#34-create-a-key-to-sign-debug-apks)**  
-  3.5. **[macOS specific prerequisites](#35-macos-specific-prerequisites)**
+  3.2. **[Configure Android SDK](#32-configure-android-sdk)**   
+  3.3. **[Create a key to sign debug APKs](#33-create-a-key-to-sign-debug-apks)**
 4. **[Get the source code](#4-get-the-source-code)**
 5. **[Build tools and dependencies](#5-build-tools-and-dependencies)**  
   5.1. **[Advanced Configure Options](#51-advanced-configure-options)**  
@@ -59,7 +57,7 @@ Several different strategies are used to draw your attention to certain pieces o
 ## 2. Install the required packages
 Install build dependencies needed to cross-compile Kodi for Android:
 ```
-sudo apt install autoconf build-essential curl default-jdk gawk git gperf lib32stdc++6 lib32z1 lib32z1-dev libcurl4-openssl-dev unzip zip zlib1g-dev
+sudo apt install autoconf bison build-essential curl default-jdk flex gawk git gperf lib32stdc++6 lib32z1 lib32z1-dev libcurl4-openssl-dev unzip zip zlib1g-dev
 ```
 **NOTE:** If you're running a 32bit Debian/Ubuntu distribution,  remove `lib32stdc++6 lib32z1 lib32z1-dev` from the command.
 **NOTE:** Gradle 7.0.2+ requires Jave Runtime 11+. Check java version by running `java --version`.  If version is < 11, set JAVA_HOME to java 11+ home directory._
@@ -77,15 +75,15 @@ Kodi CI/CD platforms currently use r21e for build testing and releases, so we re
 ### 3.1. Extract Android SDK and NDK
 Create needed directories:
 ```
-mkdir -p $HOME/android-tools/android-sdk-linux/cmdline-tools
+mkdir -p $HOME/android-tools/android-sdk-linux
 ```
 
-Extract Android SDK:
+Extract Android SDK Command line tools:
 ```
-unzip $HOME/Downloads/commandlinetools-linux-6200805_latest.zip -d $HOME/android-tools/android-sdk-linux/cmdline-tools
+unzip $HOME/Downloads/commandlinetools-linux-6200805_latest.zip -d $HOME/android-tools/android-sdk-linux/
 ```
 
-**NOTE:** Since we're using the latest SDK available, filename can change over time. Adapt the `unzip` command accordingly.
+**NOTE:** Since we're using the latest SDK Command line tools available, filename can change over time. Adapt the `unzip` command accordingly.
 
 Extract Android NDK:
 ```
@@ -95,11 +93,11 @@ unzip $HOME/Downloads/android-ndk-r21e-linux-x86_64.zip -d $HOME/android-tools
 ### 3.2. Configure Android SDK
 Before Android SDK can be used, you need to accept the licenses and configure it:
 ```
-cd $HOME/android-tools/android-sdk-linux/cmdline-tools/tools/bin
+cd $HOME/android-tools/android-sdk-linux/cmdline-tools/bin
 ./sdkmanager --sdk_root=$(pwd)/../.. --licenses
 ./sdkmanager --sdk_root=$(pwd)/../.. platform-tools
-./sdkmanager --sdk_root=$(pwd)/../.. "platforms;android-28"
-./sdkmanager --sdk_root=$(pwd)/../.. "build-tools;28.0.3"
+./sdkmanager --sdk_root=$(pwd)/../.. "platforms;android-33"
+./sdkmanager --sdk_root=$(pwd)/../.. "build-tools;30.0.3"
 ```
 
 ### 3.3. Create a key to sign debug APKs
@@ -108,15 +106,6 @@ All packages must be signed. The following command will generate a self-signed d
 ```
 keytool -genkey -keystore ~/.android/debug.keystore -v -alias androiddebugkey -dname "CN=Android Debug,O=Android,C=US" -keypass android -storepass android -keyalg RSA -keysize 2048 -validity 10000
 ```
-
-### 3.4. macOS specific prerequisites
-* **[Java Development Kit 11+ (JDK)](http://www.oracle.com/technetwork/java/javase/downloads/index.html)** installed.
-* Normal macOS installations filesystem is case insensitive but compiling for Android requires a case sensitive filesystem. Generate a writeable hdd image and format it with hfs+ (case sensitive) issuing
-  * `hdiutil create -type UDIF -fs 'Case-sensitive Journaled HFS+' -size 20g -volname android-dev $HOME/android-dev.dmg`
-* Whenever you want to compile/develop you need to mount the image
-  * `open ~/android-dev.dmg`
-* Once you have your hdd image with case sensitive hfs+ file system execute all the steps inside of this filesystem. You need to adapt all paths in this guide so that they match your local environment. As an example here is a configure line that demonstrates possible paths:
-  * `./configure --with-tarballs=/Users/Shared/xbmc-depends/tarballs --host=arm-linux-androideabi --with-sdk-path=/Volumes/android-dev/android/android-sdk-macosx --with-ndk-path=/Volumes/android-dev/android/android-ndk-r21e --prefix=/Volumes/android-dev/android/xbmc-depends`
   
 **[back to top](#table-of-contents)** | **[back to section top](#3-prerequisites)**
 
@@ -279,6 +268,12 @@ Build a specific group of add-ons:
 ```
 make -j$(getconf _NPROCESSORS_ONLN) -C tools/depends/target/binary-addons ADDONS="pvr.*"
 ```
+
+Clean-up binary add-ons:
+```
+make -C tools/depends/target/binary-addons clean
+```
+
 For additional information on regular expression usage for ADDONS_TO_BUILD, view ADDONS_TO_BUILD section located at [Kodi add-ons CMake based buildsystem](../cmake/addons/README.md)
 
 **[back to top](#table-of-contents)**
@@ -368,11 +363,11 @@ Enable CheckJNI (**before** starting the Kodi):
 adb shell setprop debug.checkjni 1
 ```
 
-**NOTE:** These commands assume that current directory is `tools/android/packaging` and that the proper SDK/NDK paths are set.
+**NOTE:** These commands assume that current directory is `$HOME/kodi-build/tools/android/packaging` and that the proper SDK/NDK paths are set.
 
-GDB can be used to debug, though the support is rather primitive. Rather than using gdb directly, you will need to use ndk-gdb which wraps it. Do **not** trust the `-p/--project` switches, as they do not work. Instead you will need to `cd` to `tools/android/packaging/xbmc` and execute it from there.
+GDB can be used to debug, though the support is rather primitive. Rather than using `gdb` directly, you will need to use `ndk-gdb` which wraps it. You can use the `-p/--project` switches or instead you will need to `cd` to `$HOME/kodi-build/tools/android/packaging/xbmc` and execute it from there.
 ```
- ndk-gdb --start --delay=0
+ ndk-gdb --verbose
 ```
 
 This will open the installed version of Kodi and break. The warnings can be ignored as we have the appropriate paths already setup.

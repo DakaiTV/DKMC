@@ -10,8 +10,10 @@
 
 #include "DVDDemuxers/DVDDemux.h"
 
-extern "C" {
+extern "C"
+{
 #include <libavcodec/avcodec.h>
+#include <libavutil/dovi_meta.h>
 }
 
 #define CODEC_FORCE_SOFTWARE 0x01
@@ -68,6 +70,7 @@ public:
   int orientation; // orientation of the video in degrees counter clockwise
   int bitsperpixel;
   int bitdepth;
+  StreamHdrType hdrType;
   AVColorSpace colorSpace;
   AVColorRange colorRange;
   AVColorPrimaries colorPrimaries;
@@ -75,6 +78,7 @@ public:
   std::shared_ptr<AVMasteringDisplayMetadata> masteringMetadata;
   std::shared_ptr<AVContentLightMetadata> contentLightMetadata;
   std::string stereo_mode; // stereoscopic 3d mode
+  AVDOVIDecoderConfigurationRecord dovi{};
 
   // AUDIO
   int channels;

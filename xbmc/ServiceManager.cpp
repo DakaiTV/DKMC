@@ -149,7 +149,7 @@ bool CServiceManager::InitStageTwo(const std::string& profilesUserDataFolder)
 
   m_contextMenuManager.reset(new CContextMenuManager(*m_addonMgr));
 
-  m_gameControllerManager.reset(new GAME::CControllerManager);
+  m_gameControllerManager = std::make_unique<GAME::CControllerManager>(*m_addonMgr);
   m_inputManager.reset(new CInputManager());
   m_inputManager->InitializeInputs();
 
@@ -195,8 +195,9 @@ bool CServiceManager::InitStageThree(const std::shared_ptr<CProfileManager>& pro
   // Peripherals depends on strings being loaded before stage 3
   m_peripherals->Initialise();
 
-  m_gameServices.reset(new GAME::CGameServices(*m_gameControllerManager, *m_gameRenderManager,
-                                               *m_peripherals, *profileManager));
+  m_gameServices =
+      std::make_unique<GAME::CGameServices>(*m_gameControllerManager, *m_gameRenderManager,
+                                            *m_peripherals, *profileManager, *m_inputManager);
 
   m_contextMenuManager->Init();
 

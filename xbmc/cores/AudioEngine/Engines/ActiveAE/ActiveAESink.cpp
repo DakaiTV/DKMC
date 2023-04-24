@@ -25,18 +25,20 @@ using namespace AE;
 using namespace ActiveAE;
 using namespace std::chrono_literals;
 
-CActiveAESink::CActiveAESink(CEvent *inMsgEvent) :
-  CThread("AESink"),
-  m_controlPort("SinkControlPort", inMsgEvent, &m_outMsgEvent),
-  m_dataPort("SinkDataPort", inMsgEvent, &m_outMsgEvent)
+CActiveAESink::CActiveAESink(CEvent* inMsgEvent)
+  : CThread("AESink"),
+    m_controlPort("SinkControlPort", inMsgEvent, &m_outMsgEvent),
+    m_dataPort("SinkDataPort", inMsgEvent, &m_outMsgEvent),
+    m_sink(nullptr),
+    m_packer(nullptr)
 {
   m_inMsgEvent = inMsgEvent;
-  m_sink = nullptr;
   m_stats = nullptr;
   m_volume = 0.0;
-  m_packer = nullptr;
   m_streamNoise = true;
 }
+
+CActiveAESink::~CActiveAESink() = default;
 
 void CActiveAESink::Start()
 {
@@ -59,15 +61,12 @@ void CActiveAESink::Dispose()
   {
     m_sink->Drain();
     m_sink->Deinitialize();
-    delete m_sink;
-    m_sink = nullptr;
+    m_sink.reset();
   }
 
-  delete m_sampleOfSilence.pkt;
-  m_sampleOfSilence.pkt = nullptr;
+  m_sampleOfSilence.pkt.reset();
 
-  delete m_packer;
-  m_packer = nullptr;
+  m_packer.reset();
 
   CAESinkFactory::Cleanup();
 }
@@ -305,8 +304,7 @@ void CActiveAESink::StateMachine(int signal, Protocol *port, Message *msg)
           {
             m_sink->Drain();
             m_sink->Deinitialize();
-            delete m_sink;
-            m_sink = nullptr;
+            m_sink.reset();
           }
           m_state = S_TOP_UNCONFIGURED;
           msg->Reply(CSinkControlProtocol::ACC);
@@ -328,7 +326,7 @@ void CActiveAESink::StateMachine(int signal, Protocol *port, Message *msg)
           return;
 
         case CSinkControlProtocol::SETSILENCETIMEOUT:
-          m_silenceTimeOut = std::chrono::milliseconds(*reinterpret_cast<int*>(msg->data));
+          m_silenceTimeOut = std::chrono::minutes(*reinterpret_cast<int*>(msg->data));
           return;
 
         case CSinkControlProtocol::SETNOISETYPE:
@@ -442,8 +440,7 @@ void CActiveAESink::StateMachine(int signal, Protocol *port, Message *msg)
           if (m_extError)
           {
             m_sink->Deinitialize();
-            delete m_sink;
-            m_sink = nullptr;
+            m_sink.reset();
             m_state = S_TOP_CONFIGURED_SUSPEND;
             m_extTimeout = 0ms;
           }
@@ -537,8 +534,7 @@ void CActiveAESink::StateMachine(int signal, Protocol *port, Message *msg)
         {
         case CSinkControlProtocol::TIMEOUT:
           m_sink->Deinitialize();
-          delete m_sink;
-          m_sink = nullptr;
+          m_sink.reset();
           m_state = S_TOP_CONFIGURED_SUSPEND;
           m_extTimeout = 10s;
           return;
@@ -585,8 +581,7 @@ void CActiveAESink::StateMachine(int signal, Protocol *port, Message *msg)
           if (m_extError)
           {
             m_sink->Deinitialize();
-            delete m_sink;
-            m_sink = nullptr;
+            m_sink.reset();
             m_state = S_TOP_CONFIGURED_SUSPEND;
           }
           else
@@ -814,7 +809,7 @@ void CActiveAESink::OpenSink()
     m_needIecPack = NeedIECPacking();
     if (m_needIecPack)
     {
-      m_packer = new CAEBitstreamPacker();
+      m_packer = std::make_unique<CAEBitstreamPacker>();
       m_requestedFormat.m_sampleRate = CAEBitstreamPacker::GetOutputRate(m_requestedFormat.m_streamInfo);
       m_requestedFormat.m_channelLayout = CAEBitstreamPacker::GetOutputChannelMap(m_requestedFormat.m_streamInfo);
     }
@@ -826,8 +821,7 @@ void CActiveAESink::OpenSink()
   {
     m_sink->Drain();
     m_sink->Deinitialize();
-    delete m_sink;
-    m_sink = nullptr;
+    m_sink.reset();
   }
 
   // get the display name of the device
@@ -895,8 +889,7 @@ void CActiveAESink::OpenSink()
   config.sample_rate = m_sinkFormat.m_sampleRate;
 
   // init sample of silence/noise
-  delete m_sampleOfSilence.pkt;
-  m_sampleOfSilence.pkt = new CSoundPacket(config, m_sinkFormat.m_frames);
+  m_sampleOfSilence.pkt = std::make_unique<CSoundPacket>(config, m_sinkFormat.m_frames);
   m_sampleOfSilence.pkt->nb_samples = m_sampleOfSilence.pkt->max_nb_samples;
   if (!passthrough)
     GenerateNoise();
@@ -1125,7 +1118,8 @@ void CActiveAESink::GenerateNoise()
   }
 
   SampleConfig config = m_sampleOfSilence.pkt->config;
-  IAEResample *resampler = CAEResampleFactory::Create(AERESAMPLEFACTORY_QUICK_RESAMPLE);
+  std::unique_ptr<IAEResample> resampler =
+      CAEResampleFactory::Create(AERESAMPLEFACTORY_QUICK_RESAMPLE);
 
   SampleConfig dstConfig, srcConfig;
   dstConfig.channel_layout = config.channel_layout;
@@ -1149,17 +1143,26 @@ void CActiveAESink::GenerateNoise()
                      (uint8_t**)&noise, m_sampleOfSilence.pkt->max_nb_samples, 1.0);
 
   KODI::MEMORY::AlignedFree(noise);
-  delete resampler;
 }
 
 void CActiveAESink::SetSilenceTimer()
 {
   if (m_extStreaming)
-    m_extSilenceTimeout = std::chrono::milliseconds::max();
-  else if (m_extAppFocused)
-    m_extSilenceTimeout = m_silenceTimeOut;
+    m_extSilenceTimeout = XbmcThreads::EndTime<decltype(m_extSilenceTimeout)>::Max();
+  else if (m_extAppFocused) // handles no playback/GUI and playback in pause and seek
+  {
+    // only true with AudioTrack RAW + passthrough + TrueHD or EAC3 (DD+)
+    const bool noSilenceOnPause =
+        !m_needIecPack && m_requestedFormat.m_dataFormat == AE_FMT_RAW &&
+        (m_sinkFormat.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD ||
+         m_sinkFormat.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_EAC3);
+
+    m_extSilenceTimeout = (noSilenceOnPause) ? 0ms : m_silenceTimeOut;
+  }
   else
+  {
     m_extSilenceTimeout = 0ms;
+  }
 
   m_extSilenceTimer.Set(m_extSilenceTimeout);
 }

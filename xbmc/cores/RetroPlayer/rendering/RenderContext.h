@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "games/GameTypes.h"
 #include "utils/ColorUtils.h"
 #include "utils/Geometry.h"
 #include "windowing/Resolution.h"
@@ -16,6 +17,7 @@ class CCriticalSection;
 class CDisplaySettings;
 class CGameSettings;
 class CGraphicContext;
+class CGUIComponent;
 class CGUIShaderDX;
 class CMediaSettings;
 class CRenderSystemBase;
@@ -31,6 +33,11 @@ enum class GL_SHADER_METHOD
 
 namespace KODI
 {
+namespace GAME
+{
+class CGameServices;
+}
+
 namespace RETRO
 {
 class CRenderContext
@@ -40,11 +47,14 @@ public:
                  CWinSystemBase* windowing,
                  CGraphicContext& graphicsContext,
                  CDisplaySettings& displaySettings,
-                 CMediaSettings& mediaSettings);
+                 CMediaSettings& mediaSettings,
+                 GAME::CGameServices& gameServices,
+                 CGUIComponent* guiComponent);
 
   CRenderSystemBase* Rendering() { return m_rendering; }
   CWinSystemBase* Windowing() { return m_windowing; }
   CGraphicContext& GraphicsContext() { return m_graphicsContext; }
+  CGUIComponent* GUI() { return m_guiComponent; }
 
   // Rendering functions
   void SetViewPort(const CRect& viewPort);
@@ -78,7 +88,7 @@ public:
   bool IsFullScreenVideo();
   bool IsCalibrating();
   RESOLUTION GetVideoResolution();
-  void Clear(UTILS::COLOR::Color color = 0);
+  void Clear(UTILS::COLOR::Color color);
   RESOLUTION_INFO GetResInfo();
   void SetRenderingResolution(const RESOLUTION_INFO& res, bool needsScaling);
   UTILS::COLOR::Color MergeAlpha(UTILS::COLOR::Color color);
@@ -94,6 +104,10 @@ public:
   ::CGameSettings& GetGameSettings();
   ::CGameSettings& GetDefaultGameSettings();
 
+  // Agent functions
+  void StartAgentManager(GAME::GameClientPtr gameClient);
+  void StopAgentManager();
+
 private:
   // Construction parameters
   CRenderSystemBase* const m_rendering;
@@ -101,6 +115,8 @@ private:
   CGraphicContext& m_graphicsContext;
   CDisplaySettings& m_displaySettings;
   CMediaSettings& m_mediaSettings;
+  GAME::CGameServices& m_gameServices;
+  CGUIComponent* const m_guiComponent;
 };
 } // namespace RETRO
 } // namespace KODI

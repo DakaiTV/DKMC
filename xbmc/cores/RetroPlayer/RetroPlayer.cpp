@@ -9,6 +9,7 @@
 #include "RetroPlayer.h"
 
 #include "FileItem.h"
+#include "GUIInfoManager.h"
 #include "RetroPlayerAutoSave.h"
 #include "RetroPlayerInput.h"
 #include "ServiceBroker.h"
@@ -18,6 +19,7 @@
 #include "cores/DataCacheCore.h"
 #include "cores/IPlayerCallback.h"
 #include "cores/RetroPlayer/cheevos/Cheevos.h"
+#include "cores/RetroPlayer/guibridge/GUIGameMessenger.h"
 #include "cores/RetroPlayer/guibridge/GUIGameRenderManager.h"
 #include "cores/RetroPlayer/guiplayback/GUIPlaybackControl.h"
 #include "cores/RetroPlayer/playback/IPlayback.h"
@@ -41,6 +43,7 @@
 #include "guilib/WindowIDs.h"
 #include "input/actions/Action.h"
 #include "input/actions/ActionIDs.h"
+#include "interfaces/AnnouncementManager.h"
 #include "messaging/ApplicationMessenger.h"
 #include "utils/JobManager.h"
 #include "utils/StringUtils.h"
@@ -86,7 +89,7 @@ bool CRetroPlayer::OpenFile(const CFileItem& file, const CPlayerOptions& options
   // Check if we should open in standalone mode
   const bool bStandalone = fileCopy.GetPath().empty();
 
-  m_processInfo.reset(CRPProcessInfo::CreateInstance());
+  m_processInfo = CRPProcessInfo::CreateInstance();
   if (!m_processInfo)
   {
     CLog::Log(LOGERROR, "RetroPlayer[PLAYER]: Failed to create - no process info registered");
@@ -96,6 +99,7 @@ bool CRetroPlayer::OpenFile(const CFileItem& file, const CPlayerOptions& options
   m_processInfo->SetDataCache(&CServiceBroker::GetDataCacheCore());
   m_processInfo->ResetInfo();
 
+  m_guiMessenger = std::make_unique<CGUIGameMessenger>(*m_processInfo);
   m_renderManager.reset(new CRPRenderManager(*m_processInfo));
 
   std::unique_lock<CCriticalSection> lock(m_mutex);
@@ -126,7 +130,10 @@ bool CRetroPlayer::OpenFile(const CFileItem& file, const CPlayerOptions& options
     {
       m_streamManager.reset(new CRPStreamManager(*m_renderManager, *m_processInfo));
 
-      m_input.reset(new CRetroPlayerInput(CServiceBroker::GetPeripherals()));
+      // Initialize input
+      m_input = std::make_unique<CRetroPlayerInput>(CServiceBroker::GetPeripherals(),
+                                                    *m_processInfo, m_gameClient);
+      m_input->StartAgentManager();
 
       if (!bStandalone)
       {
@@ -187,7 +194,7 @@ bool CRetroPlayer::OpenFile(const CFileItem& file, const CPlayerOptions& options
     m_cheevos->EnableRichPresence();
 
     // Initialize gameplay
-    CreatePlayback(m_gameServices.GameSettings().AutosaveEnabled(), savestatePath);
+    CreatePlayback(savestatePath);
     RegisterWindowCallbacks();
     m_playbackControl.reset(new CGUIPlaybackControl(*this));
     m_callback.OnPlayBackStarted(fileCopy);
@@ -233,13 +240,17 @@ bool CRetroPlayer::CloseFile(bool reopen /* = false */)
 
   m_playback.reset();
 
+  if (m_input)
+    m_input->StopAgentManager();
+
+  m_cheevos.reset();
+
   if (m_gameClient)
     m_gameClient->CloseFile();
 
   m_input.reset();
-  m_streamManager.reset();
 
-  m_cheevos.reset();
+  m_streamManager.reset();
 
   if (m_gameClient)
     m_gameClient->Unload();
@@ -513,15 +524,32 @@ std::string CRetroPlayer::GetPlayingGame() const
 
 std::string CRetroPlayer::CreateSavestate(bool autosave)
 {
-  return m_playback->CreateSavestate(autosave);
+  if (m_playback)
+    return m_playback->CreateSavestate(autosave);
+
+  return "";
 }
 
-bool CRetroPlayer::LoadSavestate(const std::string& path)
+bool CRetroPlayer::UpdateSavestate(const std::string& savestatePath)
 {
   if (m_playback)
-    return m_playback->LoadSavestate(path);
+    return !m_playback->CreateSavestate(false, savestatePath).empty();
 
   return false;
+}
+
+bool CRetroPlayer::LoadSavestate(const std::string& savestatePath)
+{
+  if (m_playback)
+    return m_playback->LoadSavestate(savestatePath);
+
+  return false;
+}
+
+void CRetroPlayer::FreeSavestateResources(const std::string& savestatePath)
+{
+  if (m_renderManager)
+    m_renderManager->ClearVideoFrame(savestatePath);
 }
 
 void CRetroPlayer::CloseOSDCallback()
@@ -587,19 +615,19 @@ void CRetroPlayer::OnSpeedChange(double newSpeed)
   m_processInfo->SetSpeed(static_cast<float>(newSpeed));
 }
 
-void CRetroPlayer::CreatePlayback(bool bRestoreState, const std::string& savestatePath)
+void CRetroPlayer::CreatePlayback(const std::string& savestatePath)
 {
   if (m_gameClient->RequiresGameLoop())
   {
     m_playback->Deinitialize();
     m_playback = std::make_unique<CReversiblePlayback>(
-        m_gameClient.get(), *m_renderManager, m_cheevos.get(), m_gameClient->GetFrameRate(),
-        m_gameClient->GetSerializeSize());
+        m_gameClient.get(), *m_renderManager, m_cheevos.get(), *m_guiMessenger,
+        m_gameClient->GetFrameRate(), m_gameClient->GetSerializeSize());
   }
   else
     ResetPlayback();
 
-  if (bRestoreState)
+  if (!savestatePath.empty())
   {
     const bool bStandalone = m_gameClient->GetGamePath().empty();
     if (!bStandalone)

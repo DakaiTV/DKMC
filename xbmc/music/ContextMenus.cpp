@@ -15,7 +15,9 @@
 #include "guilib/GUIWindowManager.h"
 #include "music/MusicUtils.h"
 #include "music/dialogs/GUIDialogMusicInfo.h"
+#include "playlists/PlayListTypes.h"
 #include "tags/MusicInfoTag.h"
+#include "utils/Variant.h"
 
 #include <utility>
 
@@ -41,6 +43,9 @@ bool CMusicInfo::Execute(const std::shared_ptr<CFileItem>& item) const
 
 bool CMusicBrowse::IsVisible(const CFileItem& item) const
 {
+  if (item.IsFileFolder(EFILEFOLDER_MASK_ONBROWSE))
+    return false; // handled by CMediaWindow
+
   return item.m_bIsFolder && MUSIC_UTILS::IsItemPlayable(item);
 }
 
@@ -67,12 +72,20 @@ bool CMusicPlay::IsVisible(const CFileItem& item) const
 
 bool CMusicPlay::Execute(const std::shared_ptr<CFileItem>& item) const
 {
-  MUSIC_UTILS::PlayItem(item);
+  const ContentUtils::PlayMode mode = item->GetProperty("CheckAutoPlayNextItem").asBoolean()
+                                          ? ContentUtils::PlayMode::CHECK_AUTO_PLAY_NEXT_ITEM
+                                          : ContentUtils::PlayMode::PLAY_ONLY_THIS;
+  MUSIC_UTILS::PlayItem(item, mode);
+
+  item->SetProperty("playlist_type_hint", PLAYLIST::TYPE_MUSIC);
   return true;
 }
 
 bool CMusicPlayNext::IsVisible(const CFileItem& item) const
 {
+  if (!item.CanQueue())
+    return false;
+
   return MUSIC_UTILS::IsItemPlayable(item);
 }
 
@@ -84,11 +97,40 @@ bool CMusicPlayNext::Execute(const std::shared_ptr<CFileItem>& item) const
 
 bool CMusicQueue::IsVisible(const CFileItem& item) const
 {
+  if (!item.CanQueue())
+    return false;
+
   return MUSIC_UTILS::IsItemPlayable(item);
 }
+
+namespace
+{
+void SelectNextItem(int windowID)
+{
+  auto& windowMgr = CServiceBroker::GetGUI()->GetWindowManager();
+  CGUIWindow* window = windowMgr.GetWindow(windowID);
+  if (window)
+  {
+    const int viewContainerID = window->GetViewContainerID();
+    if (viewContainerID > 0)
+    {
+      CGUIMessage msg1(GUI_MSG_ITEM_SELECTED, windowID, viewContainerID);
+      windowMgr.SendMessage(msg1, windowID);
+
+      CGUIMessage msg2(GUI_MSG_ITEM_SELECT, windowID, viewContainerID, msg1.GetParam1() + 1);
+      windowMgr.SendMessage(msg2, windowID);
+    }
+  }
+}
+} // unnamed namespace
 
 bool CMusicQueue::Execute(const std::shared_ptr<CFileItem>& item) const
 {
   MUSIC_UTILS::QueueItem(item, MUSIC_UTILS::QueuePosition::POSITION_END);
+
+  // Set selection to next item in active window's view.
+  const int windowID = CServiceBroker::GetGUI()->GetWindowManager().GetActiveWindow();
+  SelectNextItem(windowID);
+
   return true;
 }

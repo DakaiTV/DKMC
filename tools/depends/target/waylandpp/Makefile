@@ -17,8 +17,10 @@ ifeq ($(PLATFORM),)
 	PLATFORM = native
 	TARBALLS_LOCATION = $(ROOT_DIR)
 	BASE_URL := http://mirrors.kodi.tv/build-deps/sources
-	RETRIEVE_TOOL := curl -Ls --create-dirs -f -O
-	ARCHIVE_TOOL := tar --strip-components=1 -xf
+	RETRIEVE_TOOL := curl
+	RETRIEVE_TOOL_FLAGS := -LsS --create-dirs --retry 10 --retry-connrefused -o
+	ARCHIVE_TOOL := tar
+	ARCHIVE_TOOL_FLAGS := --strip-components=1 -xf
 	CMAKE := cmake
 	CMAKE_OPTIONS := -DCMAKE_INSTALL_PREFIX=$(PREFIX) -DBUILD_SCANNER=ON $(CMAKE_OPTIONS)
 else
@@ -27,13 +29,13 @@ else
 	CMAKE_OPTIONS := -DBUILD_SCANNER=OFF -DWAYLAND_SCANNERPP=$(NATIVEPREFIX)/bin/wayland-scanner++ $(CMAKE_OPTIONS)
 endif
 
-CMAKE_OPTIONS := -DBUILD_DOCUMENTATION=OFF -DBUILD_LIBRARIES=ON -DBUILD_EXAMPLES=OFF $(CMAKE_OPTIONS)
+CMAKE_OPTIONS := -DBUILD_DOCUMENTATION=OFF -DBUILD_LIBRARIES=ON -DBUILD_SHARED_LIBS=OFF -DBUILD_EXAMPLES=OFF $(CMAKE_OPTIONS)
 BUILDDIR = $(PLATFORM)/build
 
 all: .installed-$(PLATFORM)
 
 
-$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE).$(HASH_TYPE) $(DEPS)
+$(PLATFORM): $(DEPS) | $(TARBALLS_LOCATION)/$(ARCHIVE).$(HASH_TYPE)
 ifeq ($(PREFIX),)
 	@echo
 	@echo "ERROR: please set PREFIX to the kodi install path e.g. make PREFIX=/usr/local"

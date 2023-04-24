@@ -78,8 +78,10 @@ public:
   // HDR display support
   static HDR_STATUS ToggleWindowsHDR(DXGI_MODE_DESC& modeDesc);
   static HDR_STATUS GetWindowsHDRStatus();
+  static bool GetSystemSdrWhiteLevel(const std::wstring& gdiDeviceName, float* sdrWhiteLevel);
 
   static void PlatformSyslog();
 
   static VideoDriverInfo GetVideoDriverInfo(const UINT vendorId, const std::wstring& driverDesc);
+  static std::wstring GetDisplayFriendlyName(const std::wstring& GdiDeviceName);
 };

@@ -230,7 +230,7 @@ void URIUtils::Split(const std::string& strFileNameAndPath,
       else i--;
     }
     if (i > 0)
-      strFileName = strFileName.substr(0, i);
+      strFileName.resize(i);
   }
 }
 
@@ -1106,6 +1106,16 @@ bool URIUtils::IsPVRRecording(const std::string& strFile)
 bool URIUtils::IsPVRRecordingFileOrFolder(const std::string& strFile)
 {
   return StringUtils::StartsWith(strFile, "pvr://recordings");
+}
+
+bool URIUtils::IsPVRTVRecordingFileOrFolder(const std::string& strFile)
+{
+  return StringUtils::StartsWith(strFile, "pvr://recordings/tv");
+}
+
+bool URIUtils::IsPVRRadioRecordingFileOrFolder(const std::string& strFile)
+{
+  return StringUtils::StartsWith(strFile, "pvr://recordings/radio");
 }
 
 bool URIUtils::IsMusicDb(const std::string& strFile)

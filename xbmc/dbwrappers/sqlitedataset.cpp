@@ -350,12 +350,13 @@ int SqliteDatabase::connect(bool create)
       active = true;
       return DB_CONNECTION_OK;
     }
-
-    return DB_CONNECTION_NONE;
   }
   catch (const DbErrors&)
   {
   }
+
+  sqlite3_close(conn);
+
   return DB_CONNECTION_NONE;
 }
 
@@ -838,7 +839,7 @@ int SqliteDataset::exec(const std::string& sql)
     pos = qry.find(" ON ", pos + 1);
 
     if (pos != std::string::npos)
-      qry = qry.substr(0, pos);
+      qry.resize(pos);
   }
 
   char* errmsg;

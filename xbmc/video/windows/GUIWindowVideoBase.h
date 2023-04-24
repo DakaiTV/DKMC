@@ -33,9 +33,7 @@ public:
   bool OnMessage(CGUIMessage& message) override;
   bool OnAction(const CAction &action) override;
 
-  void PlayMovie(const CFileItem *item, const std::string &player = "");
-  static void GetResumeItemOffset(const CFileItem *item, int64_t& startoffset, int& partNumber);
-  static bool HasResumeItemOffset(const CFileItem *item);
+  void PlayMovie(const CFileItem* item, const std::string& player = "");
 
   virtual void OnItemInfo(const CFileItem& fileItem, ADDON::ScraperPtr& scraper);
 
@@ -72,6 +70,16 @@ public:
    \return string containing the resume position or an empty string if there is no resume position
    */
   static std::string GetResumeString(const CFileItem &item);
+
+  /*! \brief Load video information from the database for these items (public static version)
+   Useful for grabbing information for file listings, from watched status to full metadata
+   \param items the items to load information for.
+   \param database open database object to retrieve the data from
+   \param allowReplaceLabels allow label replacement if according GUI setting is enabled
+   */
+  static void LoadVideoInfo(CFileItemList& items,
+                            CVideoDatabase& database,
+                            bool allowReplaceLabels = true);
 
 protected:
   void OnScan(const std::string& strPath, bool scanAll = false);
@@ -114,8 +122,6 @@ protected:
   void LoadPlayList(const std::string& strPlayList, PLAYLIST::Id playlistId = PLAYLIST::TYPE_VIDEO);
 
   bool ShowIMDB(CFileItemPtr item, const ADDON::ScraperPtr& content, bool fromDB);
-
-  void AddItemToPlayList(const CFileItemPtr &pItem, CFileItemList &queuedItems);
 
   void OnSearch();
   void OnSearchItemFound(const CFileItem* pSelItem);

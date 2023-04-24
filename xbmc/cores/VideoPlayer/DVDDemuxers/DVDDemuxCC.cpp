@@ -11,8 +11,94 @@
 #include "DVDDemuxUtils.h"
 #include "cores/VideoPlayer/DVDCodecs/Overlay/contrib/cc_decoder708.h"
 #include "cores/VideoPlayer/Interface/TimingConstants.h"
+#include "utils/ColorUtils.h"
+#include "utils/StringUtils.h"
 
 #include <algorithm>
+
+namespace
+{
+/*!
+ * \brief Color formats for CC color conversion
+ */
+enum class ColorFormat
+{
+  RGB,
+  ARGB
+};
+
+/*!
+ * \brief Given the color code from the close caption decoder, returns the corresponding
+ * color in rgb format (striping the alpha channel from argb)
+ * 
+ * \param[in] ccColor - a given color from the cc decoder
+ * \param[in] format - the color format
+ * \return the corresponding Color in rgb
+ */
+constexpr UTILS::COLOR::Color CCColorConversion(const uint8_t ccColor, ColorFormat format)
+{
+  UTILS::COLOR::Color color = UTILS::COLOR::NONE;
+  switch (ccColor)
+  {
+    case WHITE:
+      color = UTILS::COLOR::WHITE;
+      break;
+    case GREEN:
+      color = UTILS::COLOR::GREEN;
+      break;
+    case BLUE:
+      color = UTILS::COLOR::BLUE;
+      break;
+    case CYAN:
+      color = UTILS::COLOR::CYAN;
+      break;
+    case RED:
+      color = UTILS::COLOR::RED;
+      break;
+    case YELLOW:
+      color = UTILS::COLOR::YELLOW;
+      break;
+    case MAGENTA:
+      color = UTILS::COLOR::MAGENTA;
+      break;
+    case BLACK:
+      color = UTILS::COLOR::BLACK;
+      break;
+    default:
+      break;
+  }
+
+  if (format == ColorFormat::RGB)
+    return color & ~0xFF000000;
+
+  return color;
+}
+
+/*!
+ * \brief Given the current buffer cc text and cc style attributes, apply the modifiers
+ * \param[in,out] ccText - the text to display in the caption
+ * \param[in] ccAttributes - The attributes (italic, color, underline) for the text
+ */
+void ApplyStyleModifiers(std::string& ccText, const cc_attribute_t& ccAttributes)
+{
+  // Apply style modifiers to CC text
+  if (ccAttributes.italic > 0)
+  {
+    ccText = StringUtils::Format("<i>{}</i>", ccText);
+  }
+  if (ccAttributes.underline > 0)
+  {
+    ccText = StringUtils::Format("<u>{}</u>", ccText);
+  }
+  if (ccAttributes.foreground != WHITE)
+  {
+    ccText = StringUtils::Format(
+        "<font color=#{}>{}</u>",
+        UTILS::COLOR::ConvertToHexRGB(CCColorConversion(ccAttributes.foreground, ColorFormat::RGB)),
+        ccText);
+  }
+}
+} // namespace
 
 class CBitstream
 {
@@ -90,7 +176,6 @@ CDVDDemuxCC::CDVDDemuxCC(AVCodecID codec) : m_codec(codec)
 {
   m_hasData = false;
   m_curPts = 0.0;
-  m_ccDecoder = NULL;
 }
 
 CDVDDemuxCC::~CDVDDemuxCC()
@@ -153,9 +238,7 @@ DemuxPacket* CDVDDemuxCC::Read(DemuxPacket *pSrcPacket)
 
   while ((len = pSrcPacket->iSize - p) > 3)
   {
-    uint8_t* buf = pSrcPacket->pData + p;
-    bool validCaption = (buf[0] & 0x04) > 0;
-    if (validCaption)
+    if ((startcode & 0xffffff00) == 0x00000100)
     {
       if (m_codec == AV_CODEC_ID_MPEG2VIDEO)
       {
@@ -164,11 +247,13 @@ DemuxPacket* CDVDDemuxCC::Read(DemuxPacket *pSrcPacket)
         {
           if (len > 4)
           {
+            uint8_t *buf = pSrcPacket->pData + p;
             picType = (buf[1] & 0x38) >> 3;
           }
         }
         else if (scode == 0xb2) // user data
         {
+          uint8_t *buf = pSrcPacket->pData + p;
           if (len >= 6 &&
             buf[0] == 'G' && buf[1] == 'A' && buf[2] == '9' && buf[3] == '4' &&
             buf[4] == 3 && (buf[5] & 0x40))
@@ -230,6 +315,7 @@ DemuxPacket* CDVDDemuxCC::Read(DemuxPacket *pSrcPacket)
         // slice data comes after SEI
         if (scode >= 1 && scode <= 5)
         {
+          uint8_t *buf = pSrcPacket->pData + p;
           CBitstream bs(buf, len * 8);
           bs.readGolombUE();
           int sliceType = bs.readGolombUE();
@@ -248,6 +334,7 @@ DemuxPacket* CDVDDemuxCC::Read(DemuxPacket *pSrcPacket)
         }
         if (scode == 0x06) // SEI
         {
+          uint8_t *buf = pSrcPacket->pData + p;
           if (len >= 12 &&
             buf[3] == 0 && buf[4] == 49 &&
             buf[5] == 'G' && buf[6] == 'A' && buf[7] == '9' && buf[8] == '4' && buf[9] == 3)
@@ -317,7 +404,7 @@ void CDVDDemuxCC::Handler(int service, void *userdata)
     stream.flags = FLAG_HEARING_IMPAIRED;
     stream.codec = AV_CODEC_ID_TEXT;
     stream.uniqueId = service;
-    ctx->m_streams.push_back(stream);
+    ctx->m_streams.push_back(std::move(stream));
 
     streamdata data;
     data.streamIdx = idx;
@@ -337,7 +424,7 @@ void CDVDDemuxCC::Handler(int service, void *userdata)
 
 bool CDVDDemuxCC::OpenDecoder()
 {
-  m_ccDecoder = new CDecoderCC708();
+  m_ccDecoder = std::make_unique<CDecoderCC708>();
   m_ccDecoder->Init(Handler, this);
   return true;
 }
@@ -346,8 +433,7 @@ void CDVDDemuxCC::Dispose()
 {
   m_streams.clear();
   m_streamdata.clear();
-  delete m_ccDecoder;
-  m_ccDecoder = NULL;
+  m_ccDecoder.reset();
 
   while (!m_ccReorderBuffer.empty())
   {
@@ -382,22 +468,22 @@ DemuxPacket* CDVDDemuxCC::Decode()
       {
         int service = m_streamdata[i].service;
 
-        char *data;
-        int len;
+        std::string data;
+        // CEA-608
         if (service == 0)
         {
           data = m_ccDecoder->m_cc608decoder->text;
-          len = m_ccDecoder->m_cc608decoder->textlen;
+          ApplyStyleModifiers(data, m_ccDecoder->m_cc608decoder->textattr);
         }
+        // CEA-708
         else
         {
           data = m_ccDecoder->m_cc708decoders[service].text;
-          len = m_ccDecoder->m_cc708decoders[service].textlen;
         }
 
-        pPacket = CDVDDemuxUtils::AllocateDemuxPacket(len);
-        pPacket->iSize = len;
-        memcpy(pPacket->pData, data, pPacket->iSize);
+        pPacket = CDVDDemuxUtils::AllocateDemuxPacket(data.size());
+        pPacket->iSize = data.size();
+        memcpy(pPacket->pData, data.c_str(), pPacket->iSize);
 
         pPacket->iStreamId = service;
         pPacket->pts = m_streamdata[i].pts;

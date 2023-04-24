@@ -32,6 +32,7 @@ class IAddonProvider;
 extern "C"
 {
 #include <libavcodec/avcodec.h>
+#include <libavutil/dovi_meta.h>
 #include <libavutil/mastering_display_metadata.h>
 }
 
@@ -82,14 +83,14 @@ public:
     source = STREAM_SOURCE_NONE;
     iDuration = 0;
     pPrivate = NULL;
-    ExtraData = NULL;
     ExtraSize = 0;
     disabled = false;
     changes = 0;
     flags = StreamFlags::FLAG_NONE;
   }
 
-  virtual ~CDemuxStream() { delete[] ExtraData; }
+  virtual ~CDemuxStream() = default;
+  CDemuxStream(CDemuxStream&&) = default;
 
   virtual std::string GetStreamName();
 
@@ -105,7 +106,7 @@ public:
 
   int iDuration; // in mseconds
   void* pPrivate; // private pointer for the demuxer
-  uint8_t* ExtraData; // extra data for codec to use
+  std::unique_ptr<uint8_t[]> ExtraData; // extra data for codec to use
   unsigned int ExtraSize; // size of extra data
 
   StreamFlags flags;
@@ -150,6 +151,7 @@ public:
 
   std::string stereo_mode; // expected stereo mode
   StreamHdrType hdr_type = StreamHdrType::HDR_TYPE_NONE; // type of HDR for this stream (hdr10, etc)
+  AVDOVIDecoderConfigurationRecord dovi{};
 };
 
 class CDemuxStreamAudio : public CDemuxStream

@@ -679,6 +679,7 @@ msgid "Free"
 msgstr ""
 
 #: addons/skin.estuary/xml/Includes.xml
+#: system/settings/settings.xml
 msgctxt "#157"
 msgid "Video"
 msgstr ""
@@ -2264,6 +2265,7 @@ msgctxt "#479"
 msgid "Skin & language"
 msgstr ""
 
+#: system/peripherals.xml
 #: system/settings/settings.xml
 #: addons/skin.estuary/xml/Includes.xml
 msgctxt "#480"
@@ -4915,7 +4917,6 @@ msgstr ""
 #: addons/skin.estuary/xml/Variables.xml
 #: xbmc/music/ContextMenus.h
 #: xbmc/video/ContextMenus.cpp
-#: xbmc/video/windows/GUIWindowVideoBase.cpp
 msgctxt "#10008"
 msgid "Play next"
 msgstr ""
@@ -5718,6 +5719,8 @@ msgstr ""
 #empty strings from id 12015 to 12020
 
 #. Label of various controls for starting playback from the beginning
+#: addons/skin.estuary/xml/SkinSettings.xml
+#: addons/skin.estuary/xml/Variables.xml
 #: xbmc/Autorun.cpp
 #: xbmc/pvr/PVRContextMenus.cpp
 #: xbmc/pvr/PVRGUIActions.cpp
@@ -6554,7 +6557,7 @@ msgctxt "#13205"
 msgid "Unknown"
 msgstr ""
 
-#. unused?
+#. Label in the game OSD to overwrite an existing savestate
 msgctxt "#13206"
 msgid "Overwrite"
 msgstr ""
@@ -6929,7 +6932,6 @@ msgstr ""
 #: system/settings/settings.xml
 #: xbmc/music/ContextMenus.h
 #: xbmc/video/ContextMenus.cpp
-#: xbmc/video/windows/GUIWindowVideoBase.cpp
 msgctxt "#13347"
 msgid "Queue item"
 msgstr ""
@@ -6995,7 +6997,15 @@ msgctxt "#13361"
 msgid "Enable voice"
 msgstr ""
 
-#empty strings from id 13362 to 13374
+#. label for resume context menu item for video folders (like a TV show or a single season of a TV show)
+#: addons/skin.estuary/xml/SkinSettings.xml
+#: addons/skin.estuary/xml/Variables.xml
+#: xbmc/video/windows/GUIWindowVideoBase.cpp
+msgctxt "#13362"
+msgid "Continue watching"
+msgstr ""
+
+#empty strings from id 13363 to 13374
 
 msgctxt "#13375"
 msgid "Enable device"
@@ -7073,10 +7083,7 @@ msgctxt "#13391"
 msgid "Eject / Load"
 msgstr ""
 
-#: system/settings/settings.xml
-msgctxt "#13392"
-msgid "Use visualisation if playing audio"
-msgstr ""
+#empty string with id 13392
 
 #: xbmc/windows/GUIWindowFileManager.cpp
 msgctxt "#13393"
@@ -8774,44 +8781,43 @@ msgid "Action"
 msgstr ""
 
 #. Label for an action associated with a favourite.
-#: xbmc/Util.cpp
+#: xbmc/favourites/FavouritesURL.cpp
 msgctxt "#15218"
 msgid "Play media"
 msgstr ""
 
 #. Label for an action associated with a favourite
-#: xbmc/Util.cpp
+#: xbmc/favourites/FavouritesURL.cpp
 msgctxt "#15219"
 msgid "Show picture"
 msgstr ""
 
 #. Label for an action associated with a favourite. Placeholder will be filled with the name of the window the favourite's content will be displayed in.
-#: xbmc/favourites/FavouritesService.cpp
-#: xbmc/Util.cpp
+#: xbmc/favourites/FavouritesURL.cpp
 msgctxt "#15220"
 msgid "Show content in \"{}\""
 msgstr ""
 
 #. Label for an action associated with a favourite
-#: xbmc/Util.cpp
+#: xbmc/favourites/FavouritesURL.cpp
 msgctxt "#15221"
 msgid "Execute script"
 msgstr ""
 
 #. Label for an action associated with a favourite
-#: xbmc/Util.cpp
+#: xbmc/favourites/FavouritesURL.cpp
 msgctxt "#15222"
 msgid "Execute Android app"
 msgstr ""
 
 #. Label for an action associated with a favourite
-#: xbmc/Util.cpp
+#: xbmc/favourites/FavouritesURL.cpp
 msgctxt "#15223"
 msgid "Execute add-on"
 msgstr ""
 
 #. Label for an action associated with a favourite
-#: xbmc/Util.cpp
+#: xbmc/favourites/FavouritesURL.cpp
 msgctxt "#15224"
 msgid "Other / Unknown"
 msgstr ""
@@ -8868,19 +8874,25 @@ msgctxt "#15313"
 msgid "Login to RetroAchievements"
 msgstr ""
 
-#. Label for button in the in-game savestate manager
+#. Label for button which creates a new savestate in the in-game savestate manager
 #: xbmc/games/dialogs/osd/DialogInGameSaves.cpp
 msgctxt "#15314"
-msgid "Save progress"
+msgid "Save"
 msgstr ""
 
-#. Caption for "Save progress" button in the in-game savestate manager
+#. Caption for "Save" button in the in-game savestate manager
 #: xbmc/games/dialogs/osd/DialogInGameSaves.cpp
 msgctxt "#15315"
-msgid "Save progress to new save file"
+msgid "Save progress to a new save file"
 msgstr ""
 
-#empty strings from id 15316 to 15999
+#. Label for savestates created automatically by "Autosave" function
+#: xbmc/cores/RetroPlayer/playback/ReversiblePlayback.cpp
+msgctxt "#15316"
+msgid "Autosave"
+msgstr ""
+
+#empty strings from id 15317 to 15999
 
 #: system/settings/settings.xml
 msgctxt "#16000"
@@ -10766,11 +10778,7 @@ msgctxt "#19220"
 msgid "Channels in"
 msgstr ""
 
-#. pvr settings "sync channel groups with backend(s)" control label
-#: system/settings/settings.xml
-msgctxt "#19221"
-msgid "Synchronise channel groups with backend(s)"
-msgstr ""
+#empty string with id 19221
 
 #: addons/skin.estouchy/xml/Includes.xml
 msgctxt "#19222"
@@ -11545,7 +11553,13 @@ msgctxt "#19349"
 msgid "User preference"
 msgstr ""
 
-#empty strings from id 19350 to 19498
+#. label for PVR settings use backend channel group order control
+#: system/settings/settings.xml
+msgctxt "#19350"
+msgid "Use channel group order from backend(s)"
+msgstr ""
+
+#empty strings from id 19351 to 19498
 
 #. label for epg genre value
 #: xbmc/pvr/epg/Epg.cpp
@@ -18294,7 +18308,7 @@ msgstr ""
 
 #: system/settings/settings.xml
 msgctxt "#35203"
-msgid "Enable rewind if supported"
+msgid "Enable rewind (if supported)"
 msgstr ""
 
 #: system/settings/settings.xml
@@ -18400,7 +18414,7 @@ msgstr ""
 #. Title of the game OSD menu
 #: addons/skin.estuary/xml/GameOSD.xml
 msgctxt "#35221"
-msgid "Game Menu"
+msgid "Menu"
 msgstr ""
 
 #. Label of button in the in-game menu for stopping game playback
@@ -18499,10 +18513,10 @@ msgstr ""
 
 #empty strings from id 35237 to 35248
 
-#. Button to open the saved game manager from the game OSD
+#. Button to open the savestate manager from the game OSD
 #: addons/skin.estuary/xml/GameOSD.xml
 msgctxt "#35249"
-msgid "Saved games"
+msgid "Save / Load"
 msgstr ""
 
 #: xbmc/windows/GUIMediaWindow.cpp
@@ -18522,7 +18536,7 @@ msgstr ""
 
 #: system/settings/settings.xml
 msgctxt "#35253"
-msgid "Enable autosave if supported"
+msgid "Enable autosave (if supported)"
 msgstr ""
 
 #: system/settings/settings.xml
@@ -18530,7 +18544,11 @@ msgctxt "#35254"
 msgid "Save the game automatically during game play, if supported. Resume playing where you left off."
 msgstr ""
 
-#empty string with id 35255
+#. Label for showing which emulator the game was saved with
+#: system/settings/settings.xml
+msgctxt "#35255"
+msgid "Saved with:"
+msgstr ""
 
 #. Error message when a game client fails to install when a game is being launched
 #: xbmc/games/dialogs/GUIDialogSelectGameClient.cpp
@@ -18566,7 +18584,7 @@ msgstr ""
 #. Button for creating a new save state from the select savestate dialog
 #: xbmc/games/dialogs/GUIDialogSelectSavestate.cpp
 msgctxt "#35261"
-msgid "New game"
+msgid "New"
 msgstr ""
 
 #. Help text for RetroAchievements username input setting
@@ -18943,7 +18961,13 @@ msgctxt "#36053"
 msgid "Tuner Device"
 msgstr ""
 
-#empty strings from id 36054 to 36096
+#empty strings from id 36054 to 36095
+
+#. Label of setting "System / Display / Use system HDR/SDR brightness balance"
+#: system/settings/settings.xml
+msgctxt "#36096"
+msgid "Use system HDR/SDR brightness balance"
+msgstr ""
 
 #. Label of setting "System / Display / GUI peak luminance in HDR PQ mode"
 #: system/settings/settings.xml
@@ -19161,11 +19185,7 @@ msgctxt "#36132"
 msgid "Preview the selected screensaver."
 msgstr ""
 
-#. Description of setting with label #13392 "Use visualisation if playing audio"
-#: system/settings/settings.xml
-msgctxt "#36133"
-msgid "If music is being played, the selected visualisation will be started instead of displaying the screensaver."
-msgstr ""
+#empty string with id 36133
 
 #. Description of setting with label #22014 "Use dim if paused during video playback"
 #: system/settings/settings.xml
@@ -19576,10 +19596,7 @@ msgctxt "#36203"
 msgid "Enables the \"Personal Video Recorder\" (PVR) features. This requires that at least one PVR add-on is installed."
 msgstr ""
 
-#: system/settings/settings.xml
-msgctxt "#36204"
-msgid "Import channel groups from the PVR backend (if supported). Will delete user created groups if they're not found on the backend."
-msgstr ""
+#empty string with id 36204
 
 #: system/settings/settings.xml
 msgctxt "#36205"
@@ -20891,7 +20908,10 @@ msgctxt "#36434"
 msgid "If enabled, switch to the channel with the programme to remind when auto-closing the reminder popup."
 msgstr ""
 
-#empty string with id 36435
+#: system/settings/settings.xml
+msgctxt "#36435"
+msgid "Sort channel groups by the order supplied by the backend(s). If enabled, groups cannot be reordered in the Group manager"
+msgstr ""
 
 #. Description for setting #407: "Hardware keyboard layouts"
 #. Setting in System -> Input -> Hardware keyboard layouts
@@ -21676,11 +21696,7 @@ msgctxt "#36636"
 msgid "You must first enter a password before web server authentication can be enabled."
 msgstr ""
 
-#. Text in confirm dialog when installing addon from zip
-#: xbmc/addons/GUIWindowAddonBrowser.cpp
-msgctxt "#36637"
-msgid "Note that add-ons installed from zip (excluding served repositories) will not auto-update and must be manually updated. Would you like to proceed?"
-msgstr ""
+#empty string with id 36637
 
 #. Menuitem at "Settings -> System -> Add-ons"
 #: ./system/settings/settings.xml
@@ -23028,7 +23044,12 @@ msgctxt "#39123"
 msgid "Artwork"
 msgstr ""
 
-#empty string with id 39124
+#. Label for component level debug logging setting
+#: xbmc/utils/log.cpp
+msgctxt "#39124"
+msgid "Verbose logging for the [B]Add-ons[/B] component"
+msgstr ""
+
 
 #: system/settings/settings.xml
 msgctxt "#39125"
@@ -23396,4 +23417,27 @@ msgstr ""
 #: xbmc/settings/windows/GUIWindowSettingsScreenCalibration.cpp
 msgctxt "#39189"
 msgid "Available only with manual subtitle position"
+msgstr ""
+
+#. Help text for setting "Use system HDR/SDR brightness balance" of label #36096
+#: system/settings/settings.xml
+msgctxt "#39190"
+msgid "[ON] The brightness of the GUI in HDR mode follows the system's setting. This affects all OSD, subtitles and graphics that are SDR in origin.[CR][OFF] Set the max brightness manually."
+msgstr ""
+
+#. System / Display "HDR" settings group label
+#: system/settings/settings.xml
+msgctxt "#39191"
+msgid "HDR"
+msgstr ""
+
+#: system/settings/settings.xml
+msgctxt "#39192"
+msgid "Disable screensaver when playing audio"
+msgstr ""
+
+#. Description of setting with label #39192 "Disable screensaver when playing audio"
+#: system/settings/settings.xml
+msgctxt "#39193"
+msgid "If music is being played, the screensaver will never be activated"
 msgstr ""

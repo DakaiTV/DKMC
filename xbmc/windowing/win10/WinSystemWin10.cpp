@@ -9,6 +9,7 @@
 #include "WinSystemWin10.h"
 
 #include "ServiceBroker.h"
+#include "WIN32Util.h"
 #include "WinEventsWin10.h"
 #include "application/Application.h"
 #include "cores/AudioEngine/AESinkFactory.h"
@@ -28,6 +29,7 @@
 #include "platform/win10/AsyncHelpers.h"
 #include "platform/win32/CharsetConverter.h"
 
+#include <cmath>
 #include <mutex>
 
 #pragma pack(push,8)
@@ -650,11 +652,41 @@ bool CWinSystemWin10::MessagePump()
   return m_winEvents->MessagePump();
 }
 
-int CWinSystemWin10::GetGuiSdrPeakLuminance() const
+/*!
+ * \brief Max luminance for GUI SDR content in HDR mode.
+ * \return Max luminance in nits, lower than 10000.
+*/
+float CWinSystemWin10::GetGuiSdrPeakLuminance() const
 {
   const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
 
-  return settings->GetInt(CSettings::SETTING_VIDEOSCREEN_GUISDRPEAKLUMINANCE);
+  // use cached system value as this is called for each frame
+  if (settings->GetBool(CSettings::SETTING_VIDEOSCREEN_USESYSTEMSDRPEAKLUMINANCE) &&
+      m_validSystemSdrPeakLuminance)
+    return m_systemSdrPeakLuminance;
+
+  // Max nits for 100% UI setting = 1000 nits, < 10000 nits, min 80 nits for 0%
+  const int guiSdrPeak = settings->GetInt(CSettings::SETTING_VIDEOSCREEN_GUISDRPEAKLUMINANCE);
+  return (80.0f * std::pow(std::exp(1.0f), 0.025257f * guiSdrPeak));
+}
+
+/*!
+ * \brief Test support of the OS for a SDR max luminance in HDR mode setting
+ * \return true when the OS supports that setting, false otherwise
+*/
+bool CWinSystemWin10::HasSystemSdrPeakLuminance()
+{
+  return CWIN32Util::GetSystemSdrWhiteLevel(std::wstring(), nullptr);
+}
+
+/*!
+ * \brief Cache the system HDR/SDR balance for use during rendering, instead of querying the API
+ for each frame.
+*/
+void CWinSystemWin10::CacheSystemSdrPeakLuminance()
+{
+  m_validSystemSdrPeakLuminance =
+      CWIN32Util::GetSystemSdrWhiteLevel(std::wstring(), &m_systemSdrPeakLuminance);
 }
 
 #pragma pack(pop)

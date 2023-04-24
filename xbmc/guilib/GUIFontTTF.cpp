@@ -492,11 +492,6 @@ void CGUIFontTTF::DrawTextInternal(CGraphicContext& context,
 
       // grab the next character
       Character* ch = &characters.front();
-      if (ch->m_glyphAndStyle == 0)
-      {
-        characters.pop();
-        continue;
-      }
 
       if ((text[glyph.m_glyphInfo.cluster] & 0xffff) == static_cast<character_t>('\t'))
       {
@@ -662,6 +657,7 @@ std::vector<CGUIFontTTF::Glyph> CGUIFontTTF::GetHarfBuzzShapedGlyphs(const vecTe
   int lastScriptIndex = -1;
   int lastSetIndex = -1;
 
+  scripts.reserve(text.size());
   for (const auto& character : text)
   {
     scripts.emplace_back(hb_unicode_script(ufuncs, static_cast<wchar_t>(0xffff & character)));

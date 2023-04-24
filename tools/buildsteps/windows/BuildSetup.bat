@@ -20,7 +20,6 @@ rem noprompt to avoid all prompts
 rem nobinaryaddons to skip building binary addons
 rem sh to use sh shell instead rxvt
 CLS
-COLOR 1B
 TITLE %APP_NAME% for Windows Build Script
 rem ----PURPOSE----
 rem - Create a working application build with a single click
@@ -79,7 +78,6 @@ set WORKSPACE=%base_dir%\kodi-build.%TARGET_PLATFORM%
 
   set EXE="%WORKSPACE%\%buildconfig%\%APP_NAME%.exe"
   set PDB="%WORKSPACE%\%buildconfig%\%APP_NAME%.pdb"
-  set D3D="%WORKSPACE%\D3DCompile*.DLL"
 
   POPD
   ECHO Done!
@@ -102,11 +100,11 @@ set WORKSPACE=%base_dir%\kodi-build.%TARGET_PLATFORM%
   Echo xbmc.old.log>>exclude.txt
   Echo kodi.log>>exclude.txt
   Echo kodi.old.log>>exclude.txt
-  Echo .so>>exclude.txt
-  Echo .h>>exclude.txt
-  Echo .cpp>>exclude.txt
-  Echo .exp>>exclude.txt
-  Echo .lib>>exclude.txt
+  Echo .so\>>exclude.txt
+  Echo .h\>>exclude.txt
+  Echo .cpp\>>exclude.txt
+  Echo .exp\>>exclude.txt
+  Echo .lib\>>exclude.txt
   rem Exclude userdata files
   Echo userdata\advancedsettings.xml>>exclude.txt
   Echo userdata\guisettings.xml>>exclude.txt
@@ -129,7 +127,6 @@ set WORKSPACE=%base_dir%\kodi-build.%TARGET_PLATFORM%
   md BUILD_WIN32\application
 
   xcopy %EXE% BUILD_WIN32\application > NUL
-  xcopy %D3D% BUILD_WIN32\application > NUL
   xcopy %base_dir%\userdata BUILD_WIN32\application\userdata /E /Q /I /Y /EXCLUDE:exclude.txt > NUL
   copy %base_dir%\LICENSE.md BUILD_WIN32\application > NUL
   copy %base_dir%\privacy-policy.txt BUILD_WIN32\application > NUL
@@ -171,8 +168,7 @@ set WORKSPACE=%base_dir%\kodi-build.%TARGET_PLATFORM%
     IF EXIST error.log del error.log > NUL
   )
 
-  rem restore color and title, some scripts mess these up
-  COLOR 1B
+  rem restore title, some scripts mess these up
   TITLE %APP_NAME% for Windows Build Script
 
   IF EXIST exclude.txt del exclude.txt > NUL
@@ -197,7 +193,11 @@ set WORKSPACE=%base_dir%\kodi-build.%TARGET_PLATFORM%
   IF EXIST %APP_SETUPFILE% del %APP_SETUPFILE% > NUL
 
   rem determine if current system is 32 or 64 bits
-  IF %PROCESSOR_ARCHITECTURE% == AMD64 (
+  SET HOST_BITS=32
+  IF %PROCESSOR_ARCHITECTURE% == AMD64 SET HOST_BITS=64
+  IF %PROCESSOR_ARCHITECTURE% == ARM64 SET HOST_BITS=64
+
+  IF %HOST_BITS% == 64 (
     SET NSIS_REG_KEY=HKLM\Software\Wow6432Node\NSIS
   ) ELSE (
     SET NSIS_REG_KEY=HKLM\Software\NSIS
@@ -228,11 +228,11 @@ set WORKSPACE=%base_dir%\kodi-build.%TARGET_PLATFORM%
     goto DIE
   )
   copy %PDB% %APP_PDBFILE% > nul
-  POPD
   ECHO ------------------------------------------------------------
   ECHO Done!
   ECHO Setup is located at %CD%\%APP_SETUPFILE%
   ECHO ------------------------------------------------------------
+  POPD
   GOTO END
 
 :MAKE_APPX

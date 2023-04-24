@@ -365,6 +365,8 @@ void GetSubDirectories(const CPVRRecordingsPath& recParentPath,
 
 bool CPVRGUIDirectory::GetRecordingsDirectory(CFileItemList& results) const
 {
+  results.SetContent("recordings");
+
   bool bGrouped = false;
   const std::vector<std::shared_ptr<CPVRRecording>> recordings =
       CServiceBroker::GetPVRManager().Recordings()->GetAll();
@@ -493,7 +495,7 @@ bool CPVRGUIDirectory::GetChannelsDirectory(CFileItemList& results) const
         group = CServiceBroker::GetPVRManager()
                     .ChannelGroups()
                     ->Get(path.IsRadio())
-                    ->GetByName(strGroupName);
+                    ->GetByName(strGroupName, path.GetGroupClientID());
       }
 
       if (group)

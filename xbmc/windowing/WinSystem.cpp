@@ -19,9 +19,6 @@
 #include "windowing/GraphicContext.h"
 
 #include <mutex>
-#if HAS_GLES
-#include "guilib/GUIFontTTFGL.h"
-#endif
 
 const char* CWinSystemBase::SETTING_WINSYSTEM_IS_HDR_DISPLAY = "winsystem.ishdrdisplay";
 
@@ -267,7 +264,7 @@ void CWinSystemBase::DriveRenderLoop()
   }
 }
 
-CGraphicContext& CWinSystemBase::GetGfxContext()
+CGraphicContext& CWinSystemBase::GetGfxContext() const
 {
   return *m_gfxContext;
 }

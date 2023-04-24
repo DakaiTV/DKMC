@@ -49,6 +49,7 @@ if(ENABLE_DVDCSS)
     endif()
   elseif(CORE_SYSTEM_NAME STREQUAL windowsstore)
     set(LIBDVD_ADDITIONAL_ARGS "-DCMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}" "-DCMAKE_SYSTEM_VERSION=${CMAKE_SYSTEM_VERSION}")
+    set(${MODULE}_CXX_FLAGS "/Zc:twoPhase-")
   endif()
 
   if(APPLE)
@@ -63,6 +64,9 @@ if(ENABLE_DVDCSS)
                    ${LIBDVD_ADDITIONAL_ARGS})
   else()
     find_program(AUTORECONF autoreconf REQUIRED)
+    if (CMAKE_HOST_SYSTEM_NAME MATCHES "(Free|Net|Open)BSD")
+      find_program(MAKE_EXECUTABLE gmake)
+    endif()
     find_program(MAKE_EXECUTABLE make REQUIRED)
 
     set(CONFIGURE_COMMAND ${AUTORECONF} -vif

@@ -1,7 +1,9 @@
 apply plugin: 'com.android.application'
 
 android {
+    namespace '@APP_PACKAGE@'
     compileSdkVersion @TARGET_SDK@
+    ndkPath "@NDKROOT@"
     defaultConfig {
         applicationId "@APP_PACKAGE@"
         minSdkVersion @TARGET_MINSDK@
@@ -60,5 +62,5 @@ project.afterEvaluate {
 dependencies {
     // New support library to for channels/programs development.
     implementation 'androidx.tvprovider:tvprovider:1.0.0'
-    implementation 'com.google.code.gson:gson:2.8.5'
+    implementation 'com.google.code.gson:gson:2.10.1'
 }

@@ -22,6 +22,8 @@
 #include "messaging/ApplicationMessenger.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/DisplaySettings.h"
+#include "settings/Settings.h"
+#include "settings/SettingsComponent.h"
 #include "windowing/GraphicContext.h"
 
 #include <mutex>
@@ -55,14 +57,12 @@
 #include <androidjni/MediaStore.h>
 #include <androidjni/NetworkInfo.h>
 #include <androidjni/PackageManager.h>
-#include <androidjni/PowerManager.h>
 #include <androidjni/StatFs.h>
 #include <androidjni/System.h>
 #include <androidjni/SystemClock.h>
 #include <androidjni/SystemProperties.h>
 #include <androidjni/URI.h>
 #include <androidjni/View.h>
-#include <androidjni/WakeLock.h>
 #include <androidjni/Window.h>
 #include <androidjni/WindowManager.h>
 #include <crossguid/guid.hpp>
@@ -290,8 +290,19 @@ void CXBMCApp::onResume()
 {
   android_printf("%s: ", __PRETTY_FUNCTION__);
 
-  if (g_application.IsInitialized() && CServiceBroker::GetWinSystem()->GetOSScreenSaver()->IsInhibited())
-    EnableWakeLock(true);
+  if (g_application.IsInitialized() &&
+      CServiceBroker::GetWinSystem()->GetOSScreenSaver()->IsInhibited())
+    KeepScreenOn(true);
+
+  // Reset shutdown timer on wake up
+  if (g_application.IsInitialized() &&
+      CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(
+          CSettings::SETTING_POWERMANAGEMENT_SHUTDOWNTIME))
+  {
+    auto& components = CServiceBroker::GetAppComponents();
+    const auto appPower = components.GetComponent<CApplicationPowerHandling>();
+    appPower->ResetShutdownTimers();
+  }
 
   m_headsetPlugged = isHeadsetPlugged();
 
@@ -348,7 +359,7 @@ void CXBMCApp::onPause()
     }
   }
 
-  EnableWakeLock(false);
+  KeepScreenOn(false);
   m_hasReqVisible = false;
 }
 
@@ -511,35 +522,26 @@ void CXBMCApp::Quit()
   android_printf("%s: Application stopped!", __PRETTY_FUNCTION__);
 }
 
-bool CXBMCApp::EnableWakeLock(bool on)
+void CXBMCApp::KeepScreenOnCallback(void* onVariant)
+{
+  CVariant* onV = static_cast<CVariant*>(onVariant);
+  bool on = onV->asBoolean();
+  delete onV;
+
+  CJNIWindow window = getWindow();
+  if (window)
+  {
+    on ? window.addFlags(CJNIWindowManagerLayoutParams::FLAG_KEEP_SCREEN_ON)
+       : window.clearFlags(CJNIWindowManagerLayoutParams::FLAG_KEEP_SCREEN_ON);
+  }
+}
+
+void CXBMCApp::KeepScreenOn(bool on)
 {
   android_printf("%s: %s", __PRETTY_FUNCTION__, on ? "true" : "false");
-  if (!m_wakeLock)
-  {
-    std::string appName = CCompileInfo::GetAppName();
-    StringUtils::ToLower(appName);
-    std::string className = CCompileInfo::GetPackage();
-    // SCREEN_BRIGHT_WAKE_LOCK is marked as deprecated but there is no real alternatives for now
-    m_wakeLock =
-        std::make_unique<CJNIWakeLock>(CJNIPowerManager(getSystemService("power"))
-                                           .newWakeLock(CJNIPowerManager::SCREEN_BRIGHT_WAKE_LOCK |
-                                                            CJNIPowerManager::ON_AFTER_RELEASE,
-                                                        className));
-    m_wakeLock->setReferenceCounted(false);
-  }
-
-  if (on)
-  {
-    if (!m_wakeLock->isHeld())
-      m_wakeLock->acquire();
-  }
-  else
-  {
-    if (m_wakeLock->isHeld())
-      m_wakeLock->release();
-  }
-
-  return true;
+  // this object is deallocated in the callback
+  CVariant* variant = new CVariant(on);
+  runNativeOnUiThread(KeepScreenOnCallback, variant);
 }
 
 bool CXBMCApp::AcquireAudioFocus()
@@ -702,7 +704,6 @@ void CXBMCApp::SetDisplayModeCallback(void* modeVariant)
 {
   CVariant* modeV = static_cast<CVariant*>(modeVariant);
   int mode = (*modeV)["mode"].asInteger();
-  float rate = (*modeV)["rate"].asFloat();
   delete modeV;
 
   CJNIWindow window = getWindow();
@@ -712,7 +713,6 @@ void CXBMCApp::SetDisplayModeCallback(void* modeVariant)
     if (params.getpreferredDisplayModeId() != mode)
     {
       params.setpreferredDisplayModeId(mode);
-      params.setpreferredRefreshRate(rate);
       window.setAttributes(params);
       return;
     }
@@ -734,18 +734,14 @@ void CXBMCApp::SetRefreshRate(float rate)
   }
 
   m_refreshRate = rate;
-
   m_displayChangeEvent.Reset();
+
+  if (m_hdmiSource)
+    dynamic_cast<CWinSystemAndroid*>(CServiceBroker::GetWinSystem())->InitiateModeChange();
+
   CVariant *variant = new CVariant(rate);
   runNativeOnUiThread(SetRefreshRateCallback, variant);
-  if (g_application.IsInitialized())
-  {
-    m_displayChangeEvent.Wait(5000ms);
-    const auto& components = CServiceBroker::GetAppComponents();
-    const auto appPlayer = components.GetComponent<CApplicationPlayer>();
-    if (m_hdmiSource && appPlayer->IsPlaying())
-      dynamic_cast<CWinSystemAndroid*>(CServiceBroker::GetWinSystem())->InitiateModeChange();
-  }
+  m_displayChangeEvent.Wait(5000ms);
 }
 
 void CXBMCApp::SetDisplayMode(int mode, float rate)
@@ -762,20 +758,17 @@ void CXBMCApp::SetDisplayMode(int mode, float rate)
   }
 
   m_displayChangeEvent.Reset();
+
+  if (m_hdmiSource)
+    dynamic_cast<CWinSystemAndroid*>(CServiceBroker::GetWinSystem())->InitiateModeChange();
+
   std::map<std::string, CVariant> vmap;
   vmap["mode"] = mode;
-  vmap["rate"] = rate;
   m_refreshRate = rate;
   CVariant *variant = new CVariant(vmap);
   runNativeOnUiThread(SetDisplayModeCallback, variant);
   if (g_application.IsInitialized())
-  {
     m_displayChangeEvent.Wait(5000ms);
-    const auto& components = CServiceBroker::GetAppComponents();
-    const auto appPlayer = components.GetComponent<CApplicationPlayer>();
-    if (m_hdmiSource && appPlayer->IsPlaying())
-      dynamic_cast<CWinSystemAndroid*>(CServiceBroker::GetWinSystem())->InitiateModeChange();
-  }
 }
 
 int CXBMCApp::android_printf(const char *format, ...)
@@ -783,7 +776,19 @@ int CXBMCApp::android_printf(const char *format, ...)
   // For use before CLog is setup by XBMC_Run()
   va_list args;
   va_start(args, format);
-  int result = __android_log_vprint(ANDROID_LOG_VERBOSE, "Kodi", format, args);
+  int result;
+  if (CServiceBroker::IsLoggingUp())
+  {
+    std::string message;
+    int len = vsnprintf(0, 0, format, args);
+    message.resize(len);
+    result = vsnprintf(&message[0], len + 1, format, args);
+    CLog::Log(LOGDEBUG, message);
+  }
+  else
+  {
+    result = __android_log_vprint(ANDROID_LOG_VERBOSE, "Kodi", format, args);
+  }
   va_end(args);
   return result;
 }

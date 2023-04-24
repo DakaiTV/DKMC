@@ -17,7 +17,7 @@ else
     TARBALLS_LOCATION = $(ROOT_DIR)
     BASE_URL := http://mirrors.kodi.tv/build-deps/sources
     RETRIEVE_TOOL := curl
-    RETRIEVE_TOOL_FLAGS := -Ls --create-dirs -f -O
+    RETRIEVE_TOOL_FLAGS := -LsS --create-dirs --retry 10 --retry-connrefused -o
     ARCHIVE_TOOL := tar
     ARCHIVE_TOOL_FLAGS := --strip-components=1 -xf
     HASH_TOOL := sha512sum
@@ -32,7 +32,7 @@ include ../../download-files.include
 all: .installed-$(PLATFORM)
 
 
-$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE).$(HASH_TYPE) $(DEPS)
+$(PLATFORM): $(DEPS) | $(TARBALLS_LOCATION)/$(ARCHIVE).$(HASH_TYPE)
 ifeq ($(PREFIX),)
 	@echo
 	@echo "ERROR: please set PREFIX to the kodi install path e.g. $(MAKE) PREFIX=/usr/local"

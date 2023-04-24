@@ -670,9 +670,8 @@ long CDecoder::Release()
     CLog::Log(LOGINFO, "CVDPAU::Release pre-cleanup");
 
     Message *reply;
-    if (m_vdpauOutput.m_controlPort.SendOutMessageSync(COutputControlProtocol::PRECLEANUP,
-                                                   &reply,
-                                                   2000))
+    if (m_vdpauOutput.m_controlPort.SendOutMessageSync(COutputControlProtocol::PRECLEANUP, &reply,
+                                                       2s))
     {
       bool success = reply->signal == COutputControlProtocol::ACC ? true : false;
       reply->Release();
@@ -966,11 +965,8 @@ bool CDecoder::ConfigVDPAU(AVCodecContext* avctx, int ref_frames)
   m_bufferStats.Reset();
   m_vdpauOutput.Start();
   Message *reply;
-  if (m_vdpauOutput.m_controlPort.SendOutMessageSync(COutputControlProtocol::INIT,
-                                                 &reply,
-                                                 2000,
-                                                 &m_vdpauConfig,
-                                                 sizeof(m_vdpauConfig)))
+  if (m_vdpauOutput.m_controlPort.SendOutMessageSync(COutputControlProtocol::INIT, &reply, 2s,
+                                                     &m_vdpauConfig, sizeof(m_vdpauConfig)))
   {
     bool success = reply->signal == COutputControlProtocol::ACC ? true : false;
     reply->Release();
@@ -1045,7 +1041,10 @@ int CDecoder::FFGetBuffer(AVCodecContext *avctx, AVFrame *pic, int flags)
   }
   pic->buf[0] = buffer;
 
-  pic->reordered_opaque= avctx->reordered_opaque;
+#if LIBAVCODEC_VERSION_MAJOR < 60
+  pic->reordered_opaque = avctx->reordered_opaque;
+#endif
+
   return 0;
 }
 
@@ -1276,9 +1275,7 @@ void CDecoder::Reset()
     return;
 
   Message *reply;
-  if (m_vdpauOutput.m_controlPort.SendOutMessageSync(COutputControlProtocol::FLUSH,
-                                                 &reply,
-                                                 2000))
+  if (m_vdpauOutput.m_controlPort.SendOutMessageSync(COutputControlProtocol::FLUSH, &reply, 2s))
   {
     bool success = reply->signal == COutputControlProtocol::ACC ? true : false;
     reply->Release();
@@ -2830,15 +2827,15 @@ bool CMixer::CheckStatus(VdpStatus vdp_st, int line)
 //-----------------------------------------------------------------------------
 // Output
 //-----------------------------------------------------------------------------
-COutput::COutput(CDecoder &decoder, CEvent *inMsgEvent) :
-  CThread("Vdpau Output"),
-  m_controlPort("OutputControlPort", inMsgEvent, &m_outMsgEvent),
-  m_dataPort("OutputDataPort", inMsgEvent, &m_outMsgEvent),
-  m_vdpau(decoder),
-  m_mixer(&m_outMsgEvent)
+COutput::COutput(CDecoder& decoder, CEvent* inMsgEvent)
+  : CThread("Vdpau Output"),
+    m_controlPort("OutputControlPort", inMsgEvent, &m_outMsgEvent),
+    m_dataPort("OutputDataPort", inMsgEvent, &m_outMsgEvent),
+    m_vdpau(decoder),
+    m_bufferPool(std::make_shared<CVdpauBufferPool>(decoder)),
+    m_mixer(&m_outMsgEvent)
 {
   m_inMsgEvent = inMsgEvent;
-  m_bufferPool = std::make_shared<CVdpauBufferPool>(decoder);
 }
 
 void COutput::Start()
@@ -2948,8 +2945,8 @@ void COutput::StateMachine(int signal, Protocol *port, Message *msg)
           }
           Init();
           Message *reply;
-          if (m_mixer.m_controlPort.SendOutMessageSync(CMixerControlProtocol::INIT,
-                                     &reply, 1000, &m_config, sizeof(m_config)))
+          if (m_mixer.m_controlPort.SendOutMessageSync(CMixerControlProtocol::INIT, &reply, 1s,
+                                                       &m_config, sizeof(m_config)))
           {
             if (reply->signal != CMixerControlProtocol::ACC)
               m_vdpError = true;
@@ -3191,9 +3188,7 @@ void COutput::Flush()
   if (m_mixer.IsActive())
   {
     Message *reply;
-    if (m_mixer.m_controlPort.SendOutMessageSync(CMixerControlProtocol::FLUSH,
-                                                 &reply,
-                                                 2000))
+    if (m_mixer.m_controlPort.SendOutMessageSync(CMixerControlProtocol::FLUSH, &reply, 2s))
     {
       reply->Release();
     }

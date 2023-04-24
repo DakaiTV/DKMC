@@ -32,6 +32,10 @@ endif
 
 ifeq ($(OS), linux)
   EXTRA_CONFIGURE=ac_cv_pthread=yes
+  ifeq ($(TARGET_PLATFORM),webos)
+    LDFLAGS+= -liconv
+  endif
+
 endif
 
 # configuration settings
@@ -53,7 +57,7 @@ LIBDYLIB=$(PLATFORM)/libpython$(PYTHON_VERSION).a
 
 all: .installed-$(PLATFORM)
 
-$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE).$(HASH_TYPE) $(DEPS)
+$(PLATFORM): $(DEPS) | $(TARBALLS_LOCATION)/$(ARCHIVE).$(HASH_TYPE)
 	rm -rf $(PLATFORM)/*; mkdir -p $(PLATFORM)
 	cd $(PLATFORM); $(ARCHIVE_TOOL) $(ARCHIVE_TOOL_FLAGS) $(TARBALLS_LOCATION)/$(ARCHIVE)
 	cd $(PLATFORM); patch -p1 -i ../crosscompile.patch

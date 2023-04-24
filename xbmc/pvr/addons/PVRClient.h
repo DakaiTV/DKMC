@@ -16,6 +16,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -163,9 +164,10 @@ public:
   const std::string& GetConnectionString() const;
 
   /*!
-   * @return A friendly name for this add-on that can be used in log messages.
+   * @brief A friendly name used to uniquely identify the addon instance
+   * @return string that can be used in log messages and the GUI.
    */
-  const std::string& GetFriendlyName() const;
+  const std::string GetFriendlyName() const;
 
   /*!
    * @brief Get the disk space reported by the server.
@@ -801,6 +803,12 @@ private:
   bool GetAddonProperties();
 
   /*!
+   * @brief reads the client's name string properties
+   * @return True on success, false otherwise.
+   */
+  bool GetAddonNameStringProperties();
+
+  /*!
    * @brief Write the given addon properties to the given properties container.
    * @param properties Pointer to an array of addon properties.
    * @param iPropertyCount The number of properties contained in the addon properties array.
@@ -1035,14 +1043,12 @@ private:
       m_ignoreClient; /*!< signals to PVRManager to ignore this client until it has been connected */
   std::vector<std::shared_ptr<CPVRTimerType>>
       m_timertypes; /*!< timer types supported by this backend */
-  mutable int m_iPriority; /*!< priority of the client */
-  mutable bool m_bPriorityFetched;
+  mutable std::optional<int> m_priority; /*!< priority of the client */
 
   /* cached data */
   std::string m_strBackendName; /*!< the cached backend version */
   std::string m_strBackendVersion; /*!< the cached backend version */
   std::string m_strConnectionString; /*!< the cached connection string */
-  std::string m_strFriendlyName; /*!< the cached friendly name */
   std::string m_strBackendHostname; /*!< the cached backend hostname */
   CPVRClientCapabilities m_clientCapabilities; /*!< the cached add-on's capabilities */
   std::shared_ptr<CPVRClientMenuHooks> m_menuhooks; /*!< the menu hooks for this add-on */

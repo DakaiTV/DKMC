@@ -39,18 +39,7 @@ macro(buildFFMPEG)
 
   set(MODULE_LC ffmpeg)
 
-  # We require this due to the odd nature of github URL's compared to our other tarball
-  # mirror system. If User sets FFMPEG_URL, allow get_filename_component in SETUP_BUILD_VARS
-  if(FFMPEG_URL)
-    set(FFMPEG_URL_PROVIDED TRUE)
-  endif()
-
   SETUP_BUILD_VARS()
-
-  if(NOT FFMPEG_URL_PROVIDED)
-    # override FFMPEG_URL due to tar naming when retrieved from github release for ffmpeg
-    set(FFMPEG_URL ${FFMPEG_BASE_URL}/archive/${FFMPEG_VER}.tar.gz)
-  endif()
 
   if(NOT DAV1D_FOUND)
     message(STATUS "dav1d not found, internal ffmpeg build will be missing AV1 support!")
@@ -151,14 +140,14 @@ if(WITH_FFMPEG)
   set(REQUIRED_FFMPEG_VERSION undef)
 else()
   # required ffmpeg library versions
-  set(REQUIRED_FFMPEG_VERSION 4.4.1)
-  set(_avcodec_ver ">=58.134.100")
-  set(_avfilter_ver ">=7.110.100")
-  set(_avformat_ver ">=58.76.100")
-  set(_avutil_ver ">=56.70.100")
-  set(_postproc_ver ">=55.9.100")
-  set(_swresample_ver ">=3.9.100")
-  set(_swscale_ver ">=5.9.100")
+  set(REQUIRED_FFMPEG_VERSION 6.0.0)
+  set(_avcodec_ver ">=60.2.100")
+  set(_avfilter_ver ">=9.3.100")
+  set(_avformat_ver ">=60.3.100")
+  set(_avutil_ver ">=58.2.100")
+  set(_postproc_ver ">=57.1.100")
+  set(_swresample_ver ">=4.10.100")
+  set(_swscale_ver ">=7.1.100")
 endif()
 
 # Allows building with external ffmpeg not found in system paths,

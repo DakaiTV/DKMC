@@ -104,7 +104,7 @@ unsigned int CFileAndroidApp::ReadIcon(unsigned char** lpBuf, unsigned int* widt
                        ? env->FindClass("android/graphics/drawable/AdaptiveIconDrawable")
                        : nullptr;
 
-  if (CJNIBuild::SDK_INT >= 15 && m_icon)
+  if (m_icon)
   {
     CJNIResources res = CJNIContext::GetPackageManager().getResourcesForApplication(m_packageName);
     if (res)
@@ -112,7 +112,7 @@ unsigned int CFileAndroidApp::ReadIcon(unsigned char** lpBuf, unsigned int* widt
       for (int i=0; densities[i] != -1 && !bmp; ++i)
       {
         int density = densities[i];
-        CJNIDrawable drw = res.getDrawableForDensity(m_icon, density);
+        CJNIDrawable drw = res.getDrawableForDensity(m_icon, density, CJNIContext::getTheme());
         if (xbmc_jnienv()->ExceptionCheck())
           xbmc_jnienv()->ExceptionClear();
         else if (!drw);
