@@ -86,9 +86,7 @@ CAddonVideoCodec::CAddonVideoCodec(CProcessInfo& processInfo,
                                    KODI_HANDLE parentInstance)
   : CDVDVideoCodec(processInfo),
     IAddonInstanceHandler(
-        ADDON_INSTANCE_VIDEOCODEC, addonInfo, ADDON::ADDON_INSTANCE_ID_UNUSED, parentInstance),
-    m_codecFlags(0),
-    m_displayAspect(0.0f)
+        ADDON_INSTANCE_VIDEOCODEC, addonInfo, ADDON::ADDON_INSTANCE_ID_UNUSED, parentInstance)
 {
   m_ifc.videocodec = new AddonInstance_VideoCodec;
   m_ifc.videocodec->props = new AddonProps_VideoCodec();
@@ -223,6 +221,9 @@ bool CAddonVideoCodec::CopyToInitData(VIDEOCODEC_INITDATA &initData, CDVDStreamI
     case CRYPTO_SESSION_SYSTEM_WISEPLAY:
       initData.cryptoSession.keySystem = STREAM_CRYPTO_KEY_SYSTEM_WISEPLAY;
       break;
+    case CRYPTO_SESSION_SYSTEM_CLEARKEY:
+      initData.cryptoSession.keySystem = STREAM_CRYPTO_KEY_SYSTEM_CLEARKEY;
+      break;
     default:
       return false;
     }
@@ -231,8 +232,8 @@ bool CAddonVideoCodec::CopyToInitData(VIDEOCODEC_INITDATA &initData, CDVDStreamI
             sizeof(initData.cryptoSession.sessionId) - 1);
   }
 
-  initData.extraData = reinterpret_cast<const uint8_t*>(hints.extradata);
-  initData.extraDataSize = hints.extrasize;
+  initData.extraData = hints.extradata.GetData();
+  initData.extraDataSize = hints.extradata.GetSize();
   initData.width = hints.width;
   initData.height = hints.height;
   initData.videoFormats = m_formats;
@@ -311,12 +312,12 @@ CDVDVideoCodec::VCReturn CAddonVideoCodec::GetPicture(VideoPicture* pVideoPictur
     pVideoPicture->pts = static_cast<double>(picture.pts);
     pVideoPicture->dts = DVD_NOPTS_VALUE;
     pVideoPicture->iFlags = 0;
-    pVideoPicture->chroma_position = 0;
+    pVideoPicture->chroma_position = AVCHROMA_LOC_UNSPECIFIED;
     pVideoPicture->colorBits = GetColorBitsFromVideoFormat(picture.videoFormat);
     pVideoPicture->color_primaries = AVColorPrimaries::AVCOL_PRI_UNSPECIFIED;
     pVideoPicture->color_range = 0;
     pVideoPicture->color_space = AVCOL_SPC_UNSPECIFIED;
-    pVideoPicture->color_transfer = 0;
+    pVideoPicture->color_transfer = AVCOL_TRC_UNSPECIFIED;
     pVideoPicture->hasDisplayMetadata = false;
     pVideoPicture->hasLightMetadata = false;
     pVideoPicture->iDuration = 0;

@@ -14,6 +14,7 @@
 #include "threads/SystemClock.h"
 #include "utils/logtypes.h"
 
+#include <memory>
 #include <string>
 
 class PLT_MediaController;
@@ -64,11 +65,11 @@ private:
   float GetPercentage();
 
   PLT_MediaController* m_control;
-  CUPnPPlayerController* m_delegate;
+  std::unique_ptr<CUPnPPlayerController> m_delegate;
   std::string m_current_uri;
   std::string m_current_meta;
-  bool m_started;
-  bool m_stopremote;
+  bool m_started = false;
+  bool m_stopremote = false;
   XbmcThreads::EndTime<> m_updateTimer;
 
   Logger m_logger;

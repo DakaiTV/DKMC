@@ -102,11 +102,6 @@ AC_ARG_WITH([rendersystem],
   [render system to use])],
   [app_rendersystem=$withval])
 
-AC_ARG_WITH([windowsystem],
-  [AS_HELP_STRING([--with-windowsystem],
-  [Windowing system to use])],
-  [app_winsystem=$withval])
-
 AC_ARG_WITH([target-cflags],
   [AS_HELP_STRING([--with-target-cflags],
   [C compiler flags (target)])],
@@ -187,7 +182,7 @@ case $build in
   *darwin*)
     build_os="osx"
     if test "x$build_cpu" = "xx86_64"; then
-      host_includes="-arch x86_64 -mmacosx-version-min=10.13"
+      host_includes="-arch x86_64 -mmacosx-version-min=10.14"
     else
       host_includes="-arch arm64 -mmacosx-version-min=11.0"
     fi
@@ -313,7 +308,7 @@ esac
 case $host in
   *-*linux-android*)
     deps_dir="$use_host-$use_ndk_api-$build_type"
-    platform_cflags="-DANDROID -D__ANDROID_API__=$use_ndk_api -fexceptions -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fPIC -DPIC"
+    platform_cflags="-DANDROID -fexceptions -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fPIC -DPIC"
     optimize_flags="-Os"
     platform_ldflags="-Wl,--exclude-libs,libgcc.a -Wl,--exclude-libs,libatomic.a -L$prefix/$deps_dir/lib/android-$use_ndk_api"
 
@@ -323,7 +318,7 @@ case $host in
           use_cpu="armeabi-v7a"
         fi
         if test "x$use_cpu" = "xarmeabi-v7a"; then
-          platform_cflags="${platform_cflags} -march=armv7-a -mtune=cortex-a9 -mfloat-abi=softfp -mfpu=neon"
+          platform_cflags="${platform_cflags} -mtune=cortex-a9 -mfloat-abi=softfp"
         fi
         platform_ldflags="${platform_ldflags} -Wl,--exclude-libs,libunwind.a"
         meson_cpu="arm"
@@ -333,7 +328,7 @@ case $host in
           use_cpu="arm64-v8a"
         fi
         if test "x$use_cpu" = "xarm64-v8a"; then
-          platform_cflags="${platform_cflags} -march=armv8-a -mtune=cortex-a53"
+          platform_cflags="${platform_cflags} -mtune=cortex-a53"
         fi
         meson_cpu="aarch64"
       ;;
@@ -368,7 +363,7 @@ case $host in
       use_cpu="armeabi-v7a"
     fi
     use_toolchain="${use_toolchain:-/usr}"
-    platform_cflags="-fPIC -DPIC -march=armv7-a -mtune=cortex-a9 -mfloat-abi=softfp -mfpu=neon"
+    platform_cflags="-fPIC -DPIC -mcpu=cortex-a9 -mtune=cortex-a53 -mfloat-abi=softfp"
     platform_cxxflags="$platform_cflags -static-libstdc++"
     optimize_flags="-Os"
     platform_ldflags="-Wl,-rpath-link=$prefix/$deps_dir/lib"
@@ -461,28 +456,17 @@ case $host in
           AC_MSG_ERROR(invalid architecture (--with-cpu=$use_cpu))
         fi
 
-        target_minver="10.13"
-
-        # check provided window system is valid_sdk
-        # if no window system supplied, default to SDL for now.
-        if test -n "$app_winsystem"; then
-          if test "$app_winsystem" != "native" && test "$app_winsystem" != "sdl"; then
-            AC_MSG_ERROR(Window system must be native or sdl)
-          fi
-        else
-          app_winsystem=sdl
-        fi
+        target_minver="10.14"
       ;;
       aarch64-apple-darwin*)
         MC_CHECK_NOT_CPU([$use_cpu], "*86")
 
         case $platform_os in
           darwin_embedded)
-            target_minver="11.0"
+            target_minver="12.0"
           ;;
           osx)
             target_minver="11.0"
-            app_winsystem=native
           ;;
           *)
             AC_MSG_ERROR(invalid platform for architecture ($host))
@@ -586,7 +570,7 @@ if test "$platform_os" = "android"; then
     AC_MSG_ERROR("SDK path is required for android")
   fi
 
-  if [ ! test -f $use_sdk_path/tools/bin/sdkmanager ]; then
+  if [ ! test -f $use_sdk_path/tools/bin/sdkmanager ] && [ ! test -f $use_sdk_path/cmdline-tools/bin/sdkmanager ]; then
     AC_MSG_ERROR(verify sdk path)
   fi
 
@@ -734,7 +718,6 @@ AC_SUBST(host_includes)
 AC_SUBST(host_sysroot)
 AC_SUBST(host_cxxflags)
 AC_SUBST(app_rendersystem)
-AC_SUBST(app_winsystem)
 AC_SUBST(ffmpeg_options)
 
 [

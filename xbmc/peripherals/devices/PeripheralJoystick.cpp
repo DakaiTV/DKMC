@@ -29,6 +29,7 @@
 #include "utils/log.h"
 
 #include <algorithm>
+#include <memory>
 #include <mutex>
 
 using namespace KODI;
@@ -38,14 +39,7 @@ using namespace PERIPHERALS;
 CPeripheralJoystick::CPeripheralJoystick(CPeripherals& manager,
                                          const PeripheralScanResult& scanResult,
                                          CPeripheralBus* bus)
-  : CPeripheral(manager, scanResult, bus),
-    m_requestedPort(JOYSTICK_PORT_UNKNOWN),
-    m_buttonCount(0),
-    m_hatCount(0),
-    m_axisCount(0),
-    m_motorCount(0),
-    m_supportsPowerOff(false),
-    m_rumbleGenerator(new CRumbleGenerator)
+  : CPeripheral(manager, scanResult, bus), m_rumbleGenerator(new CRumbleGenerator)
 {
   m_features.push_back(FEATURE_JOYSTICK);
   // FEATURE_RUMBLE conditionally added via SetMotorCount()
@@ -112,9 +106,9 @@ bool CPeripheralJoystick::InitialiseFeature(const PeripheralFeature feature)
         }
 
         // Give joystick monitor priority over default controller
-        m_appInput.reset(
-            new CKeymapHandling(this, false, m_manager.GetInputManager().KeymapEnvironment()));
-        m_joystickMonitor.reset(new CJoystickMonitor);
+        m_appInput = std::make_unique<CKeymapHandling>(
+            this, false, m_manager.GetInputManager().KeymapEnvironment());
+        m_joystickMonitor = std::make_unique<CJoystickMonitor>();
         RegisterInputHandler(m_joystickMonitor.get(), false);
       }
     }
@@ -133,7 +127,7 @@ bool CPeripheralJoystick::InitialiseFeature(const PeripheralFeature feature)
 
 void CPeripheralJoystick::InitializeDeadzoneFiltering(IButtonMap& buttonMap)
 {
-  m_deadzoneFilter.reset(new CDeadzoneFilter(&buttonMap, this));
+  m_deadzoneFilter = std::make_unique<CDeadzoneFilter>(&buttonMap, this);
 }
 
 void CPeripheralJoystick::InitializeControllerProfile(IButtonMap& buttonMap)

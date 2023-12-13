@@ -14,11 +14,13 @@
 #include "input/joysticks/JoystickTranslator.h"
 #include "input/joysticks/JoystickUtils.h"
 #include "utils/StringUtils.h"
-#include "utils/XBMCTinyXML.h"
 
 #include <algorithm>
+#include <memory>
 #include <sstream>
 #include <utility>
+
+#include <tinyxml2.h>
 
 using namespace KODI;
 
@@ -27,7 +29,7 @@ using namespace KODI;
 #define JOYSTICK_XML_ATTR_HOLDTIME "holdtime"
 #define JOYSTICK_XML_ATTR_HOTKEY "hotkey"
 
-void CJoystickMapper::MapActions(int windowID, const TiXmlNode* pDevice)
+void CJoystickMapper::MapActions(int windowID, const tinyxml2::XMLNode* pDevice)
 {
   std::string controllerId;
   DeserializeJoystickNode(pDevice, controllerId);
@@ -42,9 +44,9 @@ void CJoystickMapper::MapActions(int windowID, const TiXmlNode* pDevice)
   // Create/overwrite keymap
   auto& keymap = m_joystickKeymaps[controllerId];
   if (!keymap)
-    keymap.reset(new CWindowKeymap(controllerId));
+    keymap = std::make_shared<CWindowKeymap>(controllerId);
 
-  const TiXmlElement* pButton = pDevice->FirstChildElement();
+  const auto* pButton = pDevice->FirstChildElement();
   while (pButton != nullptr)
   {
     std::string feature;
@@ -92,14 +94,20 @@ std::vector<std::shared_ptr<const IWindowKeymap>> CJoystickMapper::GetJoystickKe
   return keymaps;
 }
 
-void CJoystickMapper::DeserializeJoystickNode(const TiXmlNode* pDevice, std::string& controllerId)
+void CJoystickMapper::DeserializeJoystickNode(const tinyxml2::XMLNode* pDevice,
+                                              std::string& controllerId)
 {
-  const TiXmlElement* deviceElem = pDevice->ToElement();
+  const auto* deviceElem = pDevice->ToElement();
   if (deviceElem != nullptr)
-    deviceElem->QueryValueAttribute(JOYSTICK_XML_NODE_PROFILE, &controllerId);
+  {
+    const char* controller;
+    if (deviceElem->QueryStringAttribute(JOYSTICK_XML_NODE_PROFILE, &controller) ==
+        tinyxml2::XML_SUCCESS)
+      controllerId = controller;
+  }
 }
 
-bool CJoystickMapper::DeserializeButton(const TiXmlElement* pButton,
+bool CJoystickMapper::DeserializeButton(const tinyxml2::XMLElement* pButton,
                                         std::string& feature,
                                         JOYSTICK::ANALOG_STICK_DIRECTION& dir,
                                         unsigned int& holdtimeMs,
@@ -111,7 +119,7 @@ bool CJoystickMapper::DeserializeButton(const TiXmlElement* pButton,
   {
     const char* szAction = nullptr;
 
-    const TiXmlNode* actionNode = pButton->FirstChild();
+    const auto* actionNode = pButton->FirstChild();
     if (actionNode != nullptr)
       szAction = actionNode->Value();
 
@@ -133,8 +141,9 @@ bool CJoystickMapper::DeserializeButton(const TiXmlElement* pButton,
 
     // Process holdtime parameter
     holdtimeMs = 0;
-    std::string strHoldTime;
-    if (pButton->QueryValueAttribute(JOYSTICK_XML_ATTR_HOLDTIME, &strHoldTime) == TIXML_SUCCESS)
+    const char* strHoldTime;
+    if (pButton->QueryStringAttribute(JOYSTICK_XML_ATTR_HOLDTIME, &strHoldTime) ==
+        tinyxml2::XML_SUCCESS)
     {
       std::istringstream ss(strHoldTime);
       ss >> holdtimeMs;
@@ -142,8 +151,9 @@ bool CJoystickMapper::DeserializeButton(const TiXmlElement* pButton,
 
     // Process hotkeys
     hotkeys.clear();
-    std::string strHotkeys;
-    if (pButton->QueryValueAttribute(JOYSTICK_XML_ATTR_HOTKEY, &strHotkeys) == TIXML_SUCCESS)
+    const char* strHotkeys;
+    if (pButton->QueryStringAttribute(JOYSTICK_XML_ATTR_HOTKEY, &strHotkeys) ==
+        tinyxml2::XML_SUCCESS)
     {
       std::vector<std::string> vecHotkeys = StringUtils::Split(strHotkeys, ",");
       for (auto& hotkey : vecHotkeys)

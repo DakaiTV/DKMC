@@ -9,6 +9,7 @@
 #pragma once
 
 #include "input/keyboard/interfaces/IKeyboardInputHandler.h"
+#include "peripherals/PeripheralTypes.h"
 
 namespace KODI
 {
@@ -23,6 +24,7 @@ class CGameClient;
 
 /*!
  * \ingroup games
+ *
  * \brief Handles keyboard events for games.
  *
  * Listens to keyboard events and forwards them to the games (as game_input_event).
@@ -54,11 +56,22 @@ public:
                     KEYBOARD::Modifier mod,
                     uint32_t unicode) override;
 
+  // Input accessors
+  const std::string& GetControllerID() const { return m_controllerId; }
+  const PERIPHERALS::PeripheralPtr& GetSource() const { return m_sourcePeripheral; }
+
+  // Input mutators
+  void SetSource(PERIPHERALS::PeripheralPtr sourcePeripheral);
+  void ClearSource();
+
 private:
   // Construction parameters
   CGameClient& m_gameClient;
   const std::string m_controllerId;
   KEYBOARD::IKeyboardInputProvider* const m_inputProvider;
+
+  // Input parameters
+  PERIPHERALS::PeripheralPtr m_sourcePeripheral;
 };
 } // namespace GAME
 } // namespace KODI

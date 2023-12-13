@@ -1236,6 +1236,7 @@ const infomap weather[] =        {{ "isfetched",        WEATHER_IS_FETCHED },
 ///                  \anchor System_HasNetwork
 ///                  _boolean_,
 ///     @return **True** if the Kodi host has a network available.
+///     @note This feature is NOT implemented. Always returns true
 ///     <p>
 ///   }
 ///   \table_row3{   <b>`System.HasMediadvd`</b>,
@@ -1740,6 +1741,20 @@ const infomap weather[] =        {{ "isfetched",        WEATHER_IS_FETCHED },
 ///     @return the current language.
 ///     <p>
 ///   }
+///   \table_row3{   <b>`System.Locale(type)`</b>,
+///                  \anchor System_Locale
+///                  _string_,
+///     @return Locale-specific information depending on the requested type.
+///     @param type - Can be one of the following:
+///       - <b>timezonecountry</b> The country name for the current time zone.
+///       - <b>timezone</b> The full timezone name with country and optional region.
+///       - <b>region</b> The currently selected region name within the selected language ( \link System_Language `System.Language` \endlink).
+///       - <b>iso</b> The country code of the currently selected region as specified in <a href="https://kodi.wiki/view/Language_support#What_is_langinfo.xml">langinfo.xml</a>.
+///     <p><hr>
+///     @skinning_v21 **[New Infolabel]** \link System_Locale
+///     `System.Locale(type)`\endlink
+///     <p>
+///   }
 ///   \table_row3{   <b>`System.ProfileName`</b>,
 ///                  \anchor System_ProfileName
 ///                  _string_,
@@ -2068,24 +2083,21 @@ const infomap system_param[] =   {{ "hasalarm",         SYSTEM_HAS_ALARM },
 ///     @return The network DNS 2 address.
 ///     <p>
 ///   }
-///   \table_row3{   <b>`Network.DHCPAddress`</b>,
-///                  \anchor Network_DHCPAddress
-///                  _string_,
-///     @return The DHCP IP address.
-///     <p>
-///   }
 /// \table_end
 ///
 /// -----------------------------------------------------------------------------
-const infomap network_labels[] = {{ "isdhcp",            NETWORK_IS_DHCP },
-                                  { "ipaddress",         NETWORK_IP_ADDRESS }, //labels from here
-                                  { "linkstate",         NETWORK_LINK_STATE },
-                                  { "macaddress",        NETWORK_MAC_ADDRESS },
-                                  { "subnetmask",        NETWORK_SUBNET_MASK },
-                                  { "gatewayaddress",    NETWORK_GATEWAY_ADDRESS },
-                                  { "dns1address",       NETWORK_DNS1_ADDRESS },
-                                  { "dns2address",       NETWORK_DNS2_ADDRESS },
-                                  { "dhcpaddress",       NETWORK_DHCP_ADDRESS }};
+// clang-format off
+const infomap network_labels[] = {
+    {"isdhcp", NETWORK_IS_DHCP},
+    {"ipaddress", NETWORK_IP_ADDRESS}, //labels from here
+    {"linkstate", NETWORK_LINK_STATE},
+    {"macaddress", NETWORK_MAC_ADDRESS},
+    {"subnetmask", NETWORK_SUBNET_MASK},
+    {"gatewayaddress", NETWORK_GATEWAY_ADDRESS},
+    {"dns1address", NETWORK_DNS1_ADDRESS},
+    {"dns2address", NETWORK_DNS2_ADDRESS}
+};
+// clang-format on
 
 /// \page modules__infolabels_boolean_conditions
 /// \subsection modules__infolabels_boolean_conditions_musicpartymode Music party mode
@@ -3984,8 +3996,8 @@ const infomap videoplayer[] =    {{ "title",            VIDEOPLAYER_TITLE },
 ///                  _string_,
 ///     @return The video filter of the currently-playing game.
 ///     The following values are possible:
-///       - nearest (Nearest neighbor\, i.e. pixelate)
-///       - linear (Bilinear filtering\, i.e. smooth blur)
+///       - <b>`nearest`</b> (Nearest neighbor\, i.e. pixelate)
+///       - <b>`linear`</b> (Bilinear filtering\, i.e. smooth blur)
 ///     <p><hr>
 ///     @skinning_v18 **[New Infolabel]** \link RetroPlayer_VideoFilter `RetroPlayer.VideoFilter`\endlink
 ///     <p>
@@ -3995,10 +4007,10 @@ const infomap videoplayer[] =    {{ "title",            VIDEOPLAYER_TITLE },
 ///                  _string_,
 ///     @return The stretch mode of the currently-playing game.
 ///     The following values are possible:
-///       - normal (Show the game normally)
-///       - 4:3 (Stretch to a 4:3 aspect ratio)
-///       - fullscreen (Stretch to the full viewing area)
-///       - original (Shrink to the original resolution)
+///       - <b>`normal`</b> (Show the game normally)
+///       - <b>`4:3`</b> (Stretch to a 4:3 aspect ratio)
+///       - <b>`fullscreen`</b> (Stretch to the full viewing area)
+///       - <b>`original`</b> (Shrink to the original resolution)
 ///     <p><hr>
 ///     @skinning_v18 **[New Infolabel]** \link RetroPlayer_StretchMode `RetroPlayer.StretchMode`\endlink
 ///     <p>
@@ -4009,10 +4021,10 @@ const infomap videoplayer[] =    {{ "title",            VIDEOPLAYER_TITLE },
 ///     @return The video rotation of the currently-playing game
 ///     in degrees counter-clockwise.
 ///     The following values are possible:
-///       - 0
-///       - 90 (Shown in the GUI as 270 degrees)
-///       - 180
-///       - 270 (Shown in the GUI as 90 degrees)
+///       - <b>`0`</b>
+///       - <b>`90`</b> (Shown in the GUI as 270 degrees)
+///       - <b>`180`</b>
+///       - <b>`270`</b> (Shown in the GUI as 90 degrees)
 ///     <p><hr>
 ///     @skinning_v18 **[New Infolabel]** \link RetroPlayer_VideoRotation `RetroPlayer.VideoRotation`\endlink
 ///     <p>
@@ -6715,6 +6727,14 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
 ///     @return The parental rating of the list item (PVR).
 ///     <p>
 ///   }
+///   \table_row3{   <b>`ListItem.ParentalRatingCode`</b>,
+///                  \anchor ListItem_ParentalRatingCode
+///                  _string_,
+///     @return The parental rating code (eg: 'PG'\, etc) of the list item (PVR).
+///     <p><hr>
+///     @skinning_v21 **[New Infolabel]** \link ListItem_ParentalRatingCode `ListItem.ParentalRatingCode`\endlink
+///     <p>
+///   }
 ///   \table_row3{   <b>`ListItem.CurrentItem`</b>,
 ///                  \anchor ListItem_CurrentItem
 ///                  _string_,
@@ -6859,9 +6879,45 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
 ///     <p><hr>
 ///     @skinning_v20 **[New Infolabel]** \link ListItem_HdrType `ListItem.HdrType`\endlink
 ///   }
+///   \table_row3{   <b>`ListItem.SongVideoURL`</b>,
+///                  \anchor ListItem_SongVideoURL
+///                  _string_,
+///     @return Link to a video of a song
+///     <p><hr>
+///     @skinning_v21 **[New Infolabel]** \link ListItem_SongVideoURL `ListItem.SongVideoURL`\endlink
+///   }
+///   \table_row3{   <b>`ListItem.VideoWidth`</b>,
+///                  \anchor ListItem_VideoWidth
+///                  _string_,
+///     @return String containing width of video in pixels - empty if unknown.
+///     <p><hr>
+///     @skinning_v21 **[New Infolabel]** \link ListItem_VideoWidth `ListItem.VideoWidth`\endlink
+///   }
+///   \table_row3{   <b>`ListItem.VideoHeight`</b>,
+///                  \anchor ListItem_VideoHeight
+///                  _string_,
+///     @return String containing height of video in pixels - empty if unknown.
+///     <p><hr>
+///     @skinning_v21 **[New Infolabel]** \link ListItem_VideoHeight `ListItem.VideoHeight`\endlink
+///   }
+///   \table_row3{   <b>`ListItem.HasVideoVersions`</b>,
+///                  \anchor ListItem_HasVideoVersions
+///                  _boolean_,
+///     @return **True** when the selected item has multiple video versions.
+///     <p><hr>
+///     @skinning_v21 **[New Infolabel]** \link ListItem_HasVideoVersions `ListItem.HasVideoVersions`\endlink
+///   }
+///   \table_row3{   <b>`ListItem.IsVideoExtras`</b>,
+///                  \anchor ListItem_IsVideoExtras
+///                  _boolean_,
+///     @return **True** when the selected item is video extras.
+///     <p><hr>
+///     @skinning_v21 **[New Infolabel]** \link ListItem_IsVideoExtras `ListItem.IsVideoExtras`\endlink
+///   }
 /// \table_end
 ///
 /// -----------------------------------------------------------------------------
+// clang-format off
 const infomap listitem_labels[]= {{ "thumb",            LISTITEM_THUMB },
                                   { "icon",             LISTITEM_ICON },
                                   { "actualicon",       LISTITEM_ACTUAL_ICON },
@@ -6975,6 +7031,8 @@ const infomap listitem_labels[]= {{ "thumb",            LISTITEM_THUMB },
                                   { "setid",            LISTITEM_SETID },
                                   { "videocodec",       LISTITEM_VIDEO_CODEC },
                                   { "videoresolution",  LISTITEM_VIDEO_RESOLUTION },
+                                  { "videowidth",       LISTITEM_VIDEO_WIDTH},
+                                  { "videoheight",      LISTITEM_VIDEO_HEIGHT},
                                   { "videoaspect",      LISTITEM_VIDEO_ASPECT },
                                   { "audiocodec",       LISTITEM_AUDIO_CODEC },
                                   { "audiochannels",    LISTITEM_AUDIO_CHANNELS },
@@ -7053,6 +7111,7 @@ const infomap listitem_labels[]= {{ "thumb",            LISTITEM_THUMB },
                                   { "art",              LISTITEM_ART },
                                   { "property",         LISTITEM_PROPERTY },
                                   { "parentalrating",   LISTITEM_PARENTAL_RATING },
+                                  { "parentalratingcode", LISTITEM_PARENTAL_RATING_CODE },
                                   { "currentitem",      LISTITEM_CURRENTITEM },
                                   { "isnew",            LISTITEM_IS_NEW },
                                   { "isboxset",         LISTITEM_IS_BOXSET },
@@ -7071,7 +7130,11 @@ const infomap listitem_labels[]= {{ "thumb",            LISTITEM_THUMB },
                                   { "albumstatus",      LISTITEM_ALBUMSTATUS },
                                   { "isautoupdateable", LISTITEM_ISAUTOUPDATEABLE },
                                   { "hdrtype",          LISTITEM_VIDEO_HDR_TYPE },
+                                  { "songvideourl",     LISTITEM_SONG_VIDEO_URL },
+                                  { "hasvideoversions", LISTITEM_HASVIDEOVERSIONS },
+                                  { "isvideoextras",    LISTITEM_ISVIDEOEXTRAS },
 };
+// clang-format on
 
 /// \page modules__infolabels_boolean_conditions
 /// \subsection modules__infolabels_boolean_conditions_Visualisation Visualisation
@@ -9715,6 +9778,11 @@ const infomap slideshow[] =      {{ "ispaused",               SLIDESHOW_ISPAUSED
 /// \page modules__infolabels_boolean_conditions
 /// \section modules_rm_infolabels_booleans Additional revision history for Infolabels and Boolean Conditions
 /// <hr>
+/// \subsection modules_rm_infolabels_booleans_v21 Kodi v21 (Omega)
+/// @skinning_v21 **[Removed Infolabels]** The following infolabels have been removed:
+///   - `Network.DHCPAddress` - this info did not return any meaningful value (always an empty string)
+///
+/// <hr>
 /// \subsection modules_rm_infolabels_booleans_v20 Kodi v20 (Nexus)
 /// @skinning_v20 **[Removed Boolean conditions]** The following boolean conditions have been removed:
 ///   - `Player.DisplayAfterSeek` - use \link Player_HasPerformedSeek `Player.HasPerformedSeek(interval)`\endlink instead
@@ -9856,7 +9924,7 @@ void CGUIInfoManager::SplitInfoString(const std::string &infoString, std::vector
       if (!property.empty()) // add our property and parameters
       {
         StringUtils::ToLower(property);
-        info.emplace_back(Property(property, param));
+        info.emplace_back(property, param);
       }
       property.clear();
       param.clear();
@@ -9874,7 +9942,7 @@ void CGUIInfoManager::SplitInfoString(const std::string &infoString, std::vector
   if (!property.empty())
   {
     StringUtils::ToLower(property);
-    info.emplace_back(Property(property, param));
+    info.emplace_back(property, param);
   }
 }
 
@@ -10100,6 +10168,25 @@ int CGUIInfoManager::TranslateSingleString(const std::string &strCondition, bool
         }
         else if (prop.name == "idletime")
           return AddMultiInfo(CGUIInfo(SYSTEM_IDLE_TIME, atoi(param.c_str())));
+        else if (prop.name == "locale")
+        {
+          if (param == "timezonecountry")
+          {
+            return SYSTEM_LOCALE_TIMEZONECOUNTRY;
+          }
+          else if (param == "timezone")
+          {
+            return SYSTEM_LOCALE_TIMEZONE;
+          }
+          else if (param == "region")
+          {
+            return SYSTEM_LOCALE_REGION;
+          }
+          else if (param == "iso")
+          {
+            return SYSTEM_LOCALE;
+          }
+        }
       }
       if (prop.name == "alarmlessorequal" && prop.num_params() == 2)
         return AddMultiInfo(CGUIInfo(SYSTEM_ALARM_LESS_OR_EQUAL, prop.param(0), atoi(prop.param(1).c_str())));
@@ -10706,7 +10793,7 @@ INFO::InfoPtr CGUIInfoManager::Register(const std::string &expression, int conte
     res = m_bools.insert(std::make_shared<InfoSingle>(condition, context, m_refreshCounter));
 
   if (res.second)
-    res.first->get()->Initialize();
+    res.first->get()->Initialize(this);
 
   return *(res.first);
 }

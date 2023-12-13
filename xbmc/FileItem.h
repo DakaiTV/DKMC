@@ -214,6 +214,7 @@ public:
   bool IsAddonsPath() const;
   bool IsSourcesPath() const;
   bool IsNFO() const;
+  bool IsVideoExtras() const;
   bool IsDiscImage() const;
   bool IsOpticalMediaFile() const;
   bool IsDVDFile(bool bVobs = true, bool bIfos = true) const;
@@ -261,6 +262,7 @@ public:
   bool IsRSS() const;
   bool IsAndroidApp() const;
 
+  bool HasVideoVersions() const;
   void RemoveExtension();
   void CleanString();
   void FillInDefaultIcon();
@@ -369,7 +371,9 @@ public:
 
   /*!
    * \brief Test if this item type can be resumed.
-   * \return True if this item can be resumed, false otherwise.
+   * \return True if this item is a folder and has at least one child with a partway resume bookmark
+   * or at least one unwatched child or if it is not a folder, if it has a partway resume bookmark,
+   * false otherwise.
    */
   bool IsResumable() const;
 
@@ -634,6 +638,12 @@ private:
    */
   void Initialize();
 
+  /*! \brief Recalculate item's MIME type if it is not set or is set to "application/octet-stream".
+   Resolve the MIME type based on file extension or a web lookup.
+   \sa FillInMimeType
+   */
+  void UpdateMimeType(bool lookup = true);
+
   /*!
    \brief Return the current resume point for this item.
    \return The resume point.
@@ -643,7 +653,7 @@ private:
   /*!
    \brief Fill item's music tag from given epg tag.
    */
-  void FillMusicInfoTag(const std::shared_ptr<PVR::CPVREpgInfoTag>& tag);
+  void FillMusicInfoTag(const std::shared_ptr<const PVR::CPVREpgInfoTag>& tag);
 
   std::string m_strPath;            ///< complete path to item
   std::string m_strDynPath;

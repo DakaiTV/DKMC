@@ -14,13 +14,19 @@
 
 #include <string>
 
-class TiXmlElement;
+namespace tinyxml2
+{
+class XMLElement;
+}
 
 namespace KODI
 {
 namespace GAME
 {
 
+/*!
+ * \ingroup games
+ */
 class CPhysicalFeature
 {
 public:
@@ -45,7 +51,7 @@ public:
   JOYSTICK::INPUT_TYPE InputType(void) const { return m_inputType; }
   KEYBOARD::KeySymbol Keycode() const { return m_keycode; }
 
-  bool Deserialize(const TiXmlElement* pElement,
+  bool Deserialize(const tinyxml2::XMLElement* pElement,
                    const CController* controller,
                    JOYSTICK::FEATURE_CATEGORY category,
                    int categoryLabelId);

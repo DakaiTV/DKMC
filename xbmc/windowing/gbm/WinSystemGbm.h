@@ -49,7 +49,7 @@ public:
   bool DisplayHardwareScalingEnabled() override;
   void UpdateDisplayHardwareScaling(const RESOLUTION_INFO& resInfo) override;
 
-  void FlipPage(bool rendered, bool videoLayer);
+  void FlipPage(bool rendered, bool videoLayer, bool async);
 
   bool CanDoWindowed() override { return false; }
   void UpdateResolutions() override;
@@ -71,7 +71,7 @@ public:
     m_videoLayerBridge = std::move(bridge);
   };
 
-  CGBMUtils::CGBMDevice* GetGBMDevice() const { return m_GBM->GetDevice(); }
+  CGBMUtils::CGBMDevice& GetGBMDevice() const { return m_GBM->GetDevice(); }
   std::shared_ptr<CDRMUtils> GetDrm() const { return m_DRM; }
 
   std::vector<std::string> GetConnectedOutputs() override;
@@ -79,7 +79,7 @@ public:
 protected:
   void OnLostDevice();
 
-  std::unique_ptr<CVideoSync> GetVideoSync(void* clock) override;
+  std::unique_ptr<CVideoSync> GetVideoSync(CVideoReferenceClock* clock) override;
 
   std::shared_ptr<CDRMUtils> m_DRM;
   std::unique_ptr<CGBMUtils> m_GBM;

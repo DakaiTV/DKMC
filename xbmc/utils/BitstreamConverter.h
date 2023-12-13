@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "cores/FFmpeg.h"
+
 #include <stdint.h>
 
 extern "C" {
@@ -92,10 +94,12 @@ public:
   bool              Convert(uint8_t *pData, int iSize);
   uint8_t*          GetConvertBuffer(void) const;
   int               GetConvertSize() const;
-  uint8_t*          GetExtraData(void) const;
+  uint8_t* GetExtraData();
+  const uint8_t* GetExtraData() const;
   int               GetExtraSize() const;
   void              ResetStartDecode(void);
   bool              CanStartDecode() const;
+  void SetConvertDovi(bool value) { m_convert_dovi = value; }
 
   static bool       mpeg2_sequence_header(const uint8_t *data, const uint32_t size, mpeg2_sequence *sequence);
 
@@ -135,10 +139,10 @@ protected:
   bool              m_convert_bitstream;
   bool              m_to_annexb;
 
-  uint8_t          *m_extradata;
-  int               m_extrasize;
+  FFmpegExtraData m_extraData;
   bool              m_convert_3byteTo4byteNALSize;
   bool              m_convert_bytestream;
   AVCodecID         m_codec;
   bool              m_start_decode;
+  bool m_convert_dovi;
 };

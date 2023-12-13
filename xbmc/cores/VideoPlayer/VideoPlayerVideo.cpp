@@ -66,7 +66,9 @@ CVideoPlayerVideo::CVideoPlayerVideo(CDVDClock* pClock
   m_iLateFrames = 0;
   m_iDroppedRequest = 0;
   m_fForcedAspectRatio = 0;
-  m_messageQueue.SetMaxDataSize(40 * 1024 * 1024);
+
+  // 128 MB allows max bitrate of 128 Mbit/s (e.g. UHD Blu-Ray) during 8 seconds
+  m_messageQueue.SetMaxDataSize(128 * 1024 * 1024);
   m_messageQueue.SetMaxTimeSize(8.0);
 
   m_iDroppedFrames = 0;
@@ -103,7 +105,7 @@ bool CVideoPlayerVideo::OpenStream(CDVDStreamInfo hint)
 {
   if (hint.flags & AV_DISPOSITION_ATTACHED_PIC)
     return false;
-  if (hint.extrasize == 0)
+  if (!hint.extradata)
   {
     // codecs which require extradata
     // clang-format off
@@ -170,7 +172,10 @@ void CVideoPlayerVideo::OpenStream(CDVDStreamInfo& hint, std::unique_ptr<CDVDVid
   //reported fps is usually not completely correct
   if (hint.fpsrate && hint.fpsscale)
   {
-    m_fFrameRate = DVD_TIME_BASE / CDVDCodecUtils::NormalizeFrameduration((double)DVD_TIME_BASE * hint.fpsscale / hint.fpsrate);
+    m_fFrameRate = DVD_TIME_BASE / CDVDCodecUtils::NormalizeFrameduration(
+                                       (double)DVD_TIME_BASE *
+                                       ((hint.interlaced ? 2 : 1) * hint.fpsscale) / hint.fpsrate);
+
     m_bFpsInvalid = false;
     m_processInfo.SetVideoFps(static_cast<float>(m_fFrameRate));
   }

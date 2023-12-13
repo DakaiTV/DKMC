@@ -24,6 +24,8 @@
 #include "utils/log.h"
 #include "windowing/Resolution.h"
 
+#include <memory>
+
 CInputStreamProvider::CInputStreamProvider(const ADDON::AddonInfoPtr& addonInfo,
                                            KODI_HANDLE parentInstance)
   : m_addonInfo(addonInfo), m_parentInstance(parentInstance)
@@ -191,8 +193,8 @@ bool CInputStreamAddon::Open()
     m_caps = {};
     m_ifc.inputstream->toAddon->get_capabilities(m_ifc.inputstream, &m_caps);
 
-    m_subAddonProvider = std::shared_ptr<CInputStreamProvider>(
-        new CInputStreamProvider(GetAddonInfo(), m_ifc.inputstream->toAddon->addonInstance));
+    m_subAddonProvider = std::make_shared<CInputStreamProvider>(
+        GetAddonInfo(), m_ifc.inputstream->toAddon->addonInstance);
   }
   return ret;
 }
@@ -415,6 +417,7 @@ KODI_HANDLE CInputStreamAddon::cb_get_stream_transfer(KODI_HANDLE handle,
     audioStream->iBlockAlign = stream->m_BlockAlign;
     audioStream->iBitRate = stream->m_BitRate;
     audioStream->iBitsPerSample = stream->m_BitsPerSample;
+    audioStream->profile = ConvertAudioCodecProfile(stream->m_codecProfile);
     demuxStream = audioStream;
   }
   else if (stream->m_streamType == INPUTSTREAM_TYPE_VIDEO)
@@ -443,8 +446,7 @@ KODI_HANDLE CInputStreamAddon::cb_get_stream_transfer(KODI_HANDLE handle,
 
     if (stream->m_masteringMetadata)
     {
-      videoStream->masteringMetaData =
-          std::shared_ptr<AVMasteringDisplayMetadata>(new AVMasteringDisplayMetadata);
+      videoStream->masteringMetaData = std::make_shared<AVMasteringDisplayMetadata>();
       videoStream->masteringMetaData->display_primaries[0][0] =
           av_d2q(stream->m_masteringMetadata->primary_r_chromaticity_x, INT_MAX);
       videoStream->masteringMetaData->display_primaries[0][1] =
@@ -471,8 +473,7 @@ KODI_HANDLE CInputStreamAddon::cb_get_stream_transfer(KODI_HANDLE handle,
 
     if (stream->m_contentLightMetadata)
     {
-      videoStream->contentLightMetaData =
-          std::shared_ptr<AVContentLightMetadata>(new AVContentLightMetadata);
+      videoStream->contentLightMetaData = std::make_shared<AVContentLightMetadata>();
       videoStream->contentLightMetaData->MaxCLL =
           static_cast<unsigned>(stream->m_contentLightMetadata->max_cll);
       videoStream->contentLightMetaData->MaxFALL =
@@ -531,24 +532,20 @@ KODI_HANDLE CInputStreamAddon::cb_get_stream_transfer(KODI_HANDLE handle,
 
   if (stream->m_ExtraData && stream->m_ExtraSize)
   {
-    demuxStream->ExtraData = std::make_unique<uint8_t[]>(stream->m_ExtraSize);
-    demuxStream->ExtraSize = stream->m_ExtraSize;
-    for (unsigned int j = 0; j < stream->m_ExtraSize; ++j)
-      demuxStream->ExtraData[j] = stream->m_ExtraData[j];
+    demuxStream->extraData = FFmpegExtraData(stream->m_ExtraData, stream->m_ExtraSize);
   }
 
   if (stream->m_cryptoSession.keySystem != STREAM_CRYPTO_KEY_SYSTEM_NONE &&
       stream->m_cryptoSession.keySystem < STREAM_CRYPTO_KEY_SYSTEM_COUNT)
   {
     static const CryptoSessionSystem map[] = {
-        CRYPTO_SESSION_SYSTEM_NONE,
-        CRYPTO_SESSION_SYSTEM_WIDEVINE,
-        CRYPTO_SESSION_SYSTEM_PLAYREADY,
-        CRYPTO_SESSION_SYSTEM_WISEPLAY,
+        CRYPTO_SESSION_SYSTEM_NONE,      CRYPTO_SESSION_SYSTEM_WIDEVINE,
+        CRYPTO_SESSION_SYSTEM_PLAYREADY, CRYPTO_SESSION_SYSTEM_WISEPLAY,
+        CRYPTO_SESSION_SYSTEM_CLEARKEY,
     };
-    demuxStream->cryptoSession = std::shared_ptr<DemuxCryptoSession>(
-        new DemuxCryptoSession(map[stream->m_cryptoSession.keySystem],
-                               stream->m_cryptoSession.sessionId, stream->m_cryptoSession.flags));
+    demuxStream->cryptoSession = std::make_shared<DemuxCryptoSession>(
+        map[stream->m_cryptoSession.keySystem], stream->m_cryptoSession.sessionId,
+        stream->m_cryptoSession.flags);
 
     if ((stream->m_features & INPUTSTREAM_FEATURE_DECODE) != 0)
       demuxStream->externalInterfaces = thisClass->m_subAddonProvider;
@@ -721,6 +718,56 @@ int CInputStreamAddon::ConvertVideoCodecProfile(STREAMCODEC_PROFILE profile)
     return FF_PROFILE_AV1_PROFESSIONAL;
   default:
     return FF_PROFILE_UNKNOWN;
+  }
+}
+
+int CInputStreamAddon::ConvertAudioCodecProfile(STREAMCODEC_PROFILE profile)
+{
+  switch (profile)
+  {
+    case AACCodecProfileMAIN:
+      return FF_PROFILE_AAC_MAIN;
+    case AACCodecProfileLOW:
+      return FF_PROFILE_AAC_LOW;
+    case AACCodecProfileSSR:
+      return FF_PROFILE_AAC_SSR;
+    case AACCodecProfileLTP:
+      return FF_PROFILE_AAC_LTP;
+    case AACCodecProfileHE:
+      return FF_PROFILE_AAC_HE;
+    case AACCodecProfileHEV2:
+      return FF_PROFILE_AAC_HE_V2;
+    case AACCodecProfileLD:
+      return FF_PROFILE_AAC_LD;
+    case AACCodecProfileELD:
+      return FF_PROFILE_AAC_ELD;
+    case MPEG2AACCodecProfileLOW:
+      return FF_PROFILE_MPEG2_AAC_LOW;
+    case MPEG2AACCodecProfileHE:
+      return FF_PROFILE_MPEG2_AAC_HE;
+    case DTSCodecProfile:
+      return FF_PROFILE_DTS;
+    case DTSCodecProfileES:
+      return FF_PROFILE_DTS_ES;
+    case DTSCodecProfile9624:
+      return FF_PROFILE_DTS_96_24;
+    case DTSCodecProfileHDHRA:
+      return FF_PROFILE_DTS_HD_HRA;
+    case DTSCodecProfileHDMA:
+      return FF_PROFILE_DTS_HD_MA;
+    case DTSCodecProfileHDExpress:
+      return FF_PROFILE_DTS_EXPRESS;
+    case DTSCodecProfileHDMAX:
+      //! @todo: with ffmpeg >= 6.1 set the appropriate profile
+      return FF_PROFILE_UNKNOWN; // FF_PROFILE_DTS_HD_MA_X
+    case DTSCodecProfileHDMAIMAX:
+      //! @todo: with ffmpeg >= 6.1 set the appropriate profile
+      return FF_PROFILE_UNKNOWN; // FF_PROFILE_DTS_HD_MA_X_IMAX
+    case DDPlusCodecProfileAtmos:
+      //! @todo: with ffmpeg >= 6.1 set the appropriate profile
+      return FF_PROFILE_UNKNOWN; // FF_PROFILE_EAC3_DDP_ATMOS
+    default:
+      return FF_PROFILE_UNKNOWN;
   }
 }
 

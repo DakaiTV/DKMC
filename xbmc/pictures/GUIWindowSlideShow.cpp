@@ -40,6 +40,7 @@
 #include "utils/XTimeUtils.h"
 #include "utils/log.h"
 
+#include <memory>
 #include <random>
 
 using namespace XFILE;
@@ -64,14 +65,7 @@ using namespace std::chrono_literals;
 
 static float zoomamount[10] = { 1.0f, 1.2f, 1.5f, 2.0f, 2.8f, 4.0f, 6.0f, 9.0f, 13.5f, 20.0f };
 
-CBackgroundPicLoader::CBackgroundPicLoader()
-  : CThread("BgPicLoader")
-  , m_iPic{0}
-  , m_iSlideNumber{0}
-  , m_maxWidth{0}
-  , m_maxHeight{0}
-  , m_isLoading{false}
-  , m_pCallback{nullptr}
+CBackgroundPicLoader::CBackgroundPicLoader() : CThread("BgPicLoader")
 {
 }
 
@@ -352,7 +346,7 @@ void CGUIWindowSlideShow::Select(const std::string& strPicture)
 void CGUIWindowSlideShow::GetSlideShowContents(CFileItemList &list)
 {
   for (size_t index = 0; index < m_slides.size(); index++)
-    list.Add(CFileItemPtr(new CFileItem(*m_slides.at(index))));
+    list.Add(std::make_shared<CFileItem>(*m_slides.at(index)));
 }
 
 std::shared_ptr<const CFileItem> CGUIWindowSlideShow::GetCurrentSlide()
@@ -401,7 +395,9 @@ void CGUIWindowSlideShow::Process(unsigned int currentTime, CDirtyRegionList &re
 
   // if we haven't processed yet, we should mark the whole screen
   if (!HasProcessed())
-    regions.push_back(CDirtyRegion(CRect(0.0f, 0.0f, (float)CServiceBroker::GetWinSystem()->GetGfxContext().GetWidth(), (float)CServiceBroker::GetWinSystem()->GetGfxContext().GetHeight())));
+    regions.emplace_back(CRect(
+        0.0f, 0.0f, static_cast<float>(CServiceBroker::GetWinSystem()->GetGfxContext().GetWidth()),
+        static_cast<float>(CServiceBroker::GetWinSystem()->GetGfxContext().GetHeight())));
 
   if (m_iCurrentSlide < 0 || m_iCurrentSlide >= static_cast<int>(m_slides.size()))
     m_iCurrentSlide = 0;
@@ -411,7 +407,7 @@ void CGUIWindowSlideShow::Process(unsigned int currentTime, CDirtyRegionList &re
   // Create our background loader if necessary
   if (!m_pBackgroundLoader)
   {
-    m_pBackgroundLoader.reset(new CBackgroundPicLoader());
+    m_pBackgroundLoader = std::make_unique<CBackgroundPicLoader>();
     m_pBackgroundLoader->Create(this);
   }
 
@@ -484,7 +480,9 @@ void CGUIWindowSlideShow::Process(unsigned int currentTime, CDirtyRegionList &re
 
   if (m_bErrorMessage)
   { // hack, just mark it all
-    regions.push_back(CDirtyRegion(CRect(0.0f, 0.0f, (float)CServiceBroker::GetWinSystem()->GetGfxContext().GetWidth(), (float)CServiceBroker::GetWinSystem()->GetGfxContext().GetHeight())));
+    regions.emplace_back(CRect(
+        0.0f, 0.0f, static_cast<float>(CServiceBroker::GetWinSystem()->GetGfxContext().GetWidth()),
+        static_cast<float>(CServiceBroker::GetWinSystem()->GetGfxContext().GetHeight())));
     return;
   }
 

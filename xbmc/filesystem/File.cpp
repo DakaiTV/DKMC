@@ -20,7 +20,7 @@
 #include "application/ApplicationComponents.h"
 #include "application/ApplicationPowerHandling.h"
 #include "commons/Exception.h"
-#include "settings/AdvancedSettings.h"
+#include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
 #include "utils/BitstreamStats.h"
 #include "utils/StringUtils.h"
@@ -287,15 +287,19 @@ bool CFile::Open(const CURL& file, const unsigned int flags)
       if (URIUtils::IsDVD(pathToUrl) || URIUtils::IsBluray(pathToUrl) ||
           (m_flags & READ_AUDIO_VIDEO))
       {
-        const unsigned int iCacheBufferMode =
-            CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_cacheBufferMode;
-        if ((iCacheBufferMode == CACHE_BUFFER_MODE_INTERNET &&
+        const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
+
+        const int cacheBufferMode = (settings)
+                                        ? settings->GetInt(CSettings::SETTING_FILECACHE_BUFFERMODE)
+                                        : CACHE_BUFFER_MODE_NETWORK;
+
+        if ((cacheBufferMode == CACHE_BUFFER_MODE_INTERNET &&
              URIUtils::IsInternetStream(pathToUrl, true)) ||
-            (iCacheBufferMode == CACHE_BUFFER_MODE_TRUE_INTERNET &&
+            (cacheBufferMode == CACHE_BUFFER_MODE_TRUE_INTERNET &&
              URIUtils::IsInternetStream(pathToUrl, false)) ||
-            (iCacheBufferMode == CACHE_BUFFER_MODE_NETWORK &&
+            (cacheBufferMode == CACHE_BUFFER_MODE_NETWORK &&
              URIUtils::IsNetworkFilesystem(pathToUrl)) ||
-            (iCacheBufferMode == CACHE_BUFFER_MODE_ALL &&
+            (cacheBufferMode == CACHE_BUFFER_MODE_ALL &&
              (URIUtils::IsNetworkFilesystem(pathToUrl) || URIUtils::IsHD(pathToUrl))))
         {
           m_flags |= READ_CACHED;
@@ -360,7 +364,12 @@ bool CFile::Open(const CURL& file, const unsigned int flags)
       return false;
     }
 
-    if (m_pFile->GetChunkSize() && !(m_flags & READ_CHUNKED))
+    constexpr int64_t len = 200 * 1024 * 1024; // 200 MB
+
+    // Use CFileStreamBuffer for all "big" files (audio/video files) when FileCache is not used
+    // This also makes use of 64K file read chunk size, suitable for localfiles, USB files, etc.
+    // Also enbles basic cache for Blu-Ray but only big .m2ts files (main audio/video files only)
+    if ((m_pFile->GetChunkSize() || m_pFile->GetLength() > len) && !(m_flags & READ_CHUNKED))
     {
       m_pBuffer = std::make_unique<CFileStreamBuffer>(0);
       m_pBuffer->Attach(m_pFile.get());

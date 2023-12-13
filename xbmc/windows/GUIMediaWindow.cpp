@@ -1310,7 +1310,7 @@ void CGUIMediaWindow::SaveSelectedItemInHistory()
     GetDirectoryHistoryString(pItem.get(), strSelectedItem);
   }
 
-  m_history.SetSelectedItem(strSelectedItem, m_vecItems->GetPath());
+  m_history.SetSelectedItem(strSelectedItem, m_vecItems->GetPath(), iItem);
 }
 
 void CGUIMediaWindow::RestoreSelectedItemFromHistory()
@@ -1333,7 +1333,17 @@ void CGUIMediaWindow::RestoreSelectedItemFromHistory()
     }
   }
 
-  // if we haven't found the selected item, select the first item
+  // Exact item not found - maybe deleted, watched status change, filtered out, ...
+  // Attempt to restore the position of the selection
+  int selectedItemIndex = m_history.GetSelectedItemIndex(m_vecItems->GetPath());
+  if (selectedItemIndex >= 0 && m_vecItems->Size() > 0)
+  {
+    int newIndex = std::min(selectedItemIndex, m_vecItems->Size() - 1);
+    m_viewControl.SetSelectedItem(newIndex);
+    return;
+  }
+
+  // Fallback: select the first item
   m_viewControl.SetSelectedItem(0);
 }
 
@@ -1808,34 +1818,6 @@ bool CGUIMediaWindow::OnPopupMenu(int itemIdx)
   return CONTEXTMENU::LoopFrom(*addonMenu[idx - addonMenuRange.first], item);
 }
 
-void CGUIMediaWindow::GetContextButtons(int itemNumber, CContextButtons &buttons)
-{
-  CFileItemPtr item = (itemNumber >= 0 && itemNumber < m_vecItems->Size()) ? m_vecItems->Get(itemNumber) : CFileItemPtr();
-
-  if (!item || item->IsParentFolder())
-    return;
-
-  if (item->IsFileFolder(EFILEFOLDER_MASK_ONBROWSE))
-    buttons.Add(CONTEXT_BUTTON_BROWSE_INTO, 37015);
-
-}
-
-bool CGUIMediaWindow::OnContextButton(int itemNumber, CONTEXT_BUTTON button)
-{
-  switch (button)
-  {
-  case CONTEXT_BUTTON_BROWSE_INTO:
-    {
-      CFileItemPtr item = m_vecItems->Get(itemNumber);
-      Update(item->GetPath());
-      return true;
-    }
-  default:
-    break;
-  }
-  return false;
-}
-
 const CGUIViewState *CGUIMediaWindow::GetViewState() const
 {
   return m_guiState.get();
@@ -2271,6 +2253,7 @@ bool CGUIMediaWindow::WaitGetDirectoryItems(CGetDirectoryItems &items)
   else
   {
     m_updateJobActive = true;
+    m_updateAborted = false;
     m_updateEvent.Reset();
     CServiceBroker::GetJobManager()->Submit(
         [&]() {
@@ -2279,14 +2262,21 @@ bool CGUIMediaWindow::WaitGetDirectoryItems(CGetDirectoryItems &items)
         },
         nullptr, CJob::PRIORITY_NORMAL);
 
-    while (!m_updateEvent.Wait(1ms))
+    // Loop until either the job ended or update canceled via CGUIMediaWindow::CancelUpdateItems.
+    while (!m_updateAborted && !m_updateEvent.Wait(1ms))
     {
       if (!ProcessRenderLoop(false))
         break;
     }
 
-    if (m_updateAborted || !items.m_result)
+    if (m_updateAborted)
     {
+      CLog::LogF(LOGDEBUG, "Get directory items job was canceled.");
+      ret = false;
+    }
+    else if (!items.m_result)
+    {
+      CLog::LogF(LOGDEBUG, "Get directory items job was unsuccessful.");
       ret = false;
     }
   }

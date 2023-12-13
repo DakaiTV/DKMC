@@ -22,13 +22,16 @@
 #include "filesystem/VideoDatabaseDirectory.h"
 #include "guilib/GUIComponent.h"
 #include "guilib/GUIWindowManager.h"
+#include "guilib/LocalizeStrings.h"
 #include "playlists/PlayList.h"
 #include "playlists/PlayListFactory.h"
+#include "profiles/ProfileManager.h"
 #include "settings/MediaSettings.h"
 #include "settings/SettingUtils.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
 #include "threads/IRunnable.h"
+#include "utils/FileUtils.h"
 #include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
 #include "utils/log.h"
@@ -43,7 +46,8 @@ class CAsyncGetItemsForPlaylist : public IRunnable
 public:
   CAsyncGetItemsForPlaylist(const std::shared_ptr<CFileItem>& item, CFileItemList& queuedItems)
     : m_item(item),
-      m_resume(item->GetStartOffset() == STARTOFFSET_RESUME),
+      m_resume((item->GetStartOffset() == STARTOFFSET_RESUME) &&
+               VIDEO_UTILS::GetItemResumeInformation(*item).isResumable),
       m_queuedItems(queuedItems)
   {
   }
@@ -176,7 +180,14 @@ void CAsyncGetItemsForPlaylist::GetItemsForPlaylist(const std::shared_ptr<CFileI
 
       SortDescription sortDesc;
       if (CServiceBroker::GetGUI()->GetWindowManager().GetActiveWindow() == viewStateWindowId)
+      {
         sortDesc = state->GetSortMethod();
+
+        // It makes no sense to play from younger to older.
+        if (sortDesc.sortBy == SortByDate || sortDesc.sortBy == SortByYear ||
+            sortDesc.sortBy == SortByEpisodeNumber)
+          sortDesc.sortOrder = SortOrderAscending;
+      }
       else
         sortDesc = GetSortDescription(*state, items);
 
@@ -184,6 +195,20 @@ void CAsyncGetItemsForPlaylist::GetItemsForPlaylist(const std::shared_ptr<CFileI
         items.ClearSortState();
 
       items.Sort(sortDesc);
+    }
+
+    if (items.GetContent().empty() && !items.IsVideoDb() && !items.IsVirtualDirectoryRoot() &&
+        !items.IsSourcesPath() && !items.IsLibraryFolder())
+    {
+      CVideoDatabase db;
+      if (db.Open())
+      {
+        std::string content = db.GetContentForPath(items.GetPath());
+        if (content.empty() && !items.IsPlugin())
+          content = "files";
+
+        items.SetContent(content);
+      }
     }
 
     if (m_resume)
@@ -227,6 +252,7 @@ void CAsyncGetItemsForPlaylist::GetItemsForPlaylist(const std::shared_ptr<CFileI
 
     const bool unwatchedOnly = watchedMode == WatchedModeUnwatched;
     const bool watchedOnly = watchedMode == WatchedModeWatched;
+    bool fetchedPlayCounts = false;
     for (const auto& i : items)
     {
       if (i->m_bIsFolder)
@@ -236,33 +262,32 @@ void CAsyncGetItemsForPlaylist::GetItemsForPlaylist(const std::shared_ptr<CFileI
         if (StringUtils::EndsWithNoCase(path, "sample")) // skip sample folders
           continue;
       }
-      else if (i->HasVideoInfoTag() &&
-               ((unwatchedOnly && i->GetVideoInfoTag()->GetPlayCount() > 0) ||
-                (watchedOnly && i->GetVideoInfoTag()->GetPlayCount() <= 0)))
-        continue;
-
+      else
+      {
+        if (!fetchedPlayCounts &&
+            (!i->HasVideoInfoTag() || !i->GetVideoInfoTag()->IsPlayCountSet()))
+        {
+          CVideoDatabase db;
+          if (db.Open())
+          {
+            fetchedPlayCounts = true;
+            db.GetPlayCounts(items.GetPath(), items);
+          }
+        }
+        if (i->HasVideoInfoTag() && i->GetVideoInfoTag()->IsPlayCountSet())
+        {
+          const int playCount = i->GetVideoInfoTag()->GetPlayCount();
+          if ((unwatchedOnly && playCount > 0) || (watchedOnly && playCount <= 0))
+            continue;
+        }
+      }
       GetItemsForPlaylist(i);
     }
   }
   else if (item->IsPlayList())
   {
-    const std::unique_ptr<PLAYLIST::CPlayList> playList(PLAYLIST::CPlayListFactory::Create(*item));
-    if (!playList)
-    {
-      CLog::LogF(LOGERROR, "Failed to create playlist {}", item->GetPath());
-      return;
-    }
-
-    if (!playList->Load(item->GetPath()))
-    {
-      CLog::LogF(LOGERROR, "Failed to load playlist {}", item->GetPath());
-      return;
-    }
-
-    for (int i = 0; i < playList->size(); ++i)
-    {
-      GetItemsForPlaylist((*playList)[i]);
-    }
+    // just queue the playlist, it will be expanded on play
+    m_queuedItems.Add(item);
   }
   else if (item->IsInternetStream())
   {
@@ -301,7 +326,8 @@ std::string GetVideoDbItemPath(const CFileItem& item)
 }
 
 void AddItemToPlayListAndPlay(const std::shared_ptr<CFileItem>& itemToQueue,
-                              const std::shared_ptr<CFileItem>& itemToPlay)
+                              const std::shared_ptr<CFileItem>& itemToPlay,
+                              const std::string& player)
 {
   // recursively add items to list
   CFileItemList queuedItems;
@@ -333,7 +359,7 @@ void AddItemToPlayListAndPlay(const std::shared_ptr<CFileItem>& itemToQueue,
   }
 
   playlistPlayer.SetCurrentPlaylist(PLAYLIST::TYPE_VIDEO);
-  playlistPlayer.Play(pos, "");
+  playlistPlayer.Play(pos, player);
 }
 
 } // unnamed namespace
@@ -351,13 +377,15 @@ bool IsAutoPlayNextItem(const CFileItem& item)
 bool IsAutoPlayNextItem(const std::string& content)
 {
   int settingValue = CSettings::SETTING_AUTOPLAYNEXT_UNCATEGORIZED;
-  if (content == MediaTypeMovie)
+  if (content == MediaTypeMovie || content == MediaTypeMovies ||
+      content == MediaTypeVideoCollections)
     settingValue = CSettings::SETTING_AUTOPLAYNEXT_MOVIES;
-  else if (content == MediaTypeEpisode)
+  else if (content == MediaTypeEpisode || content == MediaTypeSeasons ||
+           content == MediaTypeEpisodes)
     settingValue = CSettings::SETTING_AUTOPLAYNEXT_EPISODES;
-  else if (content == MediaTypeMusicVideo)
+  else if (content == MediaTypeMusicVideo || content == MediaTypeMusicVideos)
     settingValue = CSettings::SETTING_AUTOPLAYNEXT_MUSICVIDEOS;
-  else if (content == MediaTypeTvShow)
+  else if (content == MediaTypeTvShow || content == MediaTypeTvShows)
     settingValue = CSettings::SETTING_AUTOPLAYNEXT_TVSHOWS;
 
   const auto setting = std::dynamic_pointer_cast<CSettingList>(
@@ -369,6 +397,7 @@ bool IsAutoPlayNextItem(const std::string& content)
 
 void PlayItem(
     const std::shared_ptr<CFileItem>& itemIn,
+    const std::string& player,
     ContentUtils::PlayMode mode /* = ContentUtils::PlayMode::CHECK_AUTO_PLAY_NEXT_VIDEO */)
 {
   auto item = itemIn;
@@ -384,7 +413,7 @@ void PlayItem(
 
   if (item->m_bIsFolder && !item->IsPlugin())
   {
-    AddItemToPlayListAndPlay(item, nullptr);
+    AddItemToPlayListAndPlay(item, nullptr, player);
   }
   else if (item->HasVideoInfoTag())
   {
@@ -413,7 +442,7 @@ void PlayItem(
       if (item->GetStartOffset() == STARTOFFSET_RESUME)
         parentItem->SetStartOffset(STARTOFFSET_RESUME);
 
-      AddItemToPlayListAndPlay(parentItem, item);
+      AddItemToPlayListAndPlay(parentItem, item, player);
     }
     else // mode == PlayMode::PLAY_ONLY_THIS
     {
@@ -421,7 +450,7 @@ void PlayItem(
       auto& playlistPlayer = CServiceBroker::GetPlaylistPlayer();
       playlistPlayer.Reset();
       playlistPlayer.SetCurrentPlaylist(PLAYLIST::TYPE_NONE);
-      playlistPlayer.Play(item, "");
+      playlistPlayer.Play(item, player);
     }
   }
 }
@@ -479,6 +508,20 @@ bool GetItemsForPlayList(const std::shared_ptr<CFileItem>& item, CFileItemList& 
                               true); // can be cancelled
 }
 
+namespace
+{
+bool IsNonExistingUserPartyModePlaylist(const CFileItem& item)
+{
+  if (!item.IsSmartPlayList())
+    return false;
+
+  const std::string& path{item.GetPath()};
+  const auto profileManager{CServiceBroker::GetSettingsComponent()->GetProfileManager()};
+  return ((profileManager->GetUserDataItem("PartyMode-Video.xsp") == path) &&
+          !CFileUtils::Exists(path));
+}
+} // unnamed namespace
+
 bool IsItemPlayable(const CFileItem& item)
 {
   if (item.IsParentFolder())
@@ -503,14 +546,11 @@ bool IsItemPlayable(const CFileItem& item)
   if (item.IsPlugin() || item.IsScript() || item.IsAddonsPath())
     return false;
 
-  // Exclude unwanted windows
-  if (CServiceBroker::GetGUI()->GetWindowManager().GetActiveWindow() == WINDOW_VIDEO_PLAYLIST)
-    return false;
-
   // Exclude special items
   if (StringUtils::StartsWithNoCase(item.GetPath(), "newsmartplaylist://") ||
       StringUtils::StartsWithNoCase(item.GetPath(), "newplaylist://") ||
-      StringUtils::StartsWithNoCase(item.GetPath(), "newtag://"))
+      StringUtils::StartsWithNoCase(item.GetPath(), "newtag://") ||
+      StringUtils::StartsWithNoCase(item.GetPath(), "newvideoversion://"))
     return false;
 
   // Include playlists located at one of the possible video/mixed playlist locations
@@ -532,12 +572,15 @@ bool IsItemPlayable(const CFileItem& item)
         StringUtils::StartsWith(item.GetPath(), StringUtils::Format("{}/mixed/", path)))
       return true;
 
-    if (!item.m_bIsFolder)
+    if (!item.m_bIsFolder && !item.HasVideoInfoTag())
     {
       // Unknown location. Type cannot be determined for non-folder items.
       return false;
     }
   }
+
+  if (IsNonExistingUserPartyModePlaylist(item))
+    return false;
 
   if (item.m_bIsFolder &&
       (item.IsVideoDb() || StringUtils::StartsWithNoCase(item.GetPath(), "library://video/")))
@@ -575,54 +618,21 @@ bool IsItemPlayable(const CFileItem& item)
 
 namespace
 {
-bool HasInProgressVideo(const std::string& path, CVideoDatabase& db)
-{
-  //! @todo this function is really very expensive and should be optimized (at db level).
-
-  CFileItemList items;
-  CUtil::GetRecursiveListing(path, items, {}, XFILE::DIR_FLAG_DEFAULTS);
-
-  if (items.IsEmpty())
-    return false;
-
-  for (const auto& item : items)
-  {
-    const auto videoTag = item->GetVideoInfoTag();
-    if (!item->HasVideoInfoTag())
-      continue;
-
-    if (videoTag->GetPlayCount() > 0)
-      continue;
-
-    // get resume point
-    CBookmark bookmark(videoTag->GetResumePoint());
-    if (!bookmark.IsSet() && db.GetResumeBookMark(videoTag->m_strFileNameAndPath, bookmark))
-      videoTag->SetResumePoint(bookmark);
-
-    if (bookmark.IsSet())
-      return true;
-  }
-
-  return false;
-}
-
 ResumeInformation GetFolderItemResumeInformation(const CFileItem& item)
 {
   if (!item.m_bIsFolder)
     return {};
 
-  bool hasInProgressVideo = false;
-
   CFileItem folderItem(item);
-  if ((!folderItem.HasProperty("watchedepisodes") || // season/show
-       (folderItem.GetProperty("watchedepisodes").asInteger() == 0)) &&
-      (!folderItem.HasProperty("watched") || // movie set
-       (folderItem.GetProperty("watched").asInteger() == 0)))
+  if ((!folderItem.HasProperty("inprogressepisodes") || // season/show
+       (folderItem.GetProperty("inprogressepisodes").asInteger() == 0)) &&
+      (!folderItem.HasProperty("inprogress") || // movie set
+       (folderItem.GetProperty("inprogress").asInteger() == 0)))
   {
     CVideoDatabase db;
     if (db.Open())
     {
-      if (!folderItem.HasProperty("watchedepisodes") && !folderItem.HasProperty("watched"))
+      if (!folderItem.HasProperty("inprogressepisodes") && !folderItem.HasProperty("inprogress"))
       {
         XFILE::VIDEODATABASEDIRECTORY::CQueryParams params;
         XFILE::VIDEODATABASEDIRECTORY::CDirectoryNode::GetDatabaseInfo(item.GetPath(), params);
@@ -652,35 +662,28 @@ ResumeInformation GetFolderItemResumeInformation(const CFileItem& item)
           db.GetSetInfo(static_cast<int>(params.GetSetId()), details, &folderItem);
         }
       }
-
-      // no episodes/movies watched completely, but there could be some or more we have
-      // started watching
-      if ((folderItem.HasProperty("watchedepisodes") && // season/show
-           folderItem.GetProperty("watchedepisodes").asInteger() == 0) ||
-          (folderItem.HasProperty("watched") && // movie set
-           folderItem.GetProperty("watched").asInteger() == 0))
-        hasInProgressVideo = HasInProgressVideo(item.GetPath(), db);
-
       db.Close();
     }
   }
 
-  if (hasInProgressVideo ||
-      (folderItem.GetProperty("watchedepisodes").asInteger() > 0 &&
-       folderItem.GetProperty("unwatchedepisodes").asInteger() > 0) ||
-      (folderItem.GetProperty("watched").asInteger() > 0 &&
-       folderItem.GetProperty("unwatched").asInteger() > 0))
+  if (folderItem.IsResumable())
   {
     ResumeInformation resumeInfo;
     resumeInfo.isResumable = true;
     return resumeInfo;
   }
+
   return {};
 }
 
 ResumeInformation GetNonFolderItemResumeInformation(const CFileItem& item)
 {
-  if (!item.IsResumable())
+  // do not resume nfo files
+  if (item.IsNFO())
+    return {};
+
+  // do not resume playlists, except strm files
+  if (!item.IsType(".strm") && item.IsPlayList())
     return {};
 
   // do not resume Live TV and 'deleted' items (e.g. trashed pvr recordings)
@@ -770,6 +773,72 @@ ResumeInformation GetItemResumeInformation(const CFileItem& item)
     return info;
 
   return GetFolderItemResumeInformation(item);
+}
+
+std::string GetResumeString(const CFileItem& item)
+{
+  const ResumeInformation resumeInfo = GetItemResumeInformation(item);
+  if (resumeInfo.isResumable)
+  {
+    if (resumeInfo.startOffset > 0)
+    {
+      std::string resumeString = StringUtils::Format(
+          g_localizeStrings.Get(12022),
+          StringUtils::SecondsToTimeString(
+              static_cast<long>(CUtil::ConvertMilliSecsToSecsInt(resumeInfo.startOffset)),
+              TIME_FORMAT_HH_MM_SS));
+      if (resumeInfo.partNumber > 0)
+      {
+        const std::string partString =
+            StringUtils::Format(g_localizeStrings.Get(23051), resumeInfo.partNumber);
+        resumeString += " (" + partString + ")";
+      }
+      return resumeString;
+    }
+    else
+    {
+      return g_localizeStrings.Get(13362); // Continue watching
+    }
+  }
+  return {};
+}
+
+ResumeInformation GetStackPartResumeInformation(const CFileItem& item, unsigned int partNumber)
+{
+  ResumeInformation resumeInfo;
+
+  if (item.IsStack())
+  {
+    const std::string& path = item.GetDynPath();
+    if (URIUtils::IsDiscImageStack(path))
+    {
+      // disc image stack
+      CFileItemList parts;
+      XFILE::CDirectory::GetDirectory(path, parts, "", XFILE::DIR_FLAG_DEFAULTS);
+
+      resumeInfo = GetItemResumeInformation(*parts[partNumber - 1]);
+      resumeInfo.partNumber = partNumber;
+    }
+    else
+    {
+      // video file stack
+      CVideoDatabase db;
+      if (!db.Open())
+      {
+        CLog::LogF(LOGERROR, "Cannot open VideoDatabase");
+        return {};
+      }
+
+      std::vector<uint64_t> times;
+      if (db.GetStackTimes(path, times))
+      {
+        resumeInfo.startOffset = times[partNumber - 1];
+        resumeInfo.isResumable = (resumeInfo.startOffset > 0);
+      }
+      resumeInfo.partNumber = partNumber;
+    }
+  }
+  return resumeInfo;
 }
 
 } // namespace VIDEO_UTILS

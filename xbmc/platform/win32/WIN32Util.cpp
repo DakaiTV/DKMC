@@ -839,7 +839,7 @@ extern "C" {
 
       case 'k':  /* The hour (24-hour clock representation). */
         LEGAL_ALT(0);
-        /* FALLTHROUGH */
+        [[fallthrough]];
       case 'H':
         bp = conv_num(bp, &tm->tm_hour, 0, 23);
         LEGAL_ALT(ALT_O);
@@ -847,7 +847,7 @@ extern "C" {
 
       case 'l':  /* The hour (12-hour clock representation). */
         LEGAL_ALT(0);
-        /* FALLTHROUGH */
+        [[fallthrough]];
       case 'I':
         bp = conv_num(bp, &tm->tm_hour, 1, 12);
         if (tm->tm_hour == 12)
@@ -1196,7 +1196,36 @@ HDR_STATUS CWIN32Util::ToggleWindowsHDR(DXGI_MODE_DESC& modeDesc)
   HDR_STATUS status = HDR_STATUS::HDR_TOGGLE_FAILED;
 
 #ifdef TARGET_WINDOWS_STORE
-  // Not supported - not implemented yet
+  auto hdmi = HdmiDisplayInformation::GetForCurrentView();
+
+  if (!hdmi)
+    return status;
+
+  const auto current = hdmi.GetCurrentDisplayMode();
+
+  for (const auto& mode : hdmi.GetSupportedDisplayModes())
+  {
+    if (mode.IsSmpte2084Supported() != current.IsSmpte2084Supported() &&
+        mode.ResolutionHeightInRawPixels() == current.ResolutionHeightInRawPixels() &&
+        mode.ResolutionWidthInRawPixels() == current.ResolutionWidthInRawPixels() &&
+        mode.StereoEnabled() == false &&
+        fabs(mode.RefreshRate() - current.RefreshRate()) <= 0.00001)
+    {
+      if (current.IsSmpte2084Supported()) // HDR is ON
+      {
+        CLog::LogF(LOGINFO, "Toggle Windows HDR Off (ON => OFF).");
+        if (Wait(hdmi.RequestSetCurrentDisplayModeAsync(mode, HdmiDisplayHdrOption::None)))
+          status = HDR_STATUS::HDR_OFF;
+      }
+      else // HDR is OFF
+      {
+        CLog::LogF(LOGINFO, "Toggle Windows HDR On (OFF => ON).");
+        if (Wait(hdmi.RequestSetCurrentDisplayModeAsync(mode, HdmiDisplayHdrOption::Eotf2084)))
+          status = HDR_STATUS::HDR_ON;
+      }
+      break;
+    }
+  }
 #else
   uint32_t pathCount = 0;
   uint32_t modeCount = 0;
@@ -1670,5 +1699,52 @@ std::wstring CWIN32Util::GetDisplayFriendlyName(const std::wstring& gdiDeviceNam
     }
   }
   return std::wstring();
+#endif
+}
+
+using SETTHREADDESCRIPTION = HRESULT(WINAPI*)(HANDLE hThread, PCWSTR lpThreadDescription);
+
+bool CWIN32Util::SetThreadName(const HANDLE handle, const std::string& name)
+{
+#if defined(TARGET_WINDOWS_STORE)
+  //not supported
+  return false;
+#else
+  static bool initialized = false;
+  static HINSTANCE hinstLib = NULL;
+  static SETTHREADDESCRIPTION pSetThreadDescription = nullptr;
+
+  if (!initialized)
+  {
+    initialized = true;
+
+    // MS documentation: SetThreadDescription available since Windows 10 1607
+    // function located in Kernel32.dll
+    // except for Windows 10 1607, where it is located in KernelBase.dll
+    CSysInfo::WindowsVersion winver = CSysInfo::GetWindowsVersion();
+
+    if (winver < CSysInfo::WindowsVersion::WindowsVersionWin10_1607)
+      return false;
+    else if (winver == CSysInfo::WindowsVersion::WindowsVersionWin10_1607)
+      hinstLib = LoadLibrary(L"KernelBase.dll");
+    else if (winver > CSysInfo::WindowsVersion::WindowsVersionWin10_1607)
+      hinstLib = LoadLibrary(L"Kernel32.dll");
+
+    if (hinstLib != NULL)
+    {
+      pSetThreadDescription = reinterpret_cast<SETTHREADDESCRIPTION>(
+          ::GetProcAddress(hinstLib, "SetThreadDescription"));
+    }
+
+    if (pSetThreadDescription == nullptr && hinstLib)
+      FreeLibrary(hinstLib);
+  }
+
+  if (pSetThreadDescription != nullptr &&
+      SUCCEEDED(pSetThreadDescription(handle, KODI::PLATFORM::WINDOWS::ToW(name).c_str())))
+    return true;
+  else
+    return false;
+
 #endif
 }

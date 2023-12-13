@@ -16,6 +16,7 @@ xbmc/dialogs                                    dialogs
 xbmc/favourites                                 favourites
 xbmc/guilib                                     guilib
 xbmc/guilib/guiinfo                             guilib_guiinfo
+xbmc/imagefiles                                 imagefiles
 xbmc/input                                      input
 xbmc/input/actions                              input/actions
 xbmc/input/button                               input/button
@@ -40,6 +41,7 @@ xbmc/speech                                     speech
 xbmc/storage                                    storage
 xbmc/threads                                    threads
 xbmc/utils                                      utils
+xbmc/utils/guilib                               utils_guilib
 xbmc/view                                       view
 xbmc/weather                                    weather
 xbmc/windowing                                  windowing

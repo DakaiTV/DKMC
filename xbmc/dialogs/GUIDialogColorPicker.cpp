@@ -19,6 +19,7 @@
 #include "utils/log.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -29,8 +30,7 @@
 
 CGUIDialogColorPicker::CGUIDialogColorPicker()
   : CGUIDialogBoxBase(WINDOW_DIALOG_COLOR_PICKER, "DialogColorPicker.xml"),
-    m_vecList(new CFileItemList()),
-    m_focusToButton(false)
+    m_vecList(new CFileItemList())
 {
   m_bConfirmed = false;
   m_loadType = KEEP_IN_MEMORY;
@@ -144,7 +144,7 @@ void CGUIDialogColorPicker::Reset()
 
 void CGUIDialogColorPicker::AddItem(const CFileItem& item)
 {
-  m_vecList->Add(CFileItemPtr(new CFileItem(item)));
+  m_vecList->Add(std::make_shared<CFileItem>(item));
 }
 
 void CGUIDialogColorPicker::SetItems(const CFileItemList& pList)

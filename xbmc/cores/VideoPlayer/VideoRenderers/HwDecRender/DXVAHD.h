@@ -10,6 +10,7 @@
 
 #include "DVDCodecs/Video/DVDVideoCodecFFmpeg.h"
 #include "DVDCodecs/Video/DXVA.h"
+#include "VideoRenderers/HwDecRender/DXVAEnumeratorHD.h"
 #include "VideoRenderers/Windows/RendererBase.h"
 #include "guilib/D3DResource.h"
 #include "utils/Geometry.h"
@@ -22,58 +23,7 @@ class CRenderBuffer;
 
 namespace DXVA {
 
-// ProcAmp filters d3d11 filters
-struct ProcAmpFilter
-{
-  D3D11_VIDEO_PROCESSOR_FILTER filter;
-  D3D11_VIDEO_PROCESSOR_FILTER_CAPS cap;
-  const char* name;
-};
-
-// clang-format off
-const ProcAmpFilter PROCAMP_FILTERS[] = {
-    {D3D11_VIDEO_PROCESSOR_FILTER_BRIGHTNESS,
-    D3D11_VIDEO_PROCESSOR_FILTER_CAPS_BRIGHTNESS, "Brightness"},
-    {D3D11_VIDEO_PROCESSOR_FILTER_CONTRAST,
-    D3D11_VIDEO_PROCESSOR_FILTER_CAPS_CONTRAST, "Contrast"},
-    {D3D11_VIDEO_PROCESSOR_FILTER_HUE,
-    D3D11_VIDEO_PROCESSOR_FILTER_CAPS_HUE, "Hue"},
-    {D3D11_VIDEO_PROCESSOR_FILTER_SATURATION,
-    D3D11_VIDEO_PROCESSOR_FILTER_CAPS_SATURATION, "Saturation"},
-    {D3D11_VIDEO_PROCESSOR_FILTER_NOISE_REDUCTION,
-    D3D11_VIDEO_PROCESSOR_FILTER_CAPS_NOISE_REDUCTION, "Noise Reduction"},
-    {D3D11_VIDEO_PROCESSOR_FILTER_EDGE_ENHANCEMENT,
-     D3D11_VIDEO_PROCESSOR_FILTER_CAPS_EDGE_ENHANCEMENT, "Edge Enhancement"},
-    {D3D11_VIDEO_PROCESSOR_FILTER_ANAMORPHIC_SCALING,
-     D3D11_VIDEO_PROCESSOR_FILTER_CAPS_ANAMORPHIC_SCALING, "Anamorphic Scaling"},
-    {D3D11_VIDEO_PROCESSOR_FILTER_STEREO_ADJUSTMENT,
-     D3D11_VIDEO_PROCESSOR_FILTER_CAPS_STEREO_ADJUSTMENT, "Stereo Adjustment"}};
-// clang-format on
-
-const size_t NUM_FILTERS = ARRAYSIZE(PROCAMP_FILTERS);
-
-struct DXGIColorSpaceArgs
-{
-  AVColorPrimaries primaries = AVCOL_PRI_UNSPECIFIED;
-  AVColorSpace color_space = AVCOL_SPC_UNSPECIFIED;
-  AVColorTransferCharacteristic color_transfer = AVCOL_TRC_UNSPECIFIED;
-  bool full_range = false;
-
-  DXGIColorSpaceArgs(const CRenderBuffer& buf)
-  {
-    primaries = buf.primaries;
-    color_space = buf.color_space;
-    color_transfer = buf.color_transfer;
-    full_range = buf.full_range;
-  }
-  DXGIColorSpaceArgs(const VideoPicture& picture)
-  {
-    primaries = static_cast<AVColorPrimaries>(picture.color_primaries);
-    color_space = static_cast<AVColorSpace>(picture.color_space);
-    color_transfer = static_cast<AVColorTransferCharacteristic>(picture.color_transfer);
-    full_range = picture.color_range == 1;
-  }
-};
+using namespace Microsoft::WRL;
 
 struct ProcColorSpaces;
 
@@ -83,24 +33,18 @@ public:
   explicit CProcessorHD();
  ~CProcessorHD();
 
-  bool PreInit() const;
   void UnInit();
-  bool Open(UINT width, UINT height);
+  bool Open(const VideoPicture& picture, std::shared_ptr<DXVA::CEnumeratorHD> enumerator);
   void Close();
   bool Render(CRect src, CRect dst, ID3D11Resource* target, CRenderBuffer **views, DWORD flags, UINT frameIdx, UINT rotation, float contrast, float brightness);
-  uint8_t PastRefs() const { return m_max_back_refs; }
-  bool IsFormatSupported(DXGI_FORMAT format, D3D11_VIDEO_PROCESSOR_FORMAT_SUPPORT support) const;
+  uint8_t PastRefs() const { return std::min(m_procCaps.m_rateCaps.PastFrames, 4u); }
+
   /*!
-   * \brief Evaluate if the DXVA processor supports converting between two formats and color spaces.
-   * Always returns true when the Windows 10+ API is not available or cannot be called successfully.
-   * \param inputFormat The source format
-   * \param outputFormat The destination format
-   * \param picture Picutre information used to derive the color spaces
-   * \return true if the conversion is supported, false otherwise
+   * \brief Configure the processor for the provided conversion.
+   * \param conversion the conversion
+   * \return success status, true = success, false = error
    */
-  bool IsFormatConversionSupported(DXGI_FORMAT inputFormat,
-                                   DXGI_FORMAT outputFormat,
-                                   const VideoPicture& picture) const;
+  bool SetConversion(const ProcessorConversion& conversion);
 
   // ID3DResource overrides
   void OnCreateDevice() override  {}
@@ -110,7 +54,10 @@ public:
     UnInit();
   }
 
-  static bool IsBT2020Supported();
+  static bool IsSuperResolutionSuitable(const VideoPicture& picture);
+  void TryEnableVideoSuperResolution();
+  bool IsVideoSuperResolutionEnabled() const { return m_superResolutionEnabled; }
+  bool Supports(ERENDERFEATURE feature) const;
 
 protected:
   bool ReInit();
@@ -118,44 +65,50 @@ protected:
   bool CheckFormats() const;
   bool OpenProcessor();
   void ApplyFilter(D3D11_VIDEO_PROCESSOR_FILTER filter, int value, int min, int max, int def) const;
-  ID3D11VideoProcessorInputView* GetInputView(CRenderBuffer* view) const;
+  ComPtr<ID3D11VideoProcessorInputView> GetInputView(CRenderBuffer* view) const;
   /*!
-   * \brief Calculate the color spaces of the input and output of the processor
-   * \param csArgs Arguments for the calculations
-   * \return the input and output color spaces
+   * \brief Apply new video settings if there was a change. Returns true if a parameter changed, false otherwise.
    */
-  ProcColorSpaces CalculateDXGIColorSpaces(const DXGIColorSpaceArgs& csArgs) const;
-  static DXGI_COLOR_SPACE_TYPE GetDXGIColorSpaceSource(const DXGIColorSpaceArgs& csArgs,
-                                                       bool supportHDR,
-                                                       bool supportHLG,
-                                                       bool topLeft);
-  DXGI_COLOR_SPACE_TYPE GetDXGIColorSpaceTarget(const DXGIColorSpaceArgs& csArgs,
-                                                bool supportHDR,
-                                                bool limitedRange) const;
+  bool CheckVideoParameters(const CRect& src,
+                            const CRect& dst,
+                            const UINT& rotation,
+                            const float& contrast,
+                            const float& brightness,
+                            const CRenderBuffer& rb);
+
+  void EnableIntelVideoSuperResolution();
+  void EnableNvidiaRTXVideoSuperResolution();
 
   CCriticalSection m_section;
 
-  uint32_t m_width = 0;
-  uint32_t m_height = 0;
-  uint8_t  m_max_back_refs = 0;
-  uint8_t  m_max_fwd_refs = 0;
-  uint32_t m_procIndex = 0;
-  D3D11_VIDEO_PROCESSOR_CAPS m_vcaps = {};
-  D3D11_VIDEO_PROCESSOR_RATE_CONVERSION_CAPS m_rateCaps = {};
-  bool m_bSupportHLG = false;
-  bool m_bSupportHDR10Limited = false;
-  bool m_BT2020TopLeft = false;
+  ComPtr<ID3D11VideoDevice> m_pVideoDevice;
+  ComPtr<ID3D11VideoContext> m_pVideoContext;
+  ComPtr<ID3D11VideoProcessor> m_pVideoProcessor;
+  std::shared_ptr<CEnumeratorHD> m_enumerator;
 
-  struct ProcAmpInfo
-  {
-    bool bSupported;
-    D3D11_VIDEO_PROCESSOR_FILTER_RANGE Range;
-  };
-  ProcAmpInfo m_Filters[NUM_FILTERS]{};
-  Microsoft::WRL::ComPtr<ID3D11VideoDevice> m_pVideoDevice;
-  Microsoft::WRL::ComPtr<ID3D11VideoContext> m_pVideoContext;
-  Microsoft::WRL::ComPtr<ID3D11VideoProcessorEnumerator> m_pEnumerator;
-  Microsoft::WRL::ComPtr<ID3D11VideoProcessor> m_pVideoProcessor;
+  AVColorPrimaries m_color_primaries{AVCOL_PRI_UNSPECIFIED};
+  AVColorTransferCharacteristic m_color_transfer{AVCOL_TRC_UNSPECIFIED};
+  ProcessorCapabilities m_procCaps;
+
+  bool m_superResolutionEnabled{false};
+  ProcessorConversion m_conversion;
+  bool m_isValidConversion{false};
+
+  /*!
+   * \brief true when at least one frame has been processed successfully since init
+   */
+  bool m_configured{false};
+
+  // Members to compare the current frame with the previous frame
+  UINT m_lastInputFrameOrField{0};
+  UINT m_lastOutputIndex{0};
+  CRect m_lastSrc{};
+  CRect m_lastDst{};
+  UINT m_lastRotation{0};
+  float m_lastContrast{.0f};
+  float m_lastBrightness{.0f};
+  ProcessorConversion m_lastConversion{};
+  AVColorSpace m_lastColorSpace{AVCOL_SPC_UNSPECIFIED};
+  bool m_lastFullRange{false};
 };
-
 };

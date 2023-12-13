@@ -96,6 +96,11 @@ public:
       "videolibrary.musicvideoartwhitelist";
   static constexpr auto SETTING_VIDEOLIBRARY_SHOWPERFORMERS =
       "videolibrary.musicvideosallperformers";
+  static constexpr auto SETTING_VIDEOLIBRARY_IGNOREVIDEOVERSIONS =
+      "videolibrary.ignorevideoversions";
+  static constexpr auto SETTING_VIDEOLIBRARY_IGNOREVIDEOEXTRAS = "videolibrary.ignorevideoextras";
+  static constexpr auto SETTING_VIDEOLIBRARY_SHOWVIDEOVERSIONSASFOLDER =
+      "videolibrary.showvideoversionsasfolder";
   static constexpr auto SETTING_LOCALE_AUDIOLANGUAGE = "locale.audiolanguage";
   static constexpr auto SETTING_VIDEOPLAYER_PREFERDEFAULTFLAG = "videoplayer.preferdefaultflag";
   static constexpr auto SETTING_VIDEOPLAYER_AUTOPLAYNEXTITEM = "videoplayer.autoplaynextitem";
@@ -113,6 +118,8 @@ public:
       "videoplayer.quitstereomodeonstop";
   static constexpr auto SETTING_VIDEOPLAYER_RENDERMETHOD = "videoplayer.rendermethod";
   static constexpr auto SETTING_VIDEOPLAYER_HQSCALERS = "videoplayer.hqscalers";
+  static constexpr auto SETTING_VIDEOPLAYER_USESUPERRESOLUTION = "videoplayer.usesuperresolution";
+  static constexpr auto SETTING_VIDEOPLAYER_HIGHPRECISIONPROCESSING = "videoplayer.highprecision";
   static constexpr auto SETTING_VIDEOPLAYER_USEMEDIACODEC = "videoplayer.usemediacodec";
   static constexpr auto SETTING_VIDEOPLAYER_USEMEDIACODECSURFACE =
       "videoplayer.usemediacodecsurface";
@@ -127,7 +134,10 @@ public:
   static constexpr auto SETTING_VIDEOPLAYER_USESTAGEFRIGHT = "videoplayer.usestagefright";
   static constexpr auto SETTING_VIDEOPLAYER_LIMITGUIUPDATE = "videoplayer.limitguiupdate";
   static constexpr auto SETTING_VIDEOPLAYER_SUPPORTMVC = "videoplayer.supportmvc";
+  static constexpr auto SETTING_VIDEOPLAYER_CONVERTDOVI = "videoplayer.convertdovi";
   static constexpr auto SETTING_MYVIDEOS_SELECTACTION = "myvideos.selectaction";
+  static constexpr auto SETTING_MYVIDEOS_SELECTDEFAULTVERSION = "myvideos.selectdefaultversion";
+  static constexpr auto SETTING_MYVIDEOS_PLAYACTION = "myvideos.playaction";
   static constexpr auto SETTING_MYVIDEOS_USETAGS = "myvideos.usetags";
   static constexpr auto SETTING_MYVIDEOS_EXTRACTFLAGS = "myvideos.extractflags";
   static constexpr auto SETTING_MYVIDEOS_EXTRACTCHAPTERTHUMBS = "myvideos.extractchapterthumbs";
@@ -344,6 +354,7 @@ public:
   static constexpr auto SETTING_SMB_MINPROTOCOL = "smb.minprotocol";
   static constexpr auto SETTING_SMB_MAXPROTOCOL = "smb.maxprotocol";
   static constexpr auto SETTING_SMB_LEGACYSECURITY = "smb.legacysecurity";
+  static constexpr auto SETTING_SMB_CHUNKSIZE = "smb.chunksize";
   static constexpr auto SETTING_SERVICES_WSDISCOVERY = "services.wsdiscovery";
   static constexpr auto SETTING_VIDEOSCREEN_MONITOR = "videoscreen.monitor";
   static constexpr auto SETTING_VIDEOSCREEN_SCREEN = "videoscreen.screen";
@@ -366,6 +377,8 @@ public:
   static constexpr auto SETTING_VIDEOSCREEN_USESYSTEMSDRPEAKLUMINANCE =
       "videoscreen.usesystemsdrpeakluminance";
   static constexpr auto SETTING_VIDEOSCREEN_GUISDRPEAKLUMINANCE = "videoscreen.guipeakluminance";
+  static constexpr auto SETTING_VIDEOSCREEN_DITHER = "videoscreen.dither";
+  static constexpr auto SETTING_VIDEOSCREEN_DITHERDEPTH = "videoscreen.ditherdepth";
   static constexpr auto SETTING_AUDIOOUTPUT_AUDIODEVICE = "audiooutput.audiodevice";
   static constexpr auto SETTING_AUDIOOUTPUT_CHANNELS = "audiooutput.channels";
   static constexpr auto SETTING_AUDIOOUTPUT_CONFIG = "audiooutput.config";
@@ -454,6 +467,10 @@ public:
   static constexpr auto SETTING_SOURCE_VIDEOS = "source.videos";
   static constexpr auto SETTING_SOURCE_MUSIC = "source.music";
   static constexpr auto SETTING_SOURCE_PICTURES = "source.pictures";
+  static constexpr auto SETTING_FILECACHE_BUFFERMODE = "filecache.buffermode";
+  static constexpr auto SETTING_FILECACHE_MEMORYSIZE = "filecache.memorysize"; // in MBytes
+  static constexpr auto SETTING_FILECACHE_READFACTOR = "filecache.readfactor"; // as integer (x100)
+  static constexpr auto SETTING_FILECACHE_CHUNKSIZE = "filecache.chunksize"; // in Bytes
 
   // values for SETTING_VIDEOLIBRARY_SHOWUNWATCHEDPLOTS
   static const int VIDEOLIBRARY_PLOTS_SHOW_UNWATCHED_MOVIES = 0;

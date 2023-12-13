@@ -131,15 +131,41 @@ void DX::DeviceResources::GetOutput(IDXGIOutput** ppOutput) const
   *ppOutput = pOutput.Detach();
 }
 
-void DX::DeviceResources::GetAdapterDesc(DXGI_ADAPTER_DESC* desc) const
+void DX::DeviceResources::GetCachedOutputAndDesc(IDXGIOutput** ppOutput,
+                                                 DXGI_OUTPUT_DESC* outputDesc) const
 {
+  ComPtr<IDXGIOutput> pOutput;
+  if (m_output)
+  {
+    m_output.As(&pOutput);
+    *outputDesc = m_outputDesc;
+  }
+  else if (m_swapChain && SUCCEEDED(m_swapChain->GetContainingOutput(pOutput.GetAddressOf())) &&
+           pOutput)
+  {
+    pOutput->GetDesc(outputDesc);
+  }
+
+  if (!pOutput)
+    CLog::LogF(LOGWARNING, "unable to retrieve current output");
+
+  *ppOutput = pOutput.Detach();
+  return;
+}
+
+DXGI_ADAPTER_DESC DX::DeviceResources::GetAdapterDesc() const
+{
+  DXGI_ADAPTER_DESC desc{};
+
   if (m_adapter)
-    m_adapter->GetDesc(desc);
+    m_adapter->GetDesc(&desc);
 
   // GetDesc() returns VendorId == 0 in Xbox however, we need to know that
   // GPU is AMD to apply workarounds in DXVA.cpp CheckCompatibility() same as desktop
   if (CSysInfo::GetWindowsDeviceFamily() == CSysInfo::Xbox)
-    desc->VendorId = PCIV_AMD;
+    desc.VendorId = PCIV_AMD;
+
+  return desc;
 }
 
 void DX::DeviceResources::GetDisplayMode(DXGI_MODE_DESC* mode) const
@@ -188,7 +214,7 @@ void DX::DeviceResources::GetDisplayMode(DXGI_MODE_DESC* mode) const
   if (hdmiInfo) // Xbox only
   {
     auto currentMode = hdmiInfo.GetCurrentDisplayMode();
-    AVRational refresh = av_d2q(currentMode.RefreshRate(), 60000);
+    AVRational refresh = av_d2q(currentMode.RefreshRate(), 120000);
     mode->RefreshRate.Numerator = refresh.num;
     mode->RefreshRate.Denominator = refresh.den;
   }
@@ -620,12 +646,9 @@ void DX::DeviceResources::ResizeBuffers()
 
 // Xbox needs 10 bit swapchain to output true 4K resolution
 #ifdef TARGET_WINDOWS_DESKTOP
-    DXGI_ADAPTER_DESC ad = {};
-    GetAdapterDesc(&ad);
-
     // Some AMD graphics has issues with 10 bit in SDR.
     // Enabled by default only in Intel and NVIDIA with latest drivers/hardware
-    if (m_d3dFeatureLevel < D3D_FEATURE_LEVEL_12_1 || ad.VendorId == PCIV_AMD)
+    if (m_d3dFeatureLevel < D3D_FEATURE_LEVEL_12_1 || GetAdapterDesc().VendorId == PCIV_AMD)
       use10bit = false;
 #endif
 
@@ -702,40 +725,25 @@ void DX::DeviceResources::ResizeBuffers()
 
     m_IsHDROutput = (swapChainDesc.Format == DXGI_FORMAT_R10G10B10A2_UNORM) && isHdrEnabled;
 
-    const int bits = (swapChainDesc.Format == DXGI_FORMAT_R10G10B10A2_UNORM) ? 10 : 8;
-    std::string flip =
-        (swapChainDesc.SwapEffect == DXGI_SWAP_EFFECT_FLIP_DISCARD) ? "discard" : "sequential";
-
-    CLog::LogF(LOGINFO,
-               "{} bit swapchain is used with {} flip {} buffers and {} output (format {})", bits,
-               swapChainDesc.BufferCount, flip, m_IsHDROutput ? "HDR" : "SDR",
-               DX::DXGIFormatToString(swapChainDesc.Format));
+    CLog::LogF(
+        LOGINFO, "{} bit swapchain is used with {} flip {} buffers and {} output (format {})",
+        (swapChainDesc.Format == DXGI_FORMAT_R10G10B10A2_UNORM) ? 10 : 8, swapChainDesc.BufferCount,
+        (swapChainDesc.SwapEffect == DXGI_SWAP_EFFECT_FLIP_DISCARD) ? "discard" : "sequential",
+        m_IsHDROutput ? "HDR" : "SDR", DX::DXGIFormatToString(swapChainDesc.Format));
 
     hr = swapChain.As(&m_swapChain); CHECK_ERR();
     m_stereoEnabled = bHWStereoEnabled;
 
-    if (CServiceBroker::GetLogging().IsLogLevelLogged(LOGDEBUG))
+    if (CServiceBroker::GetLogging().IsLogLevelLogged(LOGDEBUG) &&
+        CServiceBroker::GetLogging().CanLogComponent(LOGVIDEO))
     {
-      ComPtr<IDXGISwapChain4> swapChain4;
-      if (SUCCEEDED(m_swapChain.As(&swapChain4)))
+      std::string colorSpaces;
+      for (const DXGI_COLOR_SPACE_TYPE& colorSpace : GetSwapChainColorSpaces())
       {
-        UINT colorSpaceSupport = 0;
-        std::string colorSpaces{};
-        for (UINT colorSpace = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
-             colorSpace < DXGI_COLOR_SPACE_YCBCR_STUDIO_G24_TOPLEFT_P2020; colorSpace++)
-        {
-          if (SUCCEEDED(swapChain4->CheckColorSpaceSupport(
-                  static_cast<DXGI_COLOR_SPACE_TYPE>(colorSpace), &colorSpaceSupport)) &&
-              (colorSpaceSupport & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT) ==
-                  DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT)
-          {
-            colorSpaces.append("\n");
-            colorSpaces.append(
-                DX::DXGIColorSpaceTypeToString(static_cast<DXGI_COLOR_SPACE_TYPE>(colorSpace)));
-          }
-        }
-        CLog::LogF(LOGDEBUG, "Color spaces supported by the swap chain:{}", colorSpaces);
+        colorSpaces.append("\n");
+        colorSpaces.append(DX::DXGIColorSpaceTypeToString(colorSpace));
       }
+      CLog::LogFC(LOGDEBUG, LOGVIDEO, "Color spaces supported by the swap chain:{}", colorSpaces);
     }
 
     // Ensure that DXGI does not queue more than one frame at a time. This both reduces latency and
@@ -743,6 +751,9 @@ void DX::DeviceResources::ResizeBuffers()
     ComPtr<IDXGIDevice1> dxgiDevice;
     hr = m_d3dDevice.As(&dxgiDevice); CHECK_ERR();
     dxgiDevice->SetMaximumFrameLatency(1);
+
+    if (m_IsHDROutput)
+      SetHdrColorSpace(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
   }
 
   CLog::LogF(LOGDEBUG, "end resize buffers.");
@@ -1056,6 +1067,7 @@ void DX::DeviceResources::HandleOutputChange(const std::function<bool(DXGI_OUTPU
       if (cmpFunc(outputDesc))
       {
         output.As(&m_output);
+        m_outputDesc = outputDesc;
         // check if adapter is changed
         if (currentDesc.AdapterLuid.HighPart != foundDesc.AdapterLuid.HighPart
           || currentDesc.AdapterLuid.LowPart != foundDesc.AdapterLuid.LowPart)
@@ -1160,8 +1172,7 @@ void DX::DeviceResources::CheckDXVA2SharedDecoderSurfaces()
   if (!m_NV12SharedTexturesSupport)
     return;
 
-  DXGI_ADAPTER_DESC ad = {};
-  GetAdapterDesc(&ad);
+  const DXGI_ADAPTER_DESC ad = GetAdapterDesc();
 
   m_DXVA2SharedDecoderSurfaces =
       ad.VendorId == PCIV_Intel ||
@@ -1171,12 +1182,27 @@ void DX::DeviceResources::CheckDXVA2SharedDecoderSurfaces()
 
   CLog::LogF(LOGINFO, "DXVA2 shared decoder surfaces is{}supported",
              m_DXVA2SharedDecoderSurfaces ? " " : " NOT ");
+
+  m_DXVA2UseFence = m_DXVA2SharedDecoderSurfaces &&
+                    (ad.VendorId == PCIV_NVIDIA || ad.VendorId == PCIV_AMD) &&
+                    CSysInfo::IsWindowsVersionAtLeast(CSysInfo::WindowsVersionWin10_1703);
+
+  if (m_DXVA2SharedDecoderSurfaces)
+    CLog::LogF(LOGINFO, "DXVA2 shared decoder surfaces {} fence synchronization.",
+               m_DXVA2UseFence ? "WITH" : "WITHOUT");
+
+  m_DXVASuperResolutionSupport =
+      m_d3dFeatureLevel >= D3D_FEATURE_LEVEL_12_1 &&
+      ((ad.VendorId == PCIV_Intel && driver.valid && driver.majorVersion >= 31) ||
+       (ad.VendorId == PCIV_NVIDIA && driver.valid && driver.majorVersion >= 530));
+
+  if (m_DXVASuperResolutionSupport)
+    CLog::LogF(LOGINFO, "DXVA Video Super Resolution is potentially supported");
 }
 
 VideoDriverInfo DX::DeviceResources::GetVideoDriverVersion()
 {
-  DXGI_ADAPTER_DESC ad = {};
-  GetAdapterDesc(&ad);
+  const DXGI_ADAPTER_DESC ad = GetAdapterDesc();
 
   VideoDriverInfo driver = CWIN32Util::GetVideoDriverInfo(ad.VendorId, ad.Description);
 
@@ -1328,6 +1354,11 @@ HDR_STATUS DX::DeviceResources::ToggleHDR()
   DXGI_MODE_DESC md = {};
   GetDisplayMode(&md);
 
+  // Xbox uses only full screen windowed mode and not needs recreate swapchain.
+  // Recreate swapchain causes native 4K resolution is lost and quality obtained
+  // is equivalent to 1080p upscaled to 4K (TO DO: investigate root cause).
+  const bool isXbox = (CSysInfo::GetWindowsDeviceFamily() == CSysInfo::Xbox);
+
   DX::Windowing()->SetTogglingHDR(true);
   DX::Windowing()->SetAlteringWindow(true);
 
@@ -1335,7 +1366,7 @@ HDR_STATUS DX::DeviceResources::ToggleHDR()
   HDR_STATUS hdrStatus = CWIN32Util::ToggleWindowsHDR(md);
 
   // Kill swapchain
-  if (m_swapChain && hdrStatus != HDR_STATUS::HDR_TOGGLE_FAILED)
+  if (!isXbox && m_swapChain && hdrStatus != HDR_STATUS::HDR_TOGGLE_FAILED)
   {
     CLog::LogF(LOGDEBUG, "Re-create swapchain due HDR <-> SDR switch");
     DestroySwapChain();
@@ -1344,11 +1375,26 @@ HDR_STATUS DX::DeviceResources::ToggleHDR()
   DX::Windowing()->SetAlteringWindow(false);
 
   // Re-create swapchain
-  if (hdrStatus != HDR_STATUS::HDR_TOGGLE_FAILED)
+  if (!isXbox && hdrStatus != HDR_STATUS::HDR_TOGGLE_FAILED)
   {
     CreateWindowSizeDependentResources();
 
     DX::Windowing()->NotifyAppFocusChange(true);
+  }
+
+  // On Xbox set new color space in same swapchain
+  if (isXbox && hdrStatus != HDR_STATUS::HDR_TOGGLE_FAILED)
+  {
+    if (hdrStatus == HDR_STATUS::HDR_ON)
+    {
+      SetHdrColorSpace(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
+      m_IsHDROutput = true;
+    }
+    else
+    {
+      SetHdrColorSpace(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
+      m_IsHDROutput = false;
+    }
   }
 
   return hdrStatus;
@@ -1384,8 +1430,8 @@ DEBUG_INFO_RENDER DX::DeviceResources::GetDebugInfo() const
       "Swapchain: {} buffers, flip {}, {}, EOTF: {} (Windows HDR {})", desc.BufferCount,
       (desc.SwapEffect == DXGI_SWAP_EFFECT_FLIP_DISCARD) ? "discard" : "sequential",
       Windowing()->IsFullScreen()
-          ? ((desc.Flags == DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH) ? "fullscreen exclusive"
-                                                                    : "fullscreen windowed")
+          ? ((desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH) ? "fullscreen exclusive"
+                                                                   : "fullscreen windowed")
           : "windowed screen",
       m_IsTransferPQ ? "PQ" : "SDR", m_IsHDROutput ? "on" : "off");
 
@@ -1394,8 +1440,47 @@ DEBUG_INFO_RENDER DX::DeviceResources::GetDebugInfo() const
       (md.ScanlineOrdering > DXGI_MODE_SCANLINE_ORDER_PROGRESSIVE) ? "i" : "p",
       static_cast<double>(md.RefreshRate.Numerator) /
           static_cast<double>(md.RefreshRate.Denominator),
-      (desc.Format == DXGI_FORMAT_R10G10B10A2_UNORM) ? "R10G10B10A2" : "B8G8R8A8", bits,
+      DXGIFormatToShortString(desc.Format), bits,
       DX::Windowing()->UseLimitedColor() ? "limited" : "full", range_min, range_max);
 
   return info;
+}
+
+std::vector<DXGI_COLOR_SPACE_TYPE> DX::DeviceResources::GetSwapChainColorSpaces() const
+{
+  if (!m_swapChain)
+    return {};
+
+  std::vector<DXGI_COLOR_SPACE_TYPE> result;
+  HRESULT hr;
+
+  ComPtr<IDXGISwapChain3> swapChain3;
+  if (SUCCEEDED(hr = m_swapChain.As(&swapChain3)))
+  {
+    UINT colorSpaceSupport = 0;
+    for (UINT colorSpace = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+         colorSpace < DXGI_COLOR_SPACE_YCBCR_STUDIO_G24_TOPLEFT_P2020; colorSpace++)
+    {
+      DXGI_COLOR_SPACE_TYPE cs = static_cast<DXGI_COLOR_SPACE_TYPE>(colorSpace);
+      if (SUCCEEDED(swapChain3->CheckColorSpaceSupport(cs, &colorSpaceSupport)) &&
+          (colorSpaceSupport & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT))
+        result.push_back(cs);
+    }
+  }
+  else
+  {
+    CLog::LogF(LOGDEBUG, "IDXGISwapChain3 is not available. Error {}", DX::GetErrorDescription(hr));
+  }
+  return result;
+}
+
+bool DX::DeviceResources::SetMultithreadProtected(bool enabled) const
+{
+  BOOL wasEnabled = FALSE;
+  ComPtr<ID3D11Multithread> multithread;
+  HRESULT hr = m_d3dDevice.As(&multithread);
+  if (SUCCEEDED(hr))
+    wasEnabled = multithread->SetMultithreadProtected(enabled ? TRUE : FALSE);
+
+  return (wasEnabled == TRUE ? true : false);
 }

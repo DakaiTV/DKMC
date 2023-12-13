@@ -14,7 +14,6 @@ NATIVE= \
   gettext \
   giflib \
   heimdal \
-  JsonSchemaBuilder \
   libjpeg-turbo \
   liblzo2 \
   libpng \
@@ -50,6 +49,10 @@ ifeq ($(OS),linux)
   endif
 endif
 
+ifeq ($(OS),android)
+  NATIVE += rustup cargo-c
+endif
+
 .PHONY: $(NATIVE) native download $(DOWNLOAD_TARGETS)
 
 all: native
@@ -66,9 +69,10 @@ download: $(DOWNLOAD_TARGETS)
 autoconf-archive: autoconf
 autoconf: m4
 automake: autoconf
+cargo-c: pkg-config openssl rustup
 dpkg: automake gettext libtool pkg-config tar
 heimdal: libtool
-JsonSchemaBuilder: automake
+JsonSchemaBuilder: cmake
 libjpeg-turbo: cmake nasm
 libpng: zlib automake
 libtool: automake
@@ -80,8 +84,8 @@ pugixml: cmake
 python3: $(EXPAT) $(LIBFFI) pkg-config zlib openssl autoconf-archive
 swig: pcre
 tar: xz automake
-TexturePacker: automake pkg-config libpng liblzo2 giflib libjpeg-turbo
-wayland-scanner: expat pkg-config
+TexturePacker: cmake libpng liblzo2 giflib libjpeg-turbo
+wayland-scanner: expat ninja pkg-config
 waylandpp-scanner: cmake pugixml
 
 # python installs are not thread safe when using easy_install method.

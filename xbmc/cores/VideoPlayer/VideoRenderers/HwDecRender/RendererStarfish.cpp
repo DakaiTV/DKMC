@@ -16,14 +16,14 @@
 #include "utils/log.h"
 #include "windowing/wayland/WinSystemWaylandWebOS.h"
 
+#include <appswitching-control-block/AcbAPI.h>
+
 CRendererStarfish::CRendererStarfish()
 {
-  CLog::Log(LOGINFO, "Instancing CRendererStarfish");
+  CLog::LogF(LOGINFO, "CRendererStarfish: Instanced");
 }
 
-CRendererStarfish::~CRendererStarfish()
-{
-}
+CRendererStarfish::~CRendererStarfish() = default;
 
 CBaseRenderer* CRendererStarfish::Create(CVideoBuffer* buffer)
 {
@@ -34,12 +34,45 @@ CBaseRenderer* CRendererStarfish::Create(CVideoBuffer* buffer)
 
 bool CRendererStarfish::Configure(const VideoPicture& picture, float fps, unsigned int orientation)
 {
+  auto buffer = static_cast<CStarfishVideoBuffer*>(picture.videoBuffer);
+  m_acbId = buffer->m_acbId;
+  if (m_acbId)
+  {
+    EnableAlwaysClip();
+  }
   m_iFlags = GetFlagsChromaPosition(picture.chroma_position) |
              GetFlagsColorMatrix(picture.color_space, picture.iWidth, picture.iHeight) |
              GetFlagsColorPrimaries(picture.color_primaries) |
              GetFlagsStereoMode(picture.stereoMode);
 
-  return CLinuxRendererGLES::Configure(picture, fps, orientation);
+  m_format = picture.videoBuffer->GetFormat();
+  m_sourceWidth = picture.iWidth;
+  m_sourceHeight = picture.iHeight;
+  m_renderOrientation = orientation;
+
+  // Calculate the input frame aspect ratio.
+  CalculateFrameAspectRatio(picture.iDisplayWidth, picture.iDisplayHeight);
+  SetViewMode(m_videoSettings.m_ViewMode);
+  ManageRenderArea();
+
+  m_configured = true;
+
+  return true;
+}
+
+bool CRendererStarfish::IsConfigured()
+{
+  return m_configured;
+}
+
+bool CRendererStarfish::ConfigChanged(const VideoPicture& picture)
+{
+  if (picture.videoBuffer->GetFormat() != m_format)
+  {
+    return true;
+  }
+
+  return false;
 }
 
 bool CRendererStarfish::Register()
@@ -50,15 +83,45 @@ bool CRendererStarfish::Register()
 
 void CRendererStarfish::ManageRenderArea()
 {
+  // this hack is needed to get the 2D mode of a 3D movie going
+  RENDER_STEREO_MODE stereoMode = CServiceBroker::GetWinSystem()->GetGfxContext().GetStereoMode();
+  if (stereoMode == RENDER_STEREO_MODE_MONO)
+    CServiceBroker::GetWinSystem()->GetGfxContext().SetStereoView(RENDER_STEREO_VIEW_LEFT);
+
   CBaseRenderer::ManageRenderArea();
+
+  if (stereoMode == RENDER_STEREO_MODE_MONO)
+    CServiceBroker::GetWinSystem()->GetGfxContext().SetStereoView(RENDER_STEREO_VIEW_OFF);
+
+  switch (stereoMode)
+  {
+    case RENDER_STEREO_MODE_SPLIT_HORIZONTAL:
+      m_destRect.y2 *= 2.0f;
+      break;
+    case RENDER_STEREO_MODE_SPLIT_VERTICAL:
+      m_destRect.x2 *= 2.0f;
+      break;
+    default:
+      break;
+  }
 
   if ((m_exportedDestRect != m_destRect || m_exportedSourceRect != m_sourceRect) &&
       !m_sourceRect.IsEmpty() && !m_destRect.IsEmpty())
   {
     auto origRect =
         CRect{0, 0, static_cast<float>(m_sourceWidth), static_cast<float>(m_sourceHeight)};
-    static_cast<KODI::WINDOWING::WAYLAND::CWinSystemWaylandWebOS*>(CServiceBroker::GetWinSystem())
-        ->SetExportedWindow(origRect, m_sourceRect, m_destRect);
+    using namespace KODI::WINDOWING::WAYLAND;
+    auto winSystem = static_cast<CWinSystemWaylandWebOS*>(CServiceBroker::GetWinSystem());
+    if (winSystem->SupportsExportedWindow())
+    {
+      winSystem->SetExportedWindow(origRect, m_sourceRect, m_destRect);
+    }
+    else if (m_acbId)
+    {
+      AcbAPI_setCustomDisplayWindow(m_acbId, m_sourceRect.x1, m_sourceRect.y1, m_sourceRect.Width(),
+                                    m_sourceRect.Height(), m_destRect.x1, m_destRect.y1,
+                                    m_destRect.Width(), m_destRect.Height(), false, nullptr);
+    }
     m_exportedSourceRect = m_sourceRect;
     m_exportedDestRect = m_destRect;
   }
@@ -69,6 +132,16 @@ bool CRendererStarfish::Supports(ERENDERFEATURE feature) const
   return (feature == RENDERFEATURE_ZOOM || feature == RENDERFEATURE_STRETCH ||
           feature == RENDERFEATURE_PIXEL_RATIO || feature == RENDERFEATURE_VERTICAL_SHIFT ||
           feature == RENDERFEATURE_ROTATION);
+}
+
+bool CRendererStarfish::Supports(ESCALINGMETHOD method) const
+{
+  return false;
+}
+
+bool CRendererStarfish::SupportsMultiPassRendering()
+{
+  return false;
 }
 
 void CRendererStarfish::AddVideoPicture(const VideoPicture& picture, int index)
@@ -83,32 +156,7 @@ CRenderInfo CRendererStarfish::GetRenderInfo()
 {
   CRenderInfo info;
   info.max_buffer_size = 4;
-  info.optimal_buffer_size = 3;
   return info;
-}
-
-bool CRendererStarfish::LoadShadersHook()
-{
-  return true;
-}
-
-bool CRendererStarfish::RenderHook(int index)
-{
-  return true;
-}
-
-bool CRendererStarfish::CreateTexture(int index)
-{
-  return true;
-}
-
-void CRendererStarfish::DeleteTexture(int index)
-{
-}
-
-bool CRendererStarfish::UploadTexture(int index)
-{
-  return true;
 }
 
 bool CRendererStarfish::IsGuiLayer()
@@ -116,6 +164,31 @@ bool CRendererStarfish::IsGuiLayer()
   return false;
 }
 
-void CRendererStarfish::RenderUpdateVideo(bool clear, unsigned int flags, unsigned int alpha)
+bool CRendererStarfish::RenderCapture(CRenderCapture* capture)
 {
+  return false;
+}
+
+void CRendererStarfish::UnInit()
+{
+  m_configured = false;
+}
+
+void CRendererStarfish::Update()
+{
+  if (!m_configured)
+  {
+    return;
+  }
+}
+
+void CRendererStarfish::RenderUpdate(
+    int index, int index2, bool clear, unsigned int flags, unsigned int alpha)
+{
+  if (!m_configured)
+  {
+    return;
+  }
+
+  ManageRenderArea();
 }

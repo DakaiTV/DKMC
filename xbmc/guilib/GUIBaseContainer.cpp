@@ -26,6 +26,8 @@
 #include "utils/XBMCTinyXML.h"
 #include "utils/log.h"
 
+#include <memory>
+
 #define HOLD_TIME_START 100
 #define HOLD_TIME_END   3000
 #define SCROLLING_GAP   200U
@@ -237,7 +239,7 @@ void CGUIBaseContainer::ProcessItem(float posX, float posY, CGUIListItemPtr& ite
       CGUIListItemLayoutPtr layout = std::make_unique<CGUIListItemLayout>(*m_layout, this);
       item->SetLayout(std::move(layout));
     }
-    if (item->GetFocusedLayout())
+    if (item->GetFocusedLayout() && item->GetFocusedLayout()->IsAnimating(ANIM_TYPE_UNFOCUS))
       item->GetFocusedLayout()->Process(item.get(), m_parentID, currentTime, dirtyregions);
     if (item->GetLayout())
       item->GetLayout()->Process(item.get(), m_parentID, currentTime, dirtyregions);
@@ -404,14 +406,14 @@ bool CGUIBaseContainer::OnAction(const CAction &action)
   case ACTION_SHOW_INFO:
     if (m_listProvider)
     {
-      int selected = GetSelectedItem();
+      const int selected = GetSelectedItem();
       if (selected >= 0 && selected < static_cast<int>(m_items.size()))
       {
-        m_listProvider->OnInfo(m_items[selected]);
-        return true;
+        if (m_listProvider->OnInfo(m_items[selected]))
+          return true;
       }
     }
-    else if (OnInfo())
+    if (OnInfo())
       return true;
     else if (action.GetID())
       return OnClick(action.GetID());

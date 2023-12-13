@@ -437,6 +437,20 @@ bool CVideoGUIInfo::GetLabel(std::string& value, const CFileItem *item, int cont
       case LISTITEM_VIDEO_ASPECT:
         value = CStreamDetails::VideoAspectToAspectDescription(tag->m_streamDetails.GetVideoAspect());
         return true;
+      case LISTITEM_VIDEO_WIDTH:
+      {
+        const int val = tag->m_streamDetails.GetVideoWidth();
+        if (val > 0)
+          value = std::to_string(val);
+        return true;
+      }
+      case LISTITEM_VIDEO_HEIGHT:
+      {
+        const int val = tag->m_streamDetails.GetVideoHeight();
+        if (val > 0)
+          value = std::to_string(val);
+        return true;
+      }
       case LISTITEM_AUDIO_CODEC:
         value = tag->m_streamDetails.GetAudioCodec();
         return true;
@@ -748,11 +762,14 @@ bool CVideoGUIInfo::GetBool(bool& value, const CGUIListItem *gitem, int contextW
       /////////////////////////////////////////////////////////////////////////////////////////////
       // LISTITEM_*
       /////////////////////////////////////////////////////////////////////////////////////////////
-      case LISTITEM_IS_RESUMABLE:
-        value = tag->GetResumePoint().timeInSeconds > 0;
-        return true;
       case LISTITEM_IS_COLLECTION:
         value = tag->m_type == MediaTypeVideoCollection;
+        return true;
+      case LISTITEM_HASVIDEOVERSIONS:
+        value = tag->m_hasVideoVersions;
+        return true;
+      case LISTITEM_ISVIDEOEXTRAS:
+        value = tag->IsVideoExtras();
         return true;
     }
   }
@@ -803,6 +820,9 @@ bool CVideoGUIInfo::GetBool(bool& value, const CGUIListItem *gitem, int contextW
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // LISTITEM_*
     ///////////////////////////////////////////////////////////////////////////////////////////////
+    case LISTITEM_IS_RESUMABLE:
+      value = item->IsResumable();
+      return true;
     case LISTITEM_IS_STEREOSCOPIC:
     {
       std::string stereoMode = item->GetProperty("stereomode").asString();

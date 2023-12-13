@@ -51,10 +51,14 @@ public:
   static bool GetSetForMovie(const CFileItem* movieItem, std::shared_ptr<CFileItem>& selectedSet);
   static bool SetMovieSet(const CFileItem *movieItem, const CFileItem *selectedSet);
 
+  static bool ConvertVideoVersion(const std::shared_ptr<CFileItem>& item);
+  static void ManageVideoVersion(const std::shared_ptr<CFileItem>& item);
+
   static bool GetItemsForTag(const std::string &strHeading, const std::string &type, CFileItemList &items, int idTag = -1, bool showAll = true);
   static bool AddItemsToTag(const std::shared_ptr<CFileItem>& tagItem);
   static bool RemoveItemsFromTag(const std::shared_ptr<CFileItem>& tagItem);
 
+  static bool ChooseAndManageVideoItemArtwork(const std::shared_ptr<CFileItem>& item);
   static bool ManageVideoItemArtwork(const std::shared_ptr<CFileItem>& item, const MediaType& type);
 
   static std::string GetLocalizedVideoType(const std::string &strType);
@@ -85,6 +89,7 @@ protected:
    * \param pItem Search result item
    */
   void OnSearchItemFound(const CFileItem* pItem);
+  void OnVideoVersion();
   void Play(bool resume = false);
   void OnGetArt();
   void OnGetFanart();
@@ -96,11 +101,6 @@ protected:
                                 bool bRemove,
                                 CVideoDatabase& database);
 
-  /*! \brief Pop up a fanart chooser. Does not utilise remote URLs.
-   \param videoItem the item to choose fanart for.
-   */
-  static bool OnGetFanart(const std::shared_ptr<CFileItem>& videoItem);
-
   std::shared_ptr<CFileItem> m_movieItem;
   CFileItemList *m_castList;
   bool m_bViewReview = false;
@@ -111,5 +111,8 @@ protected:
   int m_startUserrating = -1;
 
 private:
-  static std::string ChooseArtType(const CFileItem& item);
+  static bool ManageVideoItemArtwork(const std::shared_ptr<CFileItem>& item,
+                                     const MediaType& mediaType,
+                                     const std::string& artType);
+  bool ChooseVideoVersion();
 };

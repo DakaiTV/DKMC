@@ -10,20 +10,32 @@
 
 #include "Autorun.h"
 #include "CompileInfo.h"
+#include "DatabaseManager.h"
+#include "FileItem.h"
 #include "GUIInfoManager.h"
+#include "GUILargeTextureManager.h"
+#include "GUIPassword.h"
+#include "GUIUserMessages.h"
 #include "HDRStatus.h"
 #include "LangInfo.h"
+#include "PartyModeManager.h"
 #include "PlayListPlayer.h"
+#include "SectionLoader.h"
+#include "SeekHandler.h"
+#include "ServiceBroker.h"
 #include "ServiceManager.h"
+#include "TextureCache.h"
 #include "URL.h"
 #include "Util.h"
 #include "addons/AddonManager.h"
+#include "addons/AddonSystemSettings.h"
 #include "addons/RepositoryUpdater.h"
 #include "addons/Service.h"
 #include "addons/Skin.h"
 #include "addons/VFSEntry.h"
 #include "addons/addoninfo/AddonInfo.h"
 #include "addons/addoninfo/AddonType.h"
+#include "addons/gui/GUIDialogAddonSettings.h"
 #include "application/AppInboundProtocol.h"
 #include "application/AppParams.h"
 #include "application/ApplicationActionListeners.h"
@@ -33,173 +45,145 @@
 #include "application/ApplicationStackHelper.h"
 #include "application/ApplicationVolumeHandling.h"
 #include "cores/AudioEngine/Engines/ActiveAE/ActiveAE.h"
+#include "cores/FFmpeg.h"
 #include "cores/IPlayer.h"
 #include "cores/playercorefactory/PlayerCoreFactory.h"
 #include "dialogs/GUIDialogBusy.h"
 #include "dialogs/GUIDialogCache.h"
 #include "dialogs/GUIDialogKaiToast.h"
+#include "dialogs/GUIDialogSimpleMenu.h"
 #include "events/EventLog.h"
 #include "events/NotificationEvent.h"
+#include "filesystem/Directory.h"
+#include "filesystem/DirectoryCache.h"
+#include "filesystem/DirectoryFactory.h"
+#include "filesystem/DllLibCurl.h"
 #include "filesystem/File.h"
+#ifdef HAS_FILESYSTEM_NFS
+#include "filesystem/NFSFile.h"
+#endif
+#include "filesystem/PluginDirectory.h"
+#include "filesystem/SpecialProtocol.h"
+#ifdef HAS_UPNP
+#include "filesystem/UPnPDirectory.h"
+#endif
+#include "guilib/GUIAudioManager.h"
 #include "guilib/GUIComponent.h"
 #include "guilib/GUIControlProfiler.h"
 #include "guilib/GUIFontManager.h"
+#include "guilib/GUIWindowManager.h"
+#include "guilib/LocalizeStrings.h"
 #include "guilib/StereoscopicsManager.h"
 #include "guilib/TextureManager.h"
+#include "input/InertialScrollingHandler.h"
+#include "input/InputManager.h"
+#include "input/KeyboardLayoutManager.h"
+#include "input/actions/ActionTranslator.h"
+#include "interfaces/AnnouncementManager.h"
 #include "interfaces/builtins/Builtins.h"
 #include "interfaces/generic/ScriptInvocationManager.h"
-#include "music/MusicLibraryQueue.h"
-#include "music/tags/MusicInfoTag.h"
-#include "network/EventServer.h"
-#include "network/Network.h"
-#include "platform/Environment.h"
-#include "playlists/PlayListFactory.h"
-#include "threads/SystemClock.h"
-#include "utils/ContentUtils.h"
-#include "utils/JobManager.h"
-#include "utils/LangCodeExpander.h"
-#include "utils/Screenshot.h"
-#include "utils/Variant.h"
-#include "video/Bookmark.h"
-#include "video/VideoLibraryQueue.h"
-
+#include "interfaces/json-rpc/JSONRPC.h"
 #ifdef HAS_PYTHON
 #include "interfaces/python/XBPython.h"
 #endif
-#include "GUILargeTextureManager.h"
-#include "GUIPassword.h"
-#include "GUIUserMessages.h"
-#include "SectionLoader.h"
-#include "SeekHandler.h"
-#include "ServiceBroker.h"
-#include "TextureCache.h"
-#include "cores/DllLoader/DllLoaderContainer.h"
-#include "filesystem/Directory.h"
-#include "filesystem/DirectoryCache.h"
-#include "filesystem/DllLibCurl.h"
-#include "filesystem/PluginDirectory.h"
-#include "filesystem/SpecialProtocol.h"
-#include "guilib/GUIAudioManager.h"
-#include "guilib/LocalizeStrings.h"
-#include "input/InertialScrollingHandler.h"
-#include "input/KeyboardLayoutManager.h"
-#include "input/actions/ActionTranslator.h"
 #include "messaging/ApplicationMessenger.h"
 #include "messaging/ThreadMessage.h"
 #include "messaging/helpers/DialogHelper.h"
 #include "messaging/helpers/DialogOKHelper.h"
+#include "music/MusicLibraryQueue.h"
+#include "music/MusicThumbLoader.h"
+#include "music/MusicUtils.h"
+#include "music/infoscanner/MusicInfoScanner.h"
+#include "music/tags/MusicInfoTag.h"
+#include "network/EventServer.h"
+#include "network/Network.h"
+#include "network/ZeroconfBrowser.h"
+#ifdef HAS_UPNP
+#include "network/upnp/UPnP.h"
+#endif
+#include "peripherals/Peripherals.h"
+#include "pictures/GUIWindowSlideShow.h"
+#include "platform/Environment.h"
 #include "playlists/PlayList.h"
+#include "playlists/PlayListFactory.h"
 #include "playlists/SmartPlayList.h"
 #include "powermanagement/PowerManager.h"
 #include "profiles/ProfileManager.h"
+#include "pvr/PVRManager.h"
+#include "pvr/guilib/PVRGUIActionsPlayback.h"
+#include "pvr/guilib/PVRGUIActionsPowerManagement.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/DisplaySettings.h"
 #include "settings/MediaSettings.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
 #include "speech/ISpeechRecognition.h"
+#include "storage/MediaManager.h"
 #include "threads/SingleLock.h"
+#include "threads/SystemClock.h"
+#include "utils/AlarmClock.h"
 #include "utils/CPUInfo.h"
+#include "utils/CharsetConverter.h"
+#include "utils/ContentUtils.h"
 #include "utils/FileExtensionProvider.h"
+#include "utils/JobManager.h"
+#include "utils/LangCodeExpander.h"
 #include "utils/RegExp.h"
+#include "utils/Screenshot.h"
+#include "utils/StringUtils.h"
 #include "utils/SystemInfo.h"
 #include "utils/TimeUtils.h"
+#include "utils/URIUtils.h"
+#include "utils/Variant.h"
 #include "utils/XTimeUtils.h"
 #include "utils/log.h"
-#include "windowing/WinSystem.h"
-#include "windowing/WindowSystemFactory.h"
-
-#include <cmath>
-
-#ifdef HAS_UPNP
-#include "network/upnp/UPnP.h"
-#include "filesystem/UPnPDirectory.h"
-#endif
-#if defined(TARGET_POSIX) && defined(HAS_FILESYSTEM_SMB)
-#include "platform/posix/filesystem/SMBFile.h"
-#endif
-#ifdef HAS_FILESYSTEM_NFS
-#include "filesystem/NFSFile.h"
-#endif
-#include "PartyModeManager.h"
-#include "network/ZeroconfBrowser.h"
-#ifndef TARGET_POSIX
-#include "platform/win32/threads/Win32Exception.h"
-#endif
-#include "interfaces/json-rpc/JSONRPC.h"
-#include "interfaces/AnnouncementManager.h"
-#include "peripherals/Peripherals.h"
-#include "music/infoscanner/MusicInfoScanner.h"
-#include "music/MusicUtils.h"
-#include "music/MusicThumbLoader.h"
-
-// Windows includes
-#include "guilib/GUIWindowManager.h"
+#include "video/Bookmark.h"
 #include "video/PlayerController.h"
-
-// Dialog includes
-#include "addons/gui/GUIDialogAddonSettings.h"
-#include "dialogs/GUIDialogKaiToast.h"
-#include "dialogs/GUIDialogSimpleMenu.h"
+#include "video/VideoLibraryQueue.h"
 #include "video/dialogs/GUIDialogVideoBookmarks.h"
-
-// PVR related include Files
-#include "pvr/PVRManager.h"
-#include "pvr/guilib/PVRGUIActionsPlayback.h"
-#include "pvr/guilib/PVRGUIActionsPowerManagement.h"
-
 #ifdef TARGET_WINDOWS
 #include "win32util.h"
 #endif
-
-#ifdef TARGET_DARWIN_OSX
-#include "platform/darwin/osx/CocoaInterface.h"
-#include "platform/darwin/osx/XBMCHelper.h"
-#endif
-#ifdef TARGET_DARWIN
-#include "platform/darwin/DarwinUtils.h"
-#endif
-
-#ifdef HAS_DVD_DRIVE
-#include <cdio/logging.h>
-#endif
-
-#include "DatabaseManager.h"
-#include "input/InputManager.h"
-#include "storage/MediaManager.h"
-#include "utils/AlarmClock.h"
-#include "utils/StringUtils.h"
-#include "utils/URIUtils.h"
-
-#ifdef TARGET_POSIX
-#include "platform/posix/XHandle.h"
-#include "platform/posix/PlatformPosix.h"
-#endif
+#include "windowing/WinSystem.h"
+#include "windowing/WindowSystemFactory.h"
 
 #if defined(TARGET_ANDROID)
 #include "platform/android/activity/XBMCApp.h"
 #endif
-
-#ifdef TARGET_WINDOWS
-#include "platform/Environment.h"
+#ifdef TARGET_DARWIN
+#include "platform/darwin/DarwinUtils.h"
 #endif
+#ifdef TARGET_DARWIN_OSX
+#ifdef HAS_XBMCHELPER
+#include "platform/darwin/osx/XBMCHelper.h"
+#endif
+#endif
+#ifdef TARGET_POSIX
+#include "platform/posix/PlatformPosix.h"
+#include "platform/posix/XHandle.h"
+#endif
+#if defined(TARGET_POSIX) && defined(HAS_FILESYSTEM_SMB)
+#include "platform/posix/filesystem/SMBFile.h"
+#endif
+#ifndef TARGET_POSIX
+#include "platform/win32/threads/Win32Exception.h"
+#endif
+
+#include <cmath>
+#include <memory>
+#include <mutex>
 
 //TODO: XInitThreads
 #ifdef HAVE_X11
 #include <X11/Xlib.h>
 #endif
-
-#include "FileItem.h"
-#include "addons/AddonSystemSettings.h"
-#include "cores/FFmpeg.h"
-#include "pictures/GUIWindowSlideShow.h"
-#include "utils/CharsetConverter.h"
-
-#include <mutex>
+#ifdef HAS_OPTICAL_DRIVE
+#include <cdio/logging.h>
+#endif
 
 using namespace ADDON;
 using namespace XFILE;
-#ifdef HAS_DVD_DRIVE
+#ifdef HAS_OPTICAL_DRIVE
 using namespace MEDIA_DETECT;
 #endif
 using namespace VIDEO;
@@ -223,7 +207,7 @@ using namespace std::chrono_literals;
 
 CApplication::CApplication(void)
   :
-#ifdef HAS_DVD_DRIVE
+#ifdef HAS_OPTICAL_DRIVE
     m_Autorun(new CAutorun()),
 #endif
     m_pInertialScrollingHandler(new CInertialScrollingHandler()),
@@ -287,30 +271,13 @@ void CApplication::HandlePortEvents()
             settings->SetInt(CSettings::SETTING_WINDOW_HEIGHT, newEvent.resize.h);
             settings->Save();
           }
-#ifdef TARGET_WINDOWS
           else
           {
-            // this may occurs when OS tries to resize application window
-            //CDisplaySettings::GetInstance().SetCurrentResolution(RES_DESKTOP, true);
-            //auto& gfxContext = CServiceBroker::GetWinSystem()->GetGfxContext();
-            //gfxContext.SetVideoResolution(gfxContext.GetVideoResolution(), true);
-            // try to resize window back to it's full screen size
-            //! TODO: DX windowing should emit XBMC_FULLSCREEN_UPDATE instead with the proper dimensions
-            //! and position to avoid the ifdef in common code
-            auto& res_info = CDisplaySettings::GetInstance().GetResolutionInfo(RES_DESKTOP);
-            CServiceBroker::GetWinSystem()->ResizeWindow(res_info.iScreenWidth, res_info.iScreenHeight, 0, 0);
+            const auto& res_info = CDisplaySettings::GetInstance().GetResolutionInfo(RES_DESKTOP);
+            CServiceBroker::GetWinSystem()->ForceFullScreen(res_info);
           }
-#endif
         }
         break;
-      case XBMC_FULLSCREEN_UPDATE:
-      {
-        if (CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_fullScreen)
-        {
-          CServiceBroker::GetWinSystem()->ResizeWindow(newEvent.resize.w, newEvent.resize.h, 0, 0);
-        }
-        break;
-      }
       case XBMC_VIDEOMOVE:
       {
         CServiceBroker::GetWinSystem()->OnMove(newEvent.move.x, newEvent.move.y);
@@ -318,6 +285,9 @@ void CApplication::HandlePortEvents()
         break;
       case XBMC_MODECHANGE:
         CServiceBroker::GetWinSystem()->GetGfxContext().ApplyModeChange(newEvent.mode.res);
+        break;
+      case XBMC_SCREENCHANGE:
+        CServiceBroker::GetWinSystem()->OnChangeScreen(newEvent.screen.screenIdx);
         break;
       case XBMC_USEREVENT:
         CServiceBroker::GetAppMessenger()->PostMsg(static_cast<uint32_t>(newEvent.user.code));
@@ -364,7 +334,7 @@ bool CApplication::Create()
   const auto keyboardLayoutManager = std::make_shared<CKeyboardLayoutManager>();
   CServiceBroker::RegisterKeyboardLayoutManager(keyboardLayoutManager);
 
-  m_ServiceManager.reset(new CServiceManager());
+  m_ServiceManager = std::make_unique<CServiceManager>();
 
   if (!m_ServiceManager->InitStageOne())
   {
@@ -409,9 +379,19 @@ bool CApplication::Create()
   if (!settingsComponent->Load())
     return false;
 
+  // Log Cache GUI settings (replacement of cache in advancedsettings.xml)
+  const auto settings = settingsComponent->GetSettings();
+  CLog::Log(LOGINFO,
+            "New Cache GUI Settings (replacement of cache in advancedsettings.xml) are:\n - Buffer "
+            "Mode: {}\n - Memory Size: {} MB\n - Read "
+            "Factor: {:.2f} x\n - Chunk Size : {} bytes",
+            settings->GetInt(CSettings::SETTING_FILECACHE_BUFFERMODE),
+            settings->GetInt(CSettings::SETTING_FILECACHE_MEMORYSIZE),
+            settings->GetInt(CSettings::SETTING_FILECACHE_READFACTOR) / 100.0f,
+            settings->GetInt(CSettings::SETTING_FILECACHE_CHUNKSIZE));
+
   CLog::Log(LOGINFO, "creating subdirectories");
   const std::shared_ptr<CProfileManager> profileManager = settingsComponent->GetProfileManager();
-  const std::shared_ptr<CSettings> settings = settingsComponent->GetSettings();
   CLog::Log(LOGINFO, "userdata folder: {}",
             CURL::GetRedacted(profileManager->GetProfileUserDataFolder()));
   CLog::Log(LOGINFO, "recording folder: {}",
@@ -434,7 +414,7 @@ bool CApplication::Create()
     return false;
   }
 
-  m_pActiveAE.reset(new ActiveAE::CActiveAE());
+  m_pActiveAE = std::make_unique<ActiveAE::CActiveAE>();
   CServiceBroker::RegisterAE(m_pActiveAE.get());
 
   // initialize m_replayGainSettings
@@ -575,7 +555,7 @@ bool CApplication::CreateGUI()
   if (sav_res)
     CDisplaySettings::GetInstance().SetCurrentResolution(RES_DESKTOP, true);
 
-  m_pGUI.reset(new CGUIComponent());
+  m_pGUI = std::make_unique<CGUIComponent>();
   m_pGUI->Init();
 
   // Splash requires gui component!!
@@ -626,7 +606,8 @@ bool CApplication::Initialize()
   appVolume->SetHardwareVolume(level);
   CServiceBroker::GetActiveAE()->SetMute(muted);
 
-#if defined(HAS_DVD_DRIVE) && !defined(TARGET_WINDOWS) // somehow this throws an "unresolved external symbol" on win32
+#if defined(HAS_OPTICAL_DRIVE) && \
+    !defined(TARGET_WINDOWS) // somehow this throws an "unresolved external symbol" on win32
   // turn off cdio logging
   cdio_loglevel_default = CDIO_LOG_ERROR;
 #endif
@@ -1016,9 +997,7 @@ bool CApplication::OnAction(const CAction &action)
   if (action.GetID() == ACTION_HDR_TOGGLE)
   {
     // Only enables manual HDR toggle if no video is playing or auto HDR switch is disabled
-    if (appPlayer->IsPlayingVideo() &&
-        CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
-            CServiceBroker::GetWinSystem()->SETTING_WINSYSTEM_IS_HDR_DISPLAY))
+    if (appPlayer->IsPlayingVideo() && CServiceBroker::GetWinSystem()->IsHDRDisplaySettingEnabled())
       return true;
 
     HDR_STATUS hdrStatus = CServiceBroker::GetWinSystem()->ToggleHDR();
@@ -1039,9 +1018,7 @@ bool CApplication::OnAction(const CAction &action)
   if (action.GetID() == ACTION_CYCLE_TONEMAP_METHOD)
   {
     // Only enables tone mapping switch if display is not HDR capable or HDR is not enabled
-    if (CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
-            CServiceBroker::GetWinSystem()->SETTING_WINSYSTEM_IS_HDR_DISPLAY) &&
-        CServiceBroker::GetWinSystem()->IsHDRDisplay())
+    if (CServiceBroker::GetWinSystem()->IsHDRDisplaySettingEnabled())
       return true;
 
     if (appPlayer->IsPlayingVideo())
@@ -1607,6 +1584,10 @@ void CApplication::OnApplicationMessage(ThreadMessage* pMsg)
     appPlayer->TriggerUpdateResolution();
     break;
 
+  case TMSG_MOVETOSCREEN:
+    CServiceBroker::GetWinSystem()->MoveToScreen(static_cast<int>(pMsg->param1));
+    break;
+
   case TMSG_MINIMIZE:
     CServiceBroker::GetWinSystem()->Minimize();
     break;
@@ -1993,7 +1974,6 @@ bool CApplication::Cleanup()
     g_directoryCache.Clear();
     //CServiceBroker::GetInputManager().ClearKeymaps(); //! @todo
     CEventServer::RemoveInstance();
-    DllLoaderContainer::Clear();
     CServiceBroker::GetPlaylistPlayer().Clear();
 
     if (m_ServiceManager)
@@ -2002,7 +1982,7 @@ bool CApplication::Cleanup()
 #ifdef TARGET_POSIX
     CXHandle::DumpObjectTracker();
 
-#ifdef HAS_DVD_DRIVE
+#ifdef HAS_OPTICAL_DRIVE
     CLibcdio::ReleaseInstance();
 #endif
 #endif
@@ -2159,7 +2139,7 @@ bool CApplication::Stop(int exitCode)
     smb.Deinit();
 #endif
 
-#if defined(TARGET_DARWIN_OSX)
+#if defined(TARGET_DARWIN_OSX) and defined(HAS_XBMCHELPER)
     if (XBMCHelper::GetInstance().IsAlwaysOn() == false)
       XBMCHelper::GetInstance().Stop();
 #endif
@@ -2370,17 +2350,12 @@ bool CApplication::PlayFile(CFileItem item, const std::string& player, bool bRes
   if (item.IsPlayList())
     return false;
 
-  // if the item is a plugin we need to resolve the plugin paths
-  if (URIUtils::HasPluginPath(item) && !XFILE::CPluginDirectory::GetResolvedPluginResult(item))
-    return false;
-
-#ifdef HAS_UPNP
-  if (URIUtils::IsUPnP(item.GetPath()))
+  // Translate/Resolve the url if needed
+  const std::unique_ptr<IDirectory> dir{CDirectoryFactory::Create(item)};
+  if (dir && !dir->Resolve(item))
   {
-    if (!XFILE::CUPnPDirectory::GetResource(item.GetURL(), item))
-      return false;
+    return false;
   }
-#endif
 
   // if we have a stacked set of files, we need to setup our stack routines for
   // "seamless" seeking and total time of the movie etc.
@@ -2418,7 +2393,9 @@ bool CApplication::PlayFile(CFileItem item, const std::string& player, bool bRes
       std::string videoInfoTagPath(item.GetVideoInfoTag()->m_strFileNameAndPath);
       if (videoInfoTagPath.find("removable://") == 0 || item.IsVideoDb())
         path = videoInfoTagPath;
-      dbs.LoadVideoInfo(path, *item.GetVideoInfoTag());
+
+      if (!item.HasVideoInfoTag() || item.GetVideoInfoTag()->m_type != MediaTypeVideoVersion)
+        dbs.LoadVideoInfo(path, *item.GetVideoInfoTag());
 
       if (item.HasProperty("savedplayerstate"))
       {
@@ -2485,9 +2462,17 @@ bool CApplication::PlayFile(CFileItem item, const std::string& player, bool bRes
   if (!(options.startpercent > 0.0 || options.starttime > 0.0) &&
       (item.IsBDFile() || item.IsDiscImage()))
   {
-    //check if we must show the simplified bd menu
-    if (!CGUIDialogSimpleMenu::ShowPlaySelection(item))
-      return true;
+    // No video selection when using an external player, because it needs to handle that on its own.
+    const std::string defaulPlayer{
+        player.empty() ? m_ServiceManager->GetPlayerCoreFactory().GetDefaultPlayer(item) : player};
+    const bool isExternalPlayer{
+        m_ServiceManager->GetPlayerCoreFactory().IsExternalPlayer(defaulPlayer)};
+    if (!isExternalPlayer)
+    {
+      // Check if we must show the simplified bd menu.
+      if (!CGUIDialogSimpleMenu::ShowPlaySelection(item))
+        return true;
+    }
   }
 
   // this really aught to be inside !bRestart, but since PlayStack
@@ -2716,9 +2701,6 @@ bool CApplication::OnMessage(CGUIMessage& message)
           m_incompatibleAddons.clear();
         }
 
-        // show info dialog about moved configuration files if needed
-        ShowAppMigrationMessage();
-
         // offer enabling addons at kodi startup that are disabled due to
         // e.g. os package manager installation on linux
         ConfigureAndEnableAddons();
@@ -2765,7 +2747,7 @@ bool CApplication::OnMessage(CGUIMessage& message)
         CGUIMessage msg(GUI_MSG_PLAYLISTPLAYER_CHANGED, 0, 0, CServiceBroker::GetPlaylistPlayer().GetCurrentPlaylist(), param, item);
         CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
         CServiceBroker::GetPlaylistPlayer().SetCurrentSong(m_nextPlaylistItem);
-        m_itemCurrentFile.reset(new CFileItem(*item));
+        m_itemCurrentFile = std::make_shared<CFileItem>(*item);
       }
       CServiceBroker::GetGUI()->GetInfoManager().SetCurrentItem(*m_itemCurrentFile);
       g_partyModeManager.OnSongChange(true);
@@ -3018,26 +3000,6 @@ bool CApplication::ExecuteXBMCAction(std::string actionStr, const CGUIListItemPt
   return true;
 }
 
-// inform the user that the configuration data has moved from old XBMC location
-// to new Kodi location - if applicable
-void CApplication::ShowAppMigrationMessage()
-{
-  // .kodi_migration_complete will be created from the installer/packaging
-  // once an old XBMC configuration was moved to the new Kodi location
-  // if this is the case show the migration info to the user once which
-  // tells him to have a look into the wiki where the move of configuration
-  // is further explained.
-  if (CFile::Exists("special://home/.kodi_data_was_migrated") &&
-      !CFile::Exists("special://home/.kodi_migration_info_shown"))
-  {
-    HELPERS::ShowOKDialogText(CVariant{24128}, CVariant{24129});
-    CFile tmpFile;
-    // create the file which will prevent this dialog from appearing in the future
-    tmpFile.OpenForWrite("special://home/.kodi_migration_info_shown");
-    tmpFile.Close();
-  }
-}
-
 void CApplication::ConfigureAndEnableAddons()
 {
   std::vector<std::shared_ptr<IAddon>>
@@ -3145,16 +3107,6 @@ void CApplication::ProcessSlow()
 
   CServiceBroker::GetPowerManager().ProcessEvents();
 
-#if defined(TARGET_DARWIN_OSX) && defined(SDL_FOUND)
-  // There is an issue on OS X that several system services ask the cursor to become visible
-  // during their startup routines.  Given that we can't control this, we hack it in by
-  // forcing the
-  if (CServiceBroker::GetWinSystem()->IsFullScreen())
-  { // SDL thinks it's hidden
-    Cocoa_HideMouse();
-  }
-#endif
-
   // Temporarily pause pausable jobs when viewing video/picture
   int currentWindow = CServiceBroker::GetGUI()->GetWindowManager().GetActiveWindow();
   if (CurrentFileItem().IsVideo() ||
@@ -3213,7 +3165,7 @@ void CApplication::ProcessSlow()
 
   CServiceBroker::GetGUI()->GetTextureManager().FreeUnusedTextures(5000);
 
-#ifdef HAS_DVD_DRIVE
+#ifdef HAS_OPTICAL_DRIVE
   // checks whats in the DVD drive and tries to autostart the content (xbox games, dvd, cdda, avi files...)
   if (!appPlayer->IsPlayingVideo())
     m_Autorun->HandleAutorun();

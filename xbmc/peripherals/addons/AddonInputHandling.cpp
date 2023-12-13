@@ -20,6 +20,8 @@
 #include "peripherals/addons/AddonButtonMap.h"
 #include "utils/log.h"
 
+#include <memory>
+
 using namespace KODI;
 using namespace JOYSTICK;
 using namespace PERIPHERALS;
@@ -35,16 +37,16 @@ CAddonInputHandling::CAddonInputHandling(CPeripherals& manager,
   {
     CLog::Log(LOGDEBUG, "Failed to locate add-on for \"{}\"", peripheral->DeviceName());
   }
-  else
+  else if (!handler->ControllerID().empty())
   {
-    m_buttonMap.reset(new CAddonButtonMap(peripheral, addon, handler->ControllerID()));
+    m_buttonMap = std::make_unique<CAddonButtonMap>(peripheral, addon, handler->ControllerID());
     if (m_buttonMap->Load())
     {
-      m_driverHandler.reset(new CInputHandling(handler, m_buttonMap.get()));
+      m_driverHandler = std::make_unique<CInputHandling>(handler, m_buttonMap.get());
 
       if (receiver)
       {
-        m_inputReceiver.reset(new CDriverReceiving(receiver, m_buttonMap.get()));
+        m_inputReceiver = std::make_unique<CDriverReceiving>(receiver, m_buttonMap.get());
 
         // Interfaces are connected here because they share button map as a common resource
         handler->SetInputReceiver(m_inputReceiver.get());
@@ -67,12 +69,13 @@ CAddonInputHandling::CAddonInputHandling(CPeripherals& manager,
   {
     CLog::Log(LOGDEBUG, "Failed to locate add-on for \"{}\"", peripheral->DeviceName());
   }
-  else
+  else if (!handler->ControllerID().empty())
   {
-    m_buttonMap.reset(new CAddonButtonMap(peripheral, addon, handler->ControllerID()));
+    m_buttonMap = std::make_unique<CAddonButtonMap>(peripheral, addon, handler->ControllerID());
     if (m_buttonMap->Load())
     {
-      m_keyboardHandler.reset(new KEYBOARD::CKeyboardInputHandling(handler, m_buttonMap.get()));
+      m_keyboardHandler =
+          std::make_unique<KEYBOARD::CKeyboardInputHandling>(handler, m_buttonMap.get());
     }
     else
     {
@@ -91,12 +94,12 @@ CAddonInputHandling::CAddonInputHandling(CPeripherals& manager,
   {
     CLog::Log(LOGDEBUG, "Failed to locate add-on for \"{}\"", peripheral->DeviceName());
   }
-  else
+  else if (!handler->ControllerID().empty())
   {
-    m_buttonMap.reset(new CAddonButtonMap(peripheral, addon, handler->ControllerID()));
+    m_buttonMap = std::make_unique<CAddonButtonMap>(peripheral, addon, handler->ControllerID());
     if (m_buttonMap->Load())
     {
-      m_mouseHandler.reset(new MOUSE::CMouseInputHandling(handler, m_buttonMap.get()));
+      m_mouseHandler = std::make_unique<MOUSE::CMouseInputHandling>(handler, m_buttonMap.get());
     }
     else
     {

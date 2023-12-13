@@ -12,6 +12,7 @@
 #include "WinSystemWayland.h"
 
 #include <wayland-webos-protocols.hpp>
+#include <webos-helpers/libhelpers.h>
 
 namespace KODI::WINDOWING::WAYLAND
 {
@@ -39,12 +40,21 @@ public:
    */
   bool SetExportedWindow(CRect orig, CRect src, CRect dest);
 
+  bool SupportsExportedWindow();
+
   IShellSurface* CreateShellSurface(const std::string& name) override;
   bool CreateNewWindow(const std::string& name, bool fullScreen, RESOLUTION_INFO& res) override;
   ~CWinSystemWaylandWebOS() noexcept override;
   bool HasCursor() override;
+  void OnConfigure(std::uint32_t serial, CSizeInt size, IShellSurface::StateBitset state) override;
+
+protected:
+  std::unique_ptr<KODI::WINDOWING::IOSScreenSaver> GetOSScreenSaverImpl() override;
 
 private:
+  static bool OnAppLifecycleEventWrapper(LSHandle* sh, LSMessage* reply, void* ctx);
+  bool OnAppLifecycleEvent(LSHandle* sh, LSMessage* reply);
+
   std::unique_ptr<CRegistry> m_webosRegistry;
 
   // WebOS foreign surface
@@ -52,6 +62,11 @@ private:
   wayland::compositor_t m_compositor;
   wayland::webos_exported_t m_exportedSurface;
   wayland::webos_foreign_t m_webosForeign;
+
+  std::unique_ptr<HContext, int (*)(HContext*)> m_requestContext{new HContext(),
+                                                                 HUnregisterServiceCallback};
+
+  bool m_resumePlayback{false};
 };
 
 } // namespace KODI::WINDOWING::WAYLAND

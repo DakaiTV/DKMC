@@ -3,16 +3,6 @@ if(X_FOUND)
 else()
   set(USE_X11 0)
 endif()
-if(OPENGL_FOUND)
-  set(USE_OPENGL 1)
-else()
-  set(USE_OPENGL 0)
-endif()
-if(OPENGLES_FOUND)
-  set(USE_OPENGLES 1)
-else()
-  set(USE_OPENGLES 0)
-endif()
 
 # CMake config
 set(APP_BINARY ${APP_NAME_LC}${APP_BINARY_SUFFIX})
@@ -23,7 +13,7 @@ set(APP_INCLUDE_DIR ${includedir}/${APP_NAME_LC})
 
 # Set XBMC_STANDALONE_SH_PULSE so we can insert PulseAudio block into kodi-standalone
 if(EXISTS ${CMAKE_SOURCE_DIR}/tools/Linux/kodi-standalone.sh.pulse)
-  if(ENABLE_PULSEAUDIO AND PULSEAUDIO_FOUND)
+  if(ENABLE_PULSEAUDIO AND TARGET PulseAudio::PulseAudio)
     file(READ "${CMAKE_SOURCE_DIR}/tools/Linux/kodi-standalone.sh.pulse" pulse_content)
     set(XBMC_STANDALONE_SH_PULSE ${pulse_content})
   endif()
@@ -38,6 +28,10 @@ configure_file(${CMAKE_SOURCE_DIR}/tools/Linux/kodi-standalone.sh.in
 # Configure cmake files
 configure_file(${CMAKE_SOURCE_DIR}/cmake/KodiConfig.cmake.in
                ${CORE_BUILD_DIR}/scripts/${APP_NAME}Config.cmake @ONLY)
+
+# Configure gbm session entry
+configure_file(${CMAKE_SOURCE_DIR}/tools/Linux/kodi-gbm-session.desktop.in
+               ${CORE_BUILD_DIR}/${APP_NAME_LC}-gbm-session.desktop @ONLY)
 
 # Configure xsession entry
 configure_file(${CMAKE_SOURCE_DIR}/tools/Linux/kodi-xsession.desktop.in
@@ -55,7 +49,7 @@ configure_file(${CMAKE_SOURCE_DIR}/tools/Linux/kodi.metainfo.xml.in
 install(TARGETS ${APP_NAME_LC}
         DESTINATION ${libdir}/${APP_NAME_LC}
         COMPONENT kodi-bin)
-if(X_FOUND AND XRANDR_FOUND)
+if(TARGET X::X AND TARGET XRandR::XRandR)
   install(TARGETS ${APP_NAME_LC}-xrandr
           DESTINATION ${libdir}/${APP_NAME_LC}
           COMPONENT kodi-bin)
@@ -84,6 +78,12 @@ foreach(file ${install_data})
           DESTINATION ${datarootdir}/${APP_NAME_LC}/${dir}
           COMPONENT kodi)
 endforeach()
+
+# Install gbm session entry
+install(FILES ${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR}/${APP_NAME_LC}-gbm-session.desktop
+        RENAME ${APP_NAME_LC}-gbm.desktop
+        DESTINATION ${datarootdir}/wayland-sessions
+        COMPONENT kodi)
 
 # Install xsession entry
 install(FILES ${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR}/${APP_NAME_LC}-xsession.desktop
@@ -178,7 +178,7 @@ install(FILES ${CMAKE_SOURCE_DIR}/cmake/scripts/common/AddonHelpers.cmake
               ${CMAKE_SOURCE_DIR}/cmake/scripts/common/ArchSetup.cmake
               ${CMAKE_SOURCE_DIR}/cmake/scripts/common/CheckCommits.cmake
               ${CMAKE_SOURCE_DIR}/cmake/scripts/common/CheckTargetPlatform.cmake
-              ${CMAKE_SOURCE_DIR}/cmake/scripts/common/GenerateVersionedFiles.cmake
+              ${CMAKE_SOURCE_DIR}/cmake/scripts/common/GenerateCompileInfo.cmake
               ${CMAKE_SOURCE_DIR}/cmake/scripts/common/GeneratorSetup.cmake
               ${CMAKE_SOURCE_DIR}/cmake/scripts/common/HandleDepends.cmake
               ${CMAKE_SOURCE_DIR}/cmake/scripts/common/Macros.cmake
@@ -194,6 +194,7 @@ install(FILES ${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR}/scripts/${APP_NAME}Config.cm
         COMPONENT kodi-addon-dev)
 
 if(ENABLE_EVENTCLIENTS)
+  find_package(PythonInterpreter REQUIRED)
   execute_process(COMMAND ${PYTHON_EXECUTABLE} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(prefix=''))"
                   OUTPUT_VARIABLE PYTHON_LIB_PATH OUTPUT_STRIP_TRAILING_WHITESPACE)
   # Install kodi-eventclients-common BT python files
@@ -270,7 +271,7 @@ if(ENABLE_EVENTCLIENTS)
           DESTINATION ${bindir}
           COMPONENT kodi-eventclients-ps3)
 
-  if(BLUETOOTH_FOUND AND CWIID_FOUND AND GLU_FOUND)
+  if(TARGET Bluetooth::Bluetooth AND CWIID_FOUND AND GLU_FOUND)
     # Install kodi-eventclients-wiiremote
     install(PROGRAMS ${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR}/WiiRemote/${APP_NAME_LC}-wiiremote
             DESTINATION ${bindir}

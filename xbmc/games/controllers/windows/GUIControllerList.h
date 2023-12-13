@@ -26,6 +26,9 @@ namespace GAME
 {
 class CGUIControllerWindow;
 
+/*!
+ * \ingroup games
+ */
 class CGUIControllerList : public IControllerList
 {
 public:
@@ -63,12 +66,12 @@ private:
   // GUI stuff
   CGUIWindow* const m_guiWindow;
   IFeatureList* const m_featureList;
-  CGUIControlGroupList* m_controllerList;
-  CGUIButtonControl* m_controllerButton;
+  CGUIControlGroupList* m_controllerList = nullptr;
+  CGUIButtonControl* m_controllerButton = nullptr;
 
   // Game stuff
   ControllerVector m_controllers;
-  int m_focusedController;
+  int m_focusedController = -1; // Initially unfocused
   GameClientPtr m_gameClient;
   std::string m_controllerId;
 };

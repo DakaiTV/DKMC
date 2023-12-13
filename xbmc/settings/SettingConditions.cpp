@@ -110,6 +110,22 @@ bool HasSystemSdrPeakLuminance(const std::string& condition,
   return CServiceBroker::GetWinSystem()->HasSystemSdrPeakLuminance();
 }
 
+bool SupportsVideoSuperResolution(const std::string& condition,
+                                  const std::string& value,
+                                  const SettingConstPtr& setting,
+                                  void* data)
+{
+  return CServiceBroker::GetWinSystem()->SupportsVideoSuperResolution();
+}
+
+bool SupportsDolbyVision(const std::string& condition,
+                         const std::string& value,
+                         const SettingConstPtr& setting,
+                         void* data)
+{
+  return CServiceBroker::GetWinSystem()->GetDisplayHDRCapabilities().SupportsDolbyVision();
+}
+
 bool SupportsScreenMove(const std::string& condition,
                         const std::string& value,
                         const SettingConstPtr& setting,
@@ -443,8 +459,12 @@ void CSettingConditions::Initialize()
   m_simpleConditions.emplace("has_cdda_ripper");
 #endif
 
-#ifdef HAS_DVD_DRIVE
-  m_simpleConditions.emplace("has_dvd_drive");
+#ifdef HAS_OPTICAL_DRIVE
+  m_simpleConditions.emplace("has_optical_drive");
+#endif
+
+#ifdef HAS_XBMCHELPER
+  m_simpleConditions.emplace("has_xbmchelper");
 #endif
 
   // add complex conditions
@@ -457,6 +477,8 @@ void CSettingConditions::Initialize()
   m_complexConditions.emplace("haspowerofffeature", HasPowerOffFeature);
   m_complexConditions.emplace("hassystemsdrpeakluminance", HasSystemSdrPeakLuminance);
   m_complexConditions.emplace("supportsscreenmove", SupportsScreenMove);
+  m_complexConditions.emplace("supportsvideosuperresolution", SupportsVideoSuperResolution);
+  m_complexConditions.emplace("supportsdolbyvision", SupportsDolbyVision);
   m_complexConditions.emplace("ishdrdisplay", IsHDRDisplay);
   m_complexConditions.emplace("ismasteruser", IsMasterUser);
   m_complexConditions.emplace("hassubtitlesfontextensions", HasSubtitlesFontExtensions);

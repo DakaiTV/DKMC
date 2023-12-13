@@ -129,11 +129,10 @@ bool CGUIPVRChannelGroupsSelector::SelectChannelGroup(const std::shared_ptr<CPVR
   return false;
 }
 
-CGUIWindowPVRBase::CGUIWindowPVRBase(bool bRadio, int id, const std::string& xmlFile) :
-  CGUIMediaWindow(id, xmlFile.c_str()),
-  m_bRadio(bRadio),
-  m_channelGroupsSelector(new CGUIPVRChannelGroupsSelector),
-  m_progressHandle(nullptr)
+CGUIWindowPVRBase::CGUIWindowPVRBase(bool bRadio, int id, const std::string& xmlFile)
+  : CGUIMediaWindow(id, xmlFile.c_str()),
+    m_bRadio(bRadio),
+    m_channelGroupsSelector(new CGUIPVRChannelGroupsSelector)
 {
   // prevent removable drives to appear in directory listing (base class default behavior).
   m_rootDir.AllowNonLocalSources(false);
@@ -215,7 +214,7 @@ bool CGUIWindowPVRBase::OnAction(const CAction& action)
 
 bool CGUIWindowPVRBase::ActivatePreviousChannelGroup()
 {
-  const std::shared_ptr<CPVRChannelGroup> channelGroup = GetChannelGroup();
+  const std::shared_ptr<const CPVRChannelGroup> channelGroup = GetChannelGroup();
   if (channelGroup)
   {
     const CPVRChannelGroups* groups = CServiceBroker::GetPVRManager().ChannelGroups()->Get(channelGroup->IsRadio());
@@ -230,7 +229,7 @@ bool CGUIWindowPVRBase::ActivatePreviousChannelGroup()
 
 bool CGUIWindowPVRBase::ActivateNextChannelGroup()
 {
-  const std::shared_ptr<CPVRChannelGroup> channelGroup = GetChannelGroup();
+  const std::shared_ptr<const CPVRChannelGroup> channelGroup = GetChannelGroup();
   if (channelGroup)
   {
     const CPVRChannelGroups* groups = CServiceBroker::GetPVRManager().ChannelGroups()->Get(channelGroup->IsRadio());
@@ -247,7 +246,7 @@ void CGUIWindowPVRBase::ClearData()
 {
   std::unique_lock<CCriticalSection> lock(m_critSection);
   m_channelGroup.reset();
-  m_channelGroupsSelector.reset(new CGUIPVRChannelGroupsSelector);
+  m_channelGroupsSelector = std::make_unique<CGUIPVRChannelGroupsSelector>();
 }
 
 void CGUIWindowPVRBase::OnInitWindow()
@@ -353,6 +352,16 @@ bool CGUIWindowPVRBase::OnMessage(CGUIMessage& message)
           bReturn = true;
           break;
         }
+        case GUI_MSG_UPDATE:
+        {
+          if (IsActive() && m_bUpdating)
+          {
+            // no concurrent updates
+            CLog::LogF(LOGWARNING, "GUI_MSG_UPDATE: Updating in progress");
+            bReturn = true;
+          }
+          break;
+        }
       }
       break;
     }
@@ -406,7 +415,7 @@ bool CGUIWindowPVRBase::OpenChannelGroupSelectionDialog()
     std::string selectedName;
     std::string selectedClient;
 
-    const std::shared_ptr<CPVRChannelGroup> channelGroup = GetChannelGroup();
+    const std::shared_ptr<const CPVRChannelGroup> channelGroup = GetChannelGroup();
     if (channelGroup)
     {
       selectedName = channelGroup->GroupName();
@@ -421,7 +430,7 @@ bool CGUIWindowPVRBase::OpenChannelGroupSelectionDialog()
     for (auto& group : options)
     {
       // set client name as label2
-      const std::shared_ptr<CPVRClient> client = pvrMgr.GetClient(*group);
+      const std::shared_ptr<const CPVRClient> client = pvrMgr.GetClient(*group);
       if (client)
         group->SetLabel2(client->GetFriendlyName());
 
@@ -445,7 +454,7 @@ bool CGUIWindowPVRBase::OpenChannelGroupSelectionDialog()
   }
   else
   {
-    const std::shared_ptr<CPVRChannelGroup> channelGroup = GetChannelGroup();
+    const std::shared_ptr<const CPVRChannelGroup> channelGroup = GetChannelGroup();
     if (channelGroup)
     {
       int idx = -1;
@@ -554,6 +563,7 @@ bool CGUIWindowPVRBase::Update(const std::string& strDirectory, bool updateFilte
   if (m_bUpdating)
   {
     // no concurrent updates
+    CLog::LogF(LOGWARNING, "Updating in progress");
     return false;
   }
 

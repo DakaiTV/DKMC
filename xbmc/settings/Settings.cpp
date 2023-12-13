@@ -26,7 +26,7 @@
 #endif // defined(TARGET_POSIX)
 #include "network/upnp/UPnPSettings.h"
 #include "network/WakeOnAccess.h"
-#if defined(TARGET_DARWIN_OSX)
+#if defined(TARGET_DARWIN_OSX) and defined(HAS_XBMCHELPER)
 #include "platform/darwin/osx/XBMCHelper.h"
 #endif // defined(TARGET_DARWIN_OSX)
 #if defined(TARGET_DARWIN_TVOS)
@@ -43,6 +43,7 @@
 #include "settings/DisplaySettings.h"
 #include "settings/MediaSettings.h"
 #include "settings/MediaSourceSettings.h"
+#include "settings/ServicesSettings.h"
 #include "settings/SettingConditions.h"
 #include "settings/SettingsComponent.h"
 #include "settings/SkinSettings.h"
@@ -394,7 +395,7 @@ void CSettings::InitializeDefaults()
 void CSettings::InitializeOptionFillers()
 {
   // register setting option fillers
-#ifdef HAS_DVD_DRIVE
+#ifdef HAS_OPTICAL_DRIVE
   GetSettingsManager()->RegisterSettingOptionsFiller("audiocdactions", MEDIA_DETECT::CAutorun::SettingOptionAudioCdActionsFiller);
 #endif
   GetSettingsManager()->RegisterSettingOptionsFiller("charsets", CCharsetConverter::SettingOptionsCharsetsFiller);
@@ -436,6 +437,16 @@ void CSettings::InitializeOptionFillers()
   GetSettingsManager()->RegisterSettingOptionsFiller("timezones", CPosixTimezone::SettingOptionsTimezonesFiller);
 #endif
   GetSettingsManager()->RegisterSettingOptionsFiller("keyboardlayouts", CKeyboardLayoutManager::SettingOptionsKeyboardLayoutsFiller);
+  GetSettingsManager()->RegisterSettingOptionsFiller(
+      "filechunksizes", CServicesSettings::SettingOptionsChunkSizesFiller);
+  GetSettingsManager()->RegisterSettingOptionsFiller(
+      "filecachebuffermodes", CServicesSettings::SettingOptionsBufferModesFiller);
+  GetSettingsManager()->RegisterSettingOptionsFiller(
+      "filecachememorysizes", CServicesSettings::SettingOptionsMemorySizesFiller);
+  GetSettingsManager()->RegisterSettingOptionsFiller(
+      "filecachereadfactors", CServicesSettings::SettingOptionsReadFactorsFiller);
+  GetSettingsManager()->RegisterSettingOptionsFiller(
+      "filecachechunksizes", CServicesSettings::SettingOptionsCacheChunkSizesFiller);
 }
 
 void CSettings::UninitializeOptionFillers()
@@ -482,6 +493,11 @@ void CSettings::UninitializeOptionFillers()
 #endif // defined(TARGET_LINUX)
   GetSettingsManager()->UnregisterSettingOptionsFiller("verticalsyncs");
   GetSettingsManager()->UnregisterSettingOptionsFiller("keyboardlayouts");
+  GetSettingsManager()->UnregisterSettingOptionsFiller("filechunksizes");
+  GetSettingsManager()->UnregisterSettingOptionsFiller("filecachebuffermodes");
+  GetSettingsManager()->UnregisterSettingOptionsFiller("filecachememorysizes");
+  GetSettingsManager()->UnregisterSettingOptionsFiller("filecachereadfactors");
+  GetSettingsManager()->UnregisterSettingOptionsFiller("filecachechunksizes");
 }
 
 void CSettings::InitializeConditions()
@@ -619,7 +635,7 @@ void CSettings::InitializeISettingCallbacks()
   GetSettingsManager()->RegisterCallback(&g_timezone, settingSet);
 #endif
 
-#if defined(TARGET_DARWIN_OSX)
+#if defined(TARGET_DARWIN_OSX) and defined(HAS_XBMCHELPER)
   settingSet.clear();
   settingSet.insert(CSettings::SETTING_INPUT_APPLEREMOTEMODE);
   settingSet.insert(CSettings::SETTING_INPUT_APPLEREMOTEALWAYSON);
@@ -664,7 +680,7 @@ void CSettings::UninitializeISettingCallbacks()
 #if defined(TARGET_LINUX)
   GetSettingsManager()->UnregisterCallback(&g_timezone);
 #endif // defined(TARGET_LINUX)
-#if defined(TARGET_DARWIN_OSX)
+#if defined(TARGET_DARWIN_OSX) and defined(HAS_XBMCHELPER)
   GetSettingsManager()->UnregisterCallback(&XBMCHelper::GetInstance());
 #endif
   GetSettingsManager()->UnregisterCallback(&CWakeOnAccess::GetInstance());
