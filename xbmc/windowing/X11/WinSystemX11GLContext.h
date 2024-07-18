@@ -15,6 +15,7 @@
 #include <memory>
 
 class CGLContext;
+class CVideoReferenceClock;
 
 namespace KODI
 {
@@ -46,7 +47,7 @@ public:
   bool IsExtSupported(const char* extension) const override;
 
   // videosync
-  std::unique_ptr<CVideoSync> GetVideoSync(void *clock) override;
+  std::unique_ptr<CVideoSync> GetVideoSync(CVideoReferenceClock* clock) override;
   float GetFrameLatencyAdjustment() override;
   uint64_t GetVblankTiming(uint64_t &msc, uint64_t &interval);
 
@@ -56,6 +57,10 @@ public:
   EGLSurface GetEGLSurface() const;
   EGLContext GetEGLContext() const;
   EGLConfig GetEGLConfig() const;
+
+  bool BindTextureUploadContext() override;
+  bool UnbindTextureUploadContext() override;
+  bool HasContext() override;
 
 protected:
   bool SetWindow(int width, int height, bool fullscreen, const std::string &output, int *winstate = NULL) override;

@@ -8,6 +8,8 @@
 
 #include "PlatformLinux.h"
 
+#include "ServiceBroker.h"
+#include "application/AppParams.h"
 #include "filesystem/SpecialProtocol.h"
 
 #if defined(HAS_ALSA)
@@ -51,10 +53,12 @@
 
 #include <cstdlib>
 
+#ifndef TARGET_WEBOS
 CPlatform* CPlatform::CreateInstance()
 {
   return new CPlatformLinux();
 }
+#endif
 
 bool CPlatformLinux::InitStageOne()
 {
@@ -62,20 +66,6 @@ bool CPlatformLinux::InitStageOne()
     return false;
 
   setenv("OS", "Linux", true); // for python scripts that check the OS
-
-#if defined(TARGET_WEBOS)
-  // WebOS ipks run in a chroot like environment. $HOME is set to the ipk dir and $LD_LIBRARY_PATH is lib
-  auto HOME = std::string(getenv("HOME"));
-  setenv("XDG_RUNTIME_DIR", "/tmp/xdg", 1);
-  setenv("XKB_CONFIG_ROOT", "/usr/share/X11/xkb", 1);
-  setenv("WAYLAND_DISPLAY", "wayland-0", 1);
-  setenv("PYTHONHOME", HOME.append("/lib/python3").c_str(), 1);
-  setenv("PYTHONPATH", HOME.append("/lib/python3").c_str(), 1);
-  setenv("PYTHONIOENCODING", "UTF-8", 1);
-  setenv("KODI_HOME", HOME.c_str(), 1);
-  setenv("SSL_CERT_FILE",
-         CSpecialProtocol::TranslatePath("special://xbmc/system/certs/cacert.pem").c_str(), 1);
-#endif
 
 #if defined(HAS_GLES)
 #if defined(HAVE_WAYLAND)
@@ -101,38 +91,36 @@ bool CPlatformLinux::InitStageOne()
 #endif
 #endif
 
-  CLinuxPowerSyscall::Register();
+  RegisterPowerManagement();
 
-  std::string envSink;
-  if (getenv("KODI_AE_SINK"))
-    envSink = getenv("KODI_AE_SINK");
+  std::string_view sink = CServiceBroker::GetAppParams()->GetAudioBackend();
 
-  if (StringUtils::EqualsNoCase(envSink, "ALSA"))
+  if (sink == "alsa")
   {
     OPTIONALS::ALSARegister();
   }
-  else if (StringUtils::EqualsNoCase(envSink, "PULSE"))
+  else if (sink == "pulseaudio")
   {
-    OPTIONALS::PulseAudioRegister();
+    OPTIONALS::PulseAudioRegister(true);
   }
-  else if (StringUtils::EqualsNoCase(envSink, "PIPEWIRE"))
+  else if (sink == "pipewire")
   {
     OPTIONALS::PipewireRegister();
   }
-  else if (StringUtils::EqualsNoCase(envSink, "SNDIO"))
+  else if (sink == "sndio")
   {
     OPTIONALS::SndioRegister();
   }
-  else if (StringUtils::EqualsNoCase(envSink, "ALSA+PULSE"))
+  else if (sink == "alsa+pulseaudio")
   {
     OPTIONALS::ALSARegister();
-    OPTIONALS::PulseAudioRegister();
+    OPTIONALS::PulseAudioRegister(true);
   }
   else
   {
-    if (!OPTIONALS::PipewireRegister())
+    if (!OPTIONALS::PulseAudioRegister(false))
     {
-      if (!OPTIONALS::PulseAudioRegister())
+      if (!OPTIONALS::PipewireRegister())
       {
         if (!OPTIONALS::ALSARegister())
         {
@@ -176,4 +164,9 @@ bool CPlatformLinux::IsConfigureAddonsAtStartupEnabled()
 #else
   return false;
 #endif
+}
+
+void CPlatformLinux::RegisterPowerManagement()
+{
+  CLinuxPowerSyscall::Register();
 }

@@ -25,6 +25,9 @@ namespace KODI
 {
 namespace GAME
 {
+/*!
+ * \ingroup games
+ */
 class CControllerManager
 {
 public:
@@ -71,6 +74,17 @@ public:
    * \return The installed controllers that loaded successfully
    */
   ControllerVector GetControllers();
+
+  /*!
+   * \brief Translate a feature on a controller into its localized name
+   *
+   * \param controllerId The controller ID that the feature belongs to
+   * \param featureName The feature name
+   *
+   * \return The localized feature name, or empty if the controller or feature
+   *         doesn't exist
+   */
+  std::string TranslateFeature(const std::string& controllerId, const std::string& featureName);
 
 private:
   // Add-on event handler

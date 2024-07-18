@@ -72,7 +72,7 @@ public:
   void ReleaseBuffer(int idx) override;
   void RenderUpdate(int index, int index2, bool clear, unsigned int flags, unsigned int alpha) override;
   void Update() override;
-  bool RenderCapture(CRenderCapture* capture) override;
+  bool RenderCapture(int index, CRenderCapture* capture) override;
   CRenderInfo GetRenderInfo() override;
   bool ConfigChanged(const VideoPicture &picture) override;
 
@@ -87,6 +87,7 @@ protected:
 
   bool Render(unsigned int flags, int renderBuffer);
   void ClearBackBuffer();
+  void ClearBackBufferQuad();
   void DrawBlackBars();
 
   bool ValidateRenderer();
@@ -145,6 +146,10 @@ protected:
     CFrameBufferObject fbo;
     float width, height;
   } m_fbo;
+
+  GLint m_intermediateFormat{GL_RGBA8};
+  GLint m_intermediateType{GL_UNSIGNED_BYTE};
+  bool m_intermediateGammaCorrection{false};
 
   int m_iYV12RenderBuffer = 0;
   int m_NumYV12Buffers = 0;

@@ -20,6 +20,7 @@
 #include "cores/DataCacheCore.h"
 #include "cores/VideoPlayer/Process/ProcessInfo.h"
 #include "messaging/ApplicationMessenger.h"
+#include "music/MusicFileItemClassify.h"
 #include "music/tags/MusicInfoTag.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/Settings.h"
@@ -29,8 +30,10 @@
 #include "utils/log.h"
 #include "video/Bookmark.h"
 
+#include <memory>
 #include <mutex>
 
+using namespace KODI;
 using namespace std::chrono_literals;
 
 #define TIME_TO_CACHE_NEXT_FILE 5000 /* 5 seconds before end of song, start caching the next song */
@@ -41,20 +44,8 @@ using namespace std::chrono_literals;
 // Supporting all open  audio codec standards.
 // First one being nullsoft's nsv audio decoder format
 
-PAPlayer::PAPlayer(IPlayerCallback& callback) :
-  IPlayer(callback),
-  CThread("PAPlayer"),
-  m_signalSpeedChange(false),
-  m_playbackSpeed(1    ),
-  m_isPlaying(false),
-  m_isPaused(false),
-  m_isFinished(false),
-  m_defaultCrossfadeMS (0),
-  m_upcomingCrossfadeMS(0),
-  m_audioCallback(NULL ),
-  m_jobCounter(0),
-  m_newForcedPlayerTime(-1),
-  m_newForcedTotalTime (-1)
+PAPlayer::PAPlayer(IPlayerCallback& callback)
+  : IPlayer(callback), CThread("PAPlayer"), m_playbackSpeed(1), m_audioCallback(NULL)
 {
   memset(&m_playerGUIData, 0, sizeof(m_playerGUIData));
   m_processInfo.reset(CProcessInfo::CreateInstance());
@@ -225,7 +216,7 @@ bool PAPlayer::OpenFile(const CFileItem& file, const CPlayerOptions &options)
     std::unique_lock<CCriticalSection> lock(m_streamsLock);
     m_jobCounter++;
   }
-  CServiceBroker::GetJobManager()->Submit([=]() { QueueNextFileEx(file, false); }, this,
+  CServiceBroker::GetJobManager()->Submit([=, this]() { QueueNextFileEx(file, false); }, this,
                                           CJob::PRIORITY_NORMAL);
 
   std::unique_lock<CCriticalSection> lock(m_streamsLock);
@@ -259,8 +250,8 @@ bool PAPlayer::OpenFile(const CFileItem& file, const CPlayerOptions &options)
 void PAPlayer::UpdateCrossfadeTime(const CFileItem& file)
 {
   // we explicitly disable crossfading for audio cds
-  if (file.IsCDDA())
-   m_upcomingCrossfadeMS = 0;
+  if (MUSIC::IsCDDA(file))
+    m_upcomingCrossfadeMS = 0;
   else
     m_upcomingCrossfadeMS = m_defaultCrossfadeMS = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_MUSICPLAYER_CROSSFADE) * 1000;
 
@@ -308,7 +299,7 @@ bool PAPlayer::QueueNextFileEx(const CFileItem &file, bool fadeIn)
         file.GetStartOffset() == m_currentStream->m_fileItem->GetEndOffset() && m_currentStream &&
         m_currentStream->m_prepareTriggered)
     {
-      m_currentStream->m_nextFileItem.reset(new CFileItem(file));
+      m_currentStream->m_nextFileItem = std::make_unique<CFileItem>(file);
       m_upcomingCrossfadeMS = 0;
       return true;
     }
@@ -411,7 +402,7 @@ bool PAPlayer::QueueNextFileEx(const CFileItem &file, bool fadeIn)
 
   si->m_prepareNextAtFrame = 0;
   // cd drives don't really like it to be crossfaded or prepared
-  if (!file.IsCDDA())
+  if (!MUSIC::IsCDDA(file))
   {
     if (streamTotalTime >= TIME_TO_CACHE_NEXT_FILE + m_defaultCrossfadeMS)
       si->m_prepareNextAtFrame = (int)((streamTotalTime - TIME_TO_CACHE_NEXT_FILE - m_defaultCrossfadeMS) * si->m_audioFormat.m_sampleRate / 1000.0f);
@@ -554,7 +545,7 @@ bool PAPlayer::CloseFile(bool reopen)
       lock.lock();
     }
   }
-
+  CServiceBroker::GetDataCacheCore().Reset();
   return true;
 }
 
@@ -858,17 +849,8 @@ inline bool PAPlayer::ProcessStream(StreamInfo *si, double &freeBufferTime)
         free_space = (double)(si->m_stream->GetSpace() / si->m_bytesPerSample) / si->m_audioFormat.m_sampleRate;
       else
       {
-        if (si->m_audioFormat.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD &&
-            !m_processInfo->WantsRawPassthrough())
-        {
-          free_space = static_cast<double>(si->m_stream->GetSpace()) *
-                       si->m_audioFormat.m_streamInfo.GetDuration() / 1000 / 2;
-        }
-        else
-        {
-          free_space = static_cast<double>(si->m_stream->GetSpace()) *
-                       si->m_audioFormat.m_streamInfo.GetDuration() / 1000;
-        }
+        free_space = static_cast<double>(si->m_stream->GetSpace()) *
+                     si->m_audioFormat.m_streamInfo.GetDuration() / 1000;
       }
 
       freeBufferTime = std::max(freeBufferTime , free_space);
@@ -917,17 +899,9 @@ bool PAPlayer::QueueData(StreamInfo *si)
         CLog::Log(LOGERROR, "PAPlayer::QueueData - unknown error");
         return false;
       }
-      if (si->m_audioFormat.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD &&
-          !m_processInfo->WantsRawPassthrough())
-      {
-        si->m_framesSent += si->m_audioFormat.m_streamInfo.GetDuration() / 1000 / 2 *
-                            si->m_audioFormat.m_streamInfo.m_sampleRate;
-      }
-      else
-      {
-        si->m_framesSent += si->m_audioFormat.m_streamInfo.GetDuration() / 1000 *
-                            si->m_audioFormat.m_streamInfo.m_sampleRate;
-      }
+
+      si->m_framesSent += si->m_audioFormat.m_streamInfo.GetDuration() / 1000 *
+                          si->m_audioFormat.m_streamInfo.m_sampleRate;
     }
   }
 

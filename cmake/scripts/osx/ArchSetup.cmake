@@ -3,6 +3,7 @@ if(NOT CMAKE_TOOLCHAIN_FILE)
 endif()
 
 list(APPEND CORE_MAIN_SOURCE ${CMAKE_SOURCE_DIR}/xbmc/platform/darwin/osx/XBMCApplication.h)
+set(PLATFORM_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/xbmc/platform/darwin/${CORE_PLATFORM_NAME_LC}/Info.plist.in)
 
 set(ARCH_DEFINES -DTARGET_POSIX -DTARGET_DARWIN -DTARGET_DARWIN_OSX)
 list(APPEND SYSTEM_DEFINES -D_REENTRANT -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE
@@ -23,6 +24,17 @@ else()
   endif()
 endif()
 
+# xbmchelper (old apple IR remotes) only make sense for x86
+# last macs featuring the IR receiver are those of mid 2012
+# which are still able to run Mojave (10.14). Drop all together
+# when the sdk requirement is bumped.
+if(CPU STREQUAL arm64)
+  set(ENABLE_XBMCHELPER OFF)
+else()
+  set(ENABLE_XBMCHELPER ON)
+  list(APPEND SYSTEM_DEFINES -DHAS_XBMCHELPER)
+endif()
+
 # m1 macs can execute x86_64 code via rosetta
 if(CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "arm64" AND
    CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
@@ -33,8 +45,6 @@ set(CMAKE_OSX_ARCHITECTURES ${CPU})
 
 # Additional SYSTEM_DEFINES
 list(APPEND SYSTEM_DEFINES -DHAS_POSIX_NETWORK -DHAS_OSX_NETWORK -DHAS_ZEROCONF)
-
-list(APPEND CMAKE_SYSTEM_PREFIX_PATH ${NATIVEPREFIX})
 
 list(APPEND DEPLIBS "-framework DiskArbitration" "-framework IOKit"
                     "-framework IOSurface" "-framework SystemConfiguration"
@@ -48,7 +58,7 @@ list(APPEND DEPLIBS "-framework DiskArbitration" "-framework IOKit"
 if(ARCH STREQUAL aarch64)
   set(CMAKE_OSX_DEPLOYMENT_TARGET 11.0)
 else()
-  set(CMAKE_OSX_DEPLOYMENT_TARGET 10.13)
+  set(CMAKE_OSX_DEPLOYMENT_TARGET 10.14)
 endif()
 set(CMAKE_XCODE_ATTRIBUTE_CLANG_LINK_OBJC_RUNTIME OFF)
 

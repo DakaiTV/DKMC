@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2018 Team Kodi
+ *  Copyright (C) 2005-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -17,12 +17,22 @@
 
 class CFileItemList;
 
+namespace KODI
+{
+namespace JOYSTICK
+{
+class IButtonMap;
+} // namespace JOYSTICK
+} // namespace KODI
+
 namespace PERIPHERALS
 {
 class CPeripheral;
 class CPeripherals;
 
 /*!
+ * \ingroup peripherals
+ *
  * @class CPeripheralBus
  * This represents a bus on the system. By default, this bus instance will scan for changes every 5
  * seconds. If this bus only has to be updated after a notification sent by the system, set
@@ -56,6 +66,15 @@ public:
    * \brief Initialize the properties of a peripheral with a known location
    */
   virtual bool InitializeProperties(CPeripheral& peripheral);
+
+  /*!
+   * \brief Initialize a joystick buttonmap, if possible
+   */
+  virtual bool InitializeButtonMap(const CPeripheral& peripheral,
+                                   KODI::JOYSTICK::IButtonMap& buttonMap) const
+  {
+    return false;
+  }
 
   /*!
    * @brief Get the instance of the peripheral at the given location.
@@ -192,7 +211,8 @@ protected:
 
   PeripheralVector m_peripherals;
   std::chrono::milliseconds m_iRescanTime;
-  bool m_bNeedsPolling; /*!< true when this bus needs to be polled for new devices, false when it
+  bool m_bNeedsPolling =
+      true; /*!< true when this bus needs to be polled for new devices, false when it
                            uses callbacks to notify this bus of changed */
   CPeripherals& m_manager;
   const PeripheralBusType m_type;

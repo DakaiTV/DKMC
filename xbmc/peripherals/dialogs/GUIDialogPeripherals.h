@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2017-2018 Team Kodi
+ *  Copyright (C) 2017-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -9,6 +9,7 @@
 #pragma once
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "dialogs/GUIDialogSelect.h"
 #include "threads/CriticalSection.h"
 #include "utils/Observer.h"
@@ -17,6 +18,9 @@ namespace PERIPHERALS
 {
 class CPeripherals;
 
+/*!
+ * \ingroup peripherals
+ */
 class CGUIDialogPeripherals : public CGUIDialogSelect, protected Observer
 {
 public:
@@ -40,7 +44,6 @@ private:
   // implementation of CGUIWindow via CGUIDialogSelect
   void OnInitWindow() override;
 
-  void ShowInternal();
   void UpdatePeripheralsAsync();
   void UpdatePeripheralsSync();
 

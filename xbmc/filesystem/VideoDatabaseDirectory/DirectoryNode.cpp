@@ -24,6 +24,7 @@
 #include "DirectoryNodeTitleTvShows.h"
 #include "DirectoryNodeTvShowsOverview.h"
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "QueryParams.h"
 #include "URL.h"
 #include "utils/StringUtils.h"
@@ -99,6 +100,7 @@ CDirectoryNode* CDirectoryNode::CreateNode(NODE_TYPE Type, const std::string& st
   case NODE_TYPE_COUNTRY:
   case NODE_TYPE_SETS:
   case NODE_TYPE_TAGS:
+  case NODE_TYPE_VIDEOVERSIONS:
   case NODE_TYPE_YEAR:
   case NODE_TYPE_ACTOR:
   case NODE_TYPE_DIRECTOR:

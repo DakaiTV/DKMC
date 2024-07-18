@@ -3,42 +3,33 @@
 # -----------
 # Finds the POSIX 1003.1e capabilities library
 #
-# This will define the following variables::
+# This will define the following target:
 #
-# CAP_FOUND - system has LibCap
-# CAP_INCLUDE_DIRS - the LibCap include directory
-# CAP_LIBRARIES - the LibCap libraries
-#
-# and the following imported targets::
-#
-# CAP::CAP - The LibCap library
+# ${APP_NAME_LC}::CAP - The LibCap library
 
-if(PKG_CONFIG_FOUND)
-  pkg_check_modules(PC_CAP libcap QUIET)
-endif()
+if(NOT TARGET ${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME})
+  find_package(PkgConfig)
+  if(PKG_CONFIG_FOUND)
+    pkg_check_modules(PC_CAP libcap QUIET)
+  endif()
 
-find_path(CAP_INCLUDE_DIR NAMES sys/capability.h
-                          PATHS ${PC_CAP_INCLUDEDIR})
-find_library(CAP_LIBRARY NAMES cap libcap
-                         PATHS ${PC_CAP_LIBDIR})
+  find_path(CAP_INCLUDE_DIR NAMES sys/capability.h
+                            HINTS ${PC_CAP_INCLUDEDIR})
+  find_library(CAP_LIBRARY NAMES cap libcap
+                           HINTS ${PC_CAP_LIBDIR})
 
-set(CAP_VERSION ${PC_CAP_VERSION})
+  set(CAP_VERSION ${PC_CAP_VERSION})
 
-include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(CAP
-                                  REQUIRED_VARS CAP_LIBRARY CAP_INCLUDE_DIR
-                                  VERSION_VAR CAP_VERSION)
+  include(FindPackageHandleStandardArgs)
+  find_package_handle_standard_args(CAP
+                                    REQUIRED_VARS CAP_LIBRARY CAP_INCLUDE_DIR
+                                    VERSION_VAR CAP_VERSION)
 
-if(CAP_FOUND)
-  set(CAP_LIBRARIES ${CAP_LIBRARY})
-  set(CAP_INCLUDE_DIRS ${CAP_INCLUDE_DIR})
-
-  if(NOT TARGET CAP::CAP)
-    add_library(CAP::CAP UNKNOWN IMPORTED)
-    set_target_properties(CAP::CAP PROPERTIES
-                                   IMPORTED_LOCATION "${CAP_LIBRARY}"
-                                   INTERFACE_INCLUDE_DIRECTORIES "${CAP_INCLUDE_DIR}")
+  if(CAP_FOUND)
+    add_library(${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME} UNKNOWN IMPORTED)
+    set_target_properties(${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME} PROPERTIES
+                                                                     IMPORTED_LOCATION "${CAP_LIBRARY}"
+                                                                     INTERFACE_INCLUDE_DIRECTORIES "${CAP_INCLUDE_DIR}"
+                                                                     INTERFACE_COMPILE_DEFINITIONS HAVE_LIBCAP)
   endif()
 endif()
-
-mark_as_advanced(CAP_INCLUDE_DIR CAP_LIBRARY)

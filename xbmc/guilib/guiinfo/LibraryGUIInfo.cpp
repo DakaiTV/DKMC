@@ -9,6 +9,7 @@
 #include "guilib/guiinfo/LibraryGUIInfo.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "URL.h"
 #include "filesystem/Directory.h"
@@ -245,7 +246,7 @@ bool CLibraryGUIInfo::GetBool(bool& value, const CGUIListItem *gitem, int contex
         {
           artistcount = db.GetArtistCountForRole(strRole);
           db.Close();
-          m_libraryRoleCounts.emplace_back(std::make_pair(strRole, artistcount));
+          m_libraryRoleCounts.emplace_back(strRole, artistcount);
         }
       }
       value = artistcount > 0;

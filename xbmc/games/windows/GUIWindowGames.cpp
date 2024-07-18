@@ -9,6 +9,7 @@
 #include "GUIWindowGames.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "GUIPassword.h"
 #include "ServiceBroker.h"
 #include "URL.h"
@@ -336,5 +337,5 @@ void CGUIWindowGames::OnItemInfo(int itemNumber)
 bool CGUIWindowGames::PlayGame(const CFileItem& item)
 {
   CFileItem itemCopy(item);
-  return g_application.PlayMedia(itemCopy, "", PLAYLIST::TYPE_NONE);
+  return g_application.PlayMedia(itemCopy, "", PLAYLIST::Id::TYPE_NONE);
 }

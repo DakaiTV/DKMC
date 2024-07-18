@@ -23,6 +23,7 @@ namespace
 {
 class CGetDirectoryItems;
 }
+class TiXmlElement;
 
 // base class for all media windows
 class CGUIMediaWindow : public CGUIWindow
@@ -75,8 +76,8 @@ protected:
   virtual bool OnSelect(int item);
   virtual bool OnPopupMenu(int iItem);
 
-  virtual void GetContextButtons(int itemNumber, CContextButtons &buttons);
-  virtual bool OnContextButton(int itemNumber, CONTEXT_BUTTON button);
+  virtual void GetContextButtons(int itemNumber, CContextButtons& buttons) {}
+  virtual bool OnContextButton(int itemNumber, CONTEXT_BUTTON button) { return false; }
   virtual bool OnAddMediaSource() { return false; }
 
   virtual void FormatItemLabels(CFileItemList &items, const LABEL_MASKS &labelMasks);
@@ -208,7 +209,7 @@ protected:
   int m_iLastControl;
   std::string m_startDirectory;
 
-  CSmartPlaylist m_filter;
+  KODI::PLAYLIST::CSmartPlaylist m_filter;
   bool m_canFilterAdvanced;
   /*! \brief Contains the path used for filtering (including any active filter)
 

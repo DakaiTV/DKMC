@@ -8,6 +8,7 @@
 
 #include "GUIFontManager.h"
 
+#include "FileItemList.h"
 #include "GUIComponent.h"
 #include "GUIFontTTF.h"
 #include "GUIWindowManager.h"
@@ -15,6 +16,7 @@
 #include "addons/FontResource.h"
 #include "addons/Skin.h"
 #include "addons/addoninfo/AddonType.h"
+#include "filesystem/SpecialProtocol.h"
 #include "windowing/GraphicContext.h"
 
 #include <mutex>
@@ -42,10 +44,7 @@
 #include <algorithm>
 #include <set>
 
-#ifdef TARGET_POSIX
-#include "filesystem/SpecialProtocol.h"
-#endif
-
+using namespace XFILE;
 using namespace ADDON;
 
 namespace
@@ -128,8 +127,8 @@ static bool CheckFont(std::string& strPath, const std::string& newPath, const st
 
 CGUIFont* GUIFontManager::LoadTTF(const std::string& strFontName,
                                   const std::string& strFilename,
-                                  UTILS::COLOR::Color textColor,
-                                  UTILS::COLOR::Color shadowColor,
+                                  KODI::UTILS::COLOR::Color textColor,
+                                  KODI::UTILS::COLOR::Color shadowColor,
                                   const int iSize,
                                   const int iStyle,
                                   bool border,
@@ -395,7 +394,7 @@ CGUIFont* GUIFontManager::GetDefaultFont(bool border)
     { // create it
       const auto& font13 = m_vecFonts[font13index];
       OrigFontInfo fontInfo = m_vecFontInfo[font13index];
-      font13border = LoadTTF("__defaultborder__", fontInfo.fileName, UTILS::COLOR::BLACK, 0,
+      font13border = LoadTTF("__defaultborder__", fontInfo.fileName, KODI::UTILS::COLOR::BLACK, 0,
                              fontInfo.size, font13->GetStyle(), true, 1.0f, fontInfo.aspect,
                              &fontInfo.sourceRes, fontInfo.preserveAspect);
     }
@@ -420,50 +419,69 @@ void GUIFontManager::Clear()
 #endif
 }
 
+bool GUIFontManager::LoadFontsFromFile(const std::string& fontsetFilePath,
+                                       const std::string& fontSet,
+                                       std::string& firstFontset)
+{
+  CXBMCTinyXML xmlDoc;
+  if (LoadXMLData(fontsetFilePath, xmlDoc))
+  {
+    TiXmlElement* rootElement = xmlDoc.RootElement();
+    g_SkinInfo->ResolveIncludes(rootElement);
+    const TiXmlElement* fontsetElement = rootElement->FirstChildElement("fontset");
+    while (fontsetElement)
+    {
+      const char* idAttr = fontsetElement->Attribute("id");
+      if (idAttr)
+      {
+        // Take note of the first fontset available in case we can't load the fontset requested
+        if (firstFontset.empty())
+          firstFontset = idAttr;
+
+        if (StringUtils::EqualsNoCase(fontSet, idAttr))
+        {
+          // Found the requested fontset, so load the fonts and return
+          CLog::LogF(LOGINFO, "Loading <fontset> with name '{}' from '{}'", fontSet,
+                     fontsetFilePath);
+          LoadFonts(fontsetElement->FirstChild("font"));
+          return true;
+        }
+      }
+      fontsetElement = fontsetElement->NextSiblingElement("fontset");
+    }
+  }
+  return false;
+}
+
 void GUIFontManager::LoadFonts(const std::string& fontSet)
 {
-  // Get the file to load fonts from:
-  const std::string filePath = g_SkinInfo->GetSkinPath("Font.xml", &m_skinResolution);
-  CLog::LogF(LOGINFO, "Loading fonts from '{}'", filePath);
-
-  CXBMCTinyXML xmlDoc;
-  if (!LoadXMLData(filePath, xmlDoc))
+  std::string firstFontset;
+  // Try to load the fontset from Font.xml
+  const std::string fontsetFilePath = g_SkinInfo->GetSkinPath("Font.xml", &m_skinResolution);
+  if (LoadFontsFromFile(fontsetFilePath, fontSet, firstFontset))
     return;
 
-  TiXmlElement* pRootElement = xmlDoc.RootElement();
-  // Resolve includes in Font.xml
-  g_SkinInfo->ResolveIncludes(pRootElement);
-  // take note of the first font available in case we can't load the one specified
-  std::string firstFont;
-  const TiXmlElement* pChild = pRootElement->FirstChildElement("fontset");
-  while (pChild)
-  {
-    const char* idAttr = pChild->Attribute("id");
-    if (idAttr)
-    {
-      if (firstFont.empty())
-        firstFont = idAttr;
+  // If we got here, then the requested fontset was not found in the skin's Font.xml file
+  // Look at additional fontsets that are defined in .xml files in the skin's fonts directory
+  CFileItemList xmlFileItems;
+  CDirectory::GetDirectory(CSpecialProtocol::TranslatePath("special://skin/fonts"), xmlFileItems,
+                           ".xml", DIR_FLAG_BYPASS_CACHE);
+  for (int i = 0; i < xmlFileItems.Size(); i++)
+    if (LoadFontsFromFile(xmlFileItems[i]->GetPath(), fontSet, firstFontset))
+      return;
 
-      if (StringUtils::EqualsNoCase(fontSet, idAttr))
-      {
-        LoadFonts(pChild->FirstChild("font"));
-        return;
-      }
-    }
-    pChild = pChild->NextSiblingElement("fontset");
-  }
-
-  // no fontset was loaded, try the first
-  if (!firstFont.empty())
+  // Requested fontset was not found, try the first
+  if (!firstFontset.empty())
   {
-    CLog::Log(LOGWARNING,
-              "GUIFontManager::{}: File doesn't have <fontset> with name '{}', defaulting to first "
-              "fontset",
-              __func__, fontSet);
-    LoadFonts(firstFont);
+    CLog::LogF(LOGWARNING,
+               "Fontset with name '{}' was not found, "
+               "defaulting to first fontset '{}' ",
+               fontSet, firstFontset);
+    LoadFonts(firstFontset);
   }
   else
-    CLog::LogF(LOGERROR, "File '{}' doesn't have a valid <fontset>", filePath);
+    CLog::LogF(LOGERROR, "No valid <fontset> found in '{}' or in xml files in fonts directory",
+               fontsetFilePath);
 }
 
 void GUIFontManager::LoadFonts(const TiXmlNode* fontNode)
@@ -475,8 +493,8 @@ void GUIFontManager::LoadFonts(const TiXmlNode* fontNode)
     int iSize = 20;
     float aspect = 1.0f;
     float lineSpacing = 1.0f;
-    UTILS::COLOR::Color shadowColor = 0;
-    UTILS::COLOR::Color textColor = 0;
+    KODI::UTILS::COLOR::Color shadowColor = 0;
+    KODI::UTILS::COLOR::Color textColor = 0;
     int iStyle = FONT_STYLE_NORMAL;
 
     XMLUtils::GetString(fontNode, "name", fontName);
@@ -490,10 +508,7 @@ void GUIFontManager::LoadFonts(const TiXmlNode* fontNode)
 
     if (!fontName.empty() && URIUtils::HasExtension(fileName, ".ttf"))
     {
-      //! @todo Why do we tolower() this shit?
-      std::string strFontFileName = fileName;
-      StringUtils::ToLower(strFontFileName);
-      LoadTTF(fontName, strFontFileName, textColor, shadowColor, iSize, iStyle, false, lineSpacing,
+      LoadTTF(fontName, fileName, textColor, shadowColor, iSize, iStyle, false, lineSpacing,
               aspect);
     }
     fontNode = fontNode->NextSibling("font");
@@ -536,11 +551,11 @@ void GUIFontManager::SettingOptionsFontsFiller(const SettingConstPtr& setting,
   CFileItemList items;
 
   // Find font files
-  XFILE::CDirectory::GetDirectory(UTILS::FONT::FONTPATH::SYSTEM, itemsRoot,
-                                  UTILS::FONT::SUPPORTED_EXTENSIONS_MASK,
+  XFILE::CDirectory::GetDirectory(KODI::UTILS::FONT::FONTPATH::SYSTEM, itemsRoot,
+                                  KODI::UTILS::FONT::SUPPORTED_EXTENSIONS_MASK,
                                   XFILE::DIR_FLAG_NO_FILE_DIRS | XFILE::DIR_FLAG_NO_FILE_INFO);
-  XFILE::CDirectory::GetDirectory(UTILS::FONT::FONTPATH::USER, items,
-                                  UTILS::FONT::SUPPORTED_EXTENSIONS_MASK,
+  XFILE::CDirectory::GetDirectory(KODI::UTILS::FONT::FONTPATH::USER, items,
+                                  KODI::UTILS::FONT::SUPPORTED_EXTENSIONS_MASK,
                                   XFILE::DIR_FLAG_NO_FILE_DIRS | XFILE::DIR_FLAG_NO_FILE_INFO);
 
   for (auto itItem = itemsRoot.rbegin(); itItem != itemsRoot.rend(); ++itItem)
@@ -563,13 +578,13 @@ void GUIFontManager::Initialize()
 
 void GUIFontManager::LoadUserFonts()
 {
-  if (!XFILE::CDirectory::Exists(UTILS::FONT::FONTPATH::USER))
+  if (!XFILE::CDirectory::Exists(KODI::UTILS::FONT::FONTPATH::USER))
     return;
 
   CLog::LogF(LOGDEBUG, "Updating user fonts cache...");
   CXBMCTinyXML xmlDoc;
   std::string userFontCacheFilepath =
-      URIUtils::AddFileToFolder(UTILS::FONT::FONTPATH::USER, XML_FONTCACHE_FILENAME);
+      URIUtils::AddFileToFolder(KODI::UTILS::FONT::FONTPATH::USER, XML_FONTCACHE_FILENAME);
   if (LoadXMLData(userFontCacheFilepath, xmlDoc))
   {
     // Load in cache the fonts metadata previously stored in the XML
@@ -580,10 +595,16 @@ void GUIFontManager::LoadUserFonts()
       while (fontNode)
       {
         std::string filename;
-        std::string familyName;
         XMLUtils::GetString(fontNode, "filename", filename);
-        XMLUtils::GetString(fontNode, "familyname", familyName);
-        m_userFontsCache.emplace_back(filename, familyName);
+
+        std::set<std::string> familyNames;
+        for (const TiXmlElement* fnChildNode = fontNode->FirstChildElement("familyname");
+             fnChildNode; fnChildNode = fnChildNode->NextSiblingElement("familyname"))
+        {
+          familyNames.emplace(fnChildNode->GetText());
+        }
+
+        m_userFontsCache.emplace_back(filename, familyNames);
         fontNode = fontNode->NextSibling("font");
       }
     }
@@ -593,8 +614,8 @@ void GUIFontManager::LoadUserFonts()
   size_t previousCacheSize = m_userFontsCache.size();
   CFileItemList dirItems;
   // Get the current files list from user fonts folder
-  XFILE::CDirectory::GetDirectory(UTILS::FONT::FONTPATH::USER, dirItems,
-                                  UTILS::FONT::SUPPORTED_EXTENSIONS_MASK,
+  XFILE::CDirectory::GetDirectory(KODI::UTILS::FONT::FONTPATH::USER, dirItems,
+                                  KODI::UTILS::FONT::SUPPORTED_EXTENSIONS_MASK,
                                   XFILE::DIR_FLAG_NO_FILE_DIRS | XFILE::DIR_FLAG_NO_FILE_INFO);
   dirItems.SetFastLookup(true);
 
@@ -602,7 +623,7 @@ void GUIFontManager::LoadUserFonts()
   auto it = m_userFontsCache.begin();
   while (it != m_userFontsCache.end())
   {
-    const std::string filePath = UTILS::FONT::FONTPATH::USER + (*it).m_filename;
+    const std::string filePath = KODI::UTILS::FONT::FONTPATH::USER + (*it).m_filename;
     if (!dirItems.Contains(filePath))
     {
       it = m_userFontsCache.erase(it);
@@ -628,10 +649,10 @@ void GUIFontManager::LoadUserFonts()
     if (item->m_bIsFolder)
       continue;
 
-    std::string familyName = UTILS::FONT::GetFontFamily(filepath);
-    if (!familyName.empty())
+    std::set<std::string> familyNames;
+    if (KODI::UTILS::FONT::GetFontFamilyNames(filepath, familyNames))
     {
-      m_userFontsCache.emplace_back(item->GetLabel(), familyName);
+      m_userFontsCache.emplace_back(item->GetLabel(), familyNames);
     }
   }
   isCacheChanged = isCacheChanged || previousCacheSize != m_userFontsCache.size();
@@ -643,22 +664,26 @@ void GUIFontManager::LoadUserFonts()
     TiXmlDeclaration decl("1.0", "UTF-8", "yes");
     xmlDoc.InsertEndChild(decl);
     TiXmlElement xmlMainElement("fonts");
+
     TiXmlNode* fontsNode = xmlDoc.InsertEndChild(xmlMainElement);
     if (fontsNode)
     {
-      for (auto& fontMetadata : m_userFontsCache)
+      for (const FontMetadata& fontMetadata : m_userFontsCache)
       {
         TiXmlElement fontElement("font");
         TiXmlNode* fontNode = fontsNode->InsertEndChild(fontElement);
         XMLUtils::SetString(fontNode, "filename", fontMetadata.m_filename);
-        XMLUtils::SetString(fontNode, "familyname", fontMetadata.m_familyName);
+        for (const std::string& familyName : fontMetadata.m_familyNames)
+        {
+          XMLUtils::SetString(fontNode, "familyname", familyName);
+        }
       }
       if (!xmlDoc.SaveFile(userFontCacheFilepath))
-        CLog::LogF(LOGERROR, "Failed to save fonts cache file '{}'", userFontCacheFilepath);
+        CLog::LogF(LOGERROR, "Failed to save fonts cache file \"{}\"", userFontCacheFilepath);
     }
     else
     {
-      CLog::LogF(LOGERROR, "Failed to create XML 'fonts' node");
+      CLog::LogF(LOGERROR, "Failed to create XML \"fonts\" node");
     }
   }
   CLog::LogF(LOGDEBUG, "Updating user fonts cache... DONE");
@@ -670,9 +695,12 @@ std::vector<std::string> GUIFontManager::GetUserFontsFamilyNames()
   // Duplicated family names can happens for example when a font have each style
   // on different files
   std::set<std::string, sortstringbyname> familyNames;
-  for (auto& fontMetadata : m_userFontsCache)
+  for (const FontMetadata& fontMetadata : m_userFontsCache)
   {
-    familyNames.insert(fontMetadata.m_familyName);
+    for (const std::string& familyName : fontMetadata.m_familyNames)
+    {
+      familyNames.insert(familyName);
+    }
   }
   return std::vector<std::string>(familyNames.begin(), familyNames.end());
 }

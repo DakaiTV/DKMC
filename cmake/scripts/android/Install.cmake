@@ -28,9 +28,6 @@ unset(APP_VERSION_CODE_LIST)
 math(EXPR APP_VERSION_CODE_ANDROID "(${major} * 100 + ${minor}) * 1000 + ${patch}")
 unset(major)
 unset(minor)
-if(ARCH STREQUAL aarch64 AND patch LESS 999)
-  math(EXPR APP_VERSION_CODE_ANDROID "${APP_VERSION_CODE_ANDROID} + 1")
-endif()
 unset(patch)
 
 set(package_files strings.xml
@@ -51,6 +48,7 @@ set(package_files strings.xml
                   src/XBMCProperties.java
                   src/XBMCVideoView.java
                   src/XBMCFile.java
+                  src/XBMCTextureCache.java
                   src/XBMCURIUtils.java
                   src/channels/SyncChannelJobService.java
                   src/channels/SyncProgramsJobService.java
@@ -66,6 +64,7 @@ set(package_files strings.xml
                   src/interfaces/XBMCMediaDrmOnEventListener.java
                   src/interfaces/XBMCDisplayManagerDisplayListener.java
                   src/interfaces/XBMCSpeechRecognitionListener.java
+		  src/interfaces/XBMCConnectivityManagerNetworkCallback.java
                   src/model/TVEpisode.java
                   src/model/Movie.java
                   src/model/TVShow.java
@@ -142,8 +141,8 @@ foreach(library IN LISTS LIBRARY_FILES)
   add_bundle_file(${library} ${libdir}/${APP_NAME_LC} ${CMAKE_BINARY_DIR})
 endforeach()
 
-if(TARGET Shairplay::Shairplay)
-  add_bundle_file(Shairplay::Shairplay ${libdir} "")
+if(TARGET ${APP_NAME_LC}::Shairplay)
+  add_bundle_file(${APP_NAME_LC}::Shairplay ${libdir} "")
 endif()
 
 # Main targets from Makefile.in

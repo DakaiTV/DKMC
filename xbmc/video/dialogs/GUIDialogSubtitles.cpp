@@ -9,6 +9,7 @@
 #include "GUIDialogSubtitles.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "LangInfo.h"
 #include "ServiceBroker.h"
 #include "URL.h"
@@ -548,14 +549,15 @@ void CGUIDialogSubtitles::OnDownloadComplete(const CFileItemList *items, const s
   std::vector<std::string> vecFiles;
 
   std::string strCurrentFilePath;
-  if (StringUtils::StartsWith(strCurrentFilePath, "http://"))
+  const std::string subPath = CSpecialProtocol::TranslatePath("special://subtitles");
+
+  if (subPath.empty() && URIUtils::IsHTTP(strCurrentFile))
   {
     strCurrentFile = "TempSubtitle";
     vecFiles.push_back(strCurrentFile);
   }
   else
   {
-    std::string subPath = CSpecialProtocol::TranslatePath("special://subtitles");
     if (!subPath.empty())
       strDownloadPath = subPath;
 

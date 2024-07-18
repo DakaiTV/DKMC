@@ -1,23 +1,7 @@
 function(core_link_library lib wraplib)
-  if(CMAKE_GENERATOR MATCHES "Unix Makefiles" OR CMAKE_GENERATOR STREQUAL Ninja)
-    set(wrapper_obj cores/dll-loader/exports/CMakeFiles/wrapper.dir/wrapper.c.o)
-  elseif(CMAKE_GENERATOR MATCHES "Xcode")
-    # CURRENT_VARIANT is an Xcode env var
-    # CPU is a project cmake var
-    # Xcode new build system (CMAKE_XCODE_BUILD_SYSTEM=12) requires the env var CURRENT_VARIANT to be passed WITHOUT brackets
-    # Xcode Legacy build system (CMAKE_XCODE_BUILD_SYSTEM=1) requires the env var CURRENT_VARIANT to be passed WITH brackets
-    if(CMAKE_XCODE_BUILD_SYSTEM STREQUAL 12)
-      set(wrapper_obj cores/dll-loader/exports/kodi.build/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/wrapper.build/Objects-$CURRENT_VARIANT/${CPU}/wrapper.o)
-    else()
-			set(wrapper_obj cores/dll-loader/exports/kodi.build/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/wrapper.build/Objects-$(CURRENT_VARIANT)/${CPU}/wrapper.o)
-    endif()
-  else()
-    message(FATAL_ERROR "Unsupported generator in core_link_library")
-  endif()
-
   set(export -bundle -undefined dynamic_lookup -read_only_relocs suppress
              -Wl,-alias_list,${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR}/cores/dll-loader/exports/wrapper.def
-             ${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR}/${wrapper_obj})
+             $<TARGET_OBJECTS:wrapper>)
   set(extension ${CMAKE_SHARED_MODULE_SUFFIX})
   set(check_arg "")
   if(TARGET ${lib})
@@ -25,7 +9,6 @@ function(core_link_library lib wraplib)
     set(link_lib $<TARGET_FILE:${lib}>)
     set(check_arg ${ARGV2})
     set(data_arg  ${ARGV3})
-
   else()
     set(target ${ARGV2})
     set(link_lib ${lib})
@@ -40,7 +23,13 @@ function(core_link_library lib wraplib)
       list(APPEND export ${arg})
     endforeach()
   elseif(check_arg STREQUAL archives)
-    set(extra_libs ${data_arg})
+    foreach(_data_arg ${data_arg})
+      if(TARGET ${_data_arg})
+        list(APPEND extra_libs $<TARGET_FILE:${_data_arg}>)
+      else()
+        list(APPEND extra_libs ${_data_arg})
+      endif()
+    endforeach()
   endif()
   get_filename_component(dir ${wraplib} DIRECTORY)
 

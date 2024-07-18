@@ -71,6 +71,7 @@ public:
   bool DestroyWindowSystem() override;
   bool ResizeWindow(int newWidth, int newHeight, int newLeft, int newTop) override;
   void FinishWindowResize(int newWidth, int newHeight) override;
+  void ForceFullScreen(const RESOLUTION_INFO& resInfo) override;
   void UpdateResolutions() override;
   void NotifyAppFocusChange(bool bGaining) override;
   void ShowOSMouse(bool show) override;
@@ -81,10 +82,11 @@ public:
   bool Show(bool raise = true) override;
   std::string GetClipboardText() override;
   bool UseLimitedColor() override;
+  float GetGuiSdrPeakLuminance() const override;
   bool HasSystemSdrPeakLuminance() override;
 
   // videosync
-  std::unique_ptr<CVideoSync> GetVideoSync(void *clock) override;
+  std::unique_ptr<CVideoSync> GetVideoSync(CVideoReferenceClock* clock) override;
 
   bool WindowedMode() const { return m_state != WINDOW_STATE_FULLSCREEN; }
   bool SetFullScreen(bool fullScreen, RESOLUTION_INFO& res, bool blankOtherDisplays) override;
@@ -97,7 +99,6 @@ public:
   virtual bool DPIChanged(WORD dpi, RECT windowRect) const;
   bool IsMinimized() const { return m_bMinimized; }
   void SetMinimized(bool minimized) { m_bMinimized = minimized; }
-  float GetGuiSdrPeakLuminance() const;
   void CacheSystemSdrPeakLuminance();
 
   bool CanDoWindowed() override;
@@ -155,6 +156,10 @@ protected:
 
   bool m_validSystemSdrPeakLuminance{false};
   float m_systemSdrPeakLuminance{.0f};
+
+  DWORD m_uiThreadId{0};
+  HDR_STATUS m_cachedHdrStatus{HDR_STATUS::HDR_UNSUPPORTED};
+  bool m_cachedHasSystemSdrPeakLum{false};
 };
 
 #pragma pack(pop)

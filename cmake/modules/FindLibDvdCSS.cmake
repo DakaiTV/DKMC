@@ -3,17 +3,11 @@
 # ----------
 # Finds the libdvdcss library
 #
-# This will define the following variables::
-#
-# LIBDVDCSS_FOUND - system has LibDvdCSS
-# LIBDVDCSS_INCLUDE_DIRS - the LibDvdCSS include directory
-# LIBDVDCSS_LIBRARIES - the LibDvdCSS libraries
-#
-# and the following imported targets::
+# This will define the following target:
 #
 #   LibDvdCSS::LibDvdCSS   - The LibDvdCSS library
 
-if(ENABLE_DVDCSS)
+if(NOT TARGET LibDvdCSS::LibDvdCSS)
   include(cmake/scripts/common/ModuleHelpers.cmake)
 
   set(MODULE_LC libdvdcss)
@@ -40,12 +34,10 @@ if(ENABLE_DVDCSS)
   if(CORE_SYSTEM_NAME STREQUAL android)
     if(ARCH STREQUAL arm)
       set(HOST_ARCH arm-linux-androideabi)
-    elseif(ARCH STREQUAL aarch64)
-      set(HOST_ARCH aarch64-linux-android)
     elseif(ARCH STREQUAL i486-linux)
       set(HOST_ARCH i686-linux-android)
-    elseif(ARCH STREQUAL x86_64)
-      set(HOST_ARCH x86_64-linux-android)
+    elseif()
+      set(HOST_ARCH ${ARCH}-linux-android)
     endif()
   elseif(CORE_SYSTEM_NAME STREQUAL windowsstore)
     set(LIBDVD_ADDITIONAL_ARGS "-DCMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}" "-DCMAKE_SYSTEM_VERSION=${CMAKE_SYSTEM_VERSION}")
@@ -89,38 +81,21 @@ if(ENABLE_DVDCSS)
 
   BUILD_DEP_TARGET()
 
-endif()
+  include(FindPackageHandleStandardArgs)
+  find_package_handle_standard_args(LibDvdCSS
+                                    REQUIRED_VARS LIBDVDCSS_LIBRARY LIBDVDCSS_INCLUDE_DIR
+                                    VERSION_VAR LIBDVDCSS_VERSION)
 
-include(SelectLibraryConfigurations)
-select_library_configurations(LibDvdCSS)
-
-include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(LibDvdCSS
-                                  REQUIRED_VARS LIBDVDCSS_LIBRARY LIBDVDCSS_INCLUDE_DIR
-                                  VERSION_VAR LIBDVDCSS_VERSION)
-
-if(LIBDVDCSS_FOUND)
-  set(LIBDVDCSS_INCLUDE_DIRS ${LIBDVDCSS_INCLUDE_DIR})
-  set(LIBDVDCSS_LIBRARIES ${LIBDVDCSS_LIBRARY})
-  set(LIBDVDCSS_DEFINITIONS -DHAVE_DVDCSS_DVDCSS_H)
-
-  if(NOT TARGET LibDvdCSS::LibDvdCSS)
-    add_library(LibDvdCSS::LibDvdCSS UNKNOWN IMPORTED)
-
+  if(LibDvdCSS_FOUND)
+    add_library(LibDvdCSS::LibDvdCSS STATIC IMPORTED)
     set_target_properties(LibDvdCSS::LibDvdCSS PROPERTIES
                                                IMPORTED_LOCATION "${LIBDVDCSS_LIBRARY}"
-                                               INTERFACE_COMPILE_DEFINITIONS "${LIBDVDCSS_DEFINITIONS}"
+                                               INTERFACE_COMPILE_DEFINITIONS "HAVE_DVDCSS_DVDCSS_H"
                                                INTERFACE_INCLUDE_DIRECTORIES "${LIBDVDCSS_INCLUDE_DIR}")
-
-    if(TARGET libdvdcss)
-      add_dependencies(LibDvdCSS::LibDvdCSS libdvdcss)
+    add_dependencies(LibDvdCSS::LibDvdCSS libdvdcss)
+  else()
+    if(LibDvdCSS_FIND_REQUIRED)
+      message(FATAL_ERROR "Libdvdcss not found. Possibly remove ENABLE_DVDCSS.")
     endif()
   endif()
-
-else()
-  if(LIBDVDCSS_FIND_REQUIRED)
-    message(FATAL_ERROR "Libdvdcss not found. Possibly remove ENABLE_DVDCSS.")
-  endif()
 endif()
-
-mark_as_advanced(LIBDVDCSS_INCLUDE_DIR LIBDVDCSS_LIBRARY)

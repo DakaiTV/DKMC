@@ -9,6 +9,7 @@
 #include "GUIViewStateWindowGames.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "games/GameUtils.h"
 #include "guilib/LocalizeStrings.h"
 #include "guilib/WindowIDs.h"
@@ -61,8 +62,6 @@ std::string CGUIViewStateWindowGames::GetLockType()
 
 std::string CGUIViewStateWindowGames::GetExtensions()
 {
-  using namespace ADDON;
-
   std::set<std::string> exts = CGameUtils::GetGameExtensions();
 
   // Ensure .zip appears

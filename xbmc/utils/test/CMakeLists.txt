@@ -1,6 +1,7 @@
 set(SOURCES TestAlarmClock.cpp
             TestAliasShortcutUtils.cpp
             TestArchive.cpp
+            TestArtUtils.cpp
             TestBase64.cpp
             TestBitstreamStats.cpp
             TestCharsetConverter.cpp
@@ -14,6 +15,7 @@ set(SOURCES TestAlarmClock.cpp
             TestFileOperationJob.cpp
             TestFileUtils.cpp
             TestGlobalsHandling.cpp
+            TestGPUInfo.cpp
             TestHTMLUtil.cpp
             TestHttpHeader.cpp
             TestHttpParser.cpp
@@ -26,12 +28,13 @@ set(SOURCES TestAlarmClock.cpp
             TestLangCodeExpander.cpp
             TestLocale.cpp
             Testlog.cpp
+            TestMap.cpp
             TestMathUtils.cpp
             TestMime.cpp
             TestPOUtils.cpp
             TestRegExp.cpp
-            Testrfft.cpp
             TestRingBuffer.cpp
+            TestRssReader.cpp
             TestScraperParser.cpp
             TestScraperUrl.cpp
             TestSortUtils.cpp
@@ -44,6 +47,7 @@ set(SOURCES TestAlarmClock.cpp
             TestUrlOptions.cpp
             TestVariant.cpp
             TestXBMCTinyXML.cpp
+            TestXBMCTinyXML2.cpp
             TestXMLUtils.cpp)
 
 set(HEADERS TestGlobalsHandlingPattern1.h)

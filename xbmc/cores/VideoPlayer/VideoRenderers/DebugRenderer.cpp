@@ -90,6 +90,7 @@ void CDebugRenderer::SetInfo(DEBUG_INFO_VIDEO& video, DEBUG_INFO_RENDER& render)
   m_adapter->AddSubtitle(video.metaPrim, 0., 5000000.);
   m_adapter->AddSubtitle(video.metaLight, 0., 5000000.);
   m_adapter->AddSubtitle(video.shader, 0., 5000000.);
+  m_adapter->AddSubtitle(video.render, 0., 5000000.);
   m_adapter->AddSubtitle(render.renderFlags, 0., 5000000.);
   m_adapter->AddSubtitle(render.videoOutput, 0., 5000000.);
 }
@@ -115,7 +116,7 @@ CDebugRenderer::CRenderer::CRenderer() : OVERLAY::CRenderer()
 {
 }
 
-void CDebugRenderer::CRenderer::Render(int idx)
+void CDebugRenderer::CRenderer::Render(int idx, float depth)
 {
   std::vector<SElement>& list = m_buffers[idx];
   for (std::vector<SElement>::iterator it = list.begin(); it != list.end(); ++it)

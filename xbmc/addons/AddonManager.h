@@ -16,6 +16,7 @@
 #include <mutex>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ADDON
@@ -37,10 +38,10 @@ using ADDON_INFO_LIST = std::map<std::string, AddonInfoPtr>;
 
 class IAddon;
 using AddonPtr = std::shared_ptr<IAddon>;
+using AddonWithUpdate = std::pair<std::shared_ptr<IAddon>, std::shared_ptr<IAddon>>;
 using VECADDONS = std::vector<AddonPtr>;
 
 struct AddonEvent;
-struct AddonWithUpdate;
 struct DependencyInfo;
 struct RepositoryDirInfo;
 
@@ -426,10 +427,12 @@ public:
   bool ServicesHasStarted() const;
 
   /*!
-     * @deprecated This addon function should no more used and becomes replaced
-     * in future with the other below by his callers.
+     * @brief Check if given addon is compatible with Kodi.
+     *
+     * @param[in] addon Addon to check
+     * @return true if compatible, false if not
      */
-  bool IsCompatible(const IAddon& addon) const;
+  bool IsCompatible(const std::shared_ptr<const IAddon>& addon) const;
 
   /*!
      * @brief Check given addon information is compatible with Kodi.

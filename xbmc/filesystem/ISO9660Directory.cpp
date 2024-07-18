@@ -9,6 +9,7 @@
 #include "ISO9660Directory.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "URL.h"
 #include "utils/URIUtils.h"
 
@@ -78,4 +79,20 @@ bool CISO9660Directory::Exists(const CURL& url)
 {
   CFileItemList items;
   return GetDirectory(url, items);
+}
+
+bool CISO9660Directory::Resolve(CFileItem& item) const
+{
+  const CURL url{item.GetDynPath()};
+  if (url.GetProtocol() != "iso9660" && url.GetFileType() != "iso")
+  {
+    return false;
+  }
+
+  // translate a generic iso9660:// url to the actual disc drive for playback
+  if (!url.GetHostName().empty() && url.GetFileName() == "VIDEO_TS/video_ts.ifo")
+  {
+    item.SetDynPath(url.GetHostName());
+  }
+  return true;
 }

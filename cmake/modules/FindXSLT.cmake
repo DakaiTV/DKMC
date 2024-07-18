@@ -3,48 +3,40 @@
 # --------
 # Finds the XSLT library
 #
-# This will define the following variables::
+# This will define the following target:
 #
-# XSLT_FOUND - system has XSLT
-# XSLT_INCLUDE_DIRS - the XSLT include directory
-# XSLT_LIBRARIES - the XSLT libraries
-# XSLT_DEFINITIONS - the XSLT definitions
-#
-# and the following imported targets::
-#
-#   XSLT::XSLT   - The XSLT library
+#   ${APP_NAME_LC}::XSLT - The XSLT library
 
-find_package(LibXml2 REQUIRED)
+if(NOT TARGET ${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME})
 
-if(PKG_CONFIG_FOUND)
-  pkg_check_modules(PC_XSLT libxslt QUIET)
-endif()
+  find_package(LibXml2 REQUIRED)
+  find_package(PkgConfig)
 
-find_path(XSLT_INCLUDE_DIR NAMES libxslt/xslt.h
-                           PATHS ${PC_XSLT_INCLUDEDIR})
-find_library(XSLT_LIBRARY NAMES xslt libxslt
-                          PATHS ${PC_XSLT_LIBDIR})
+  if(PKG_CONFIG_FOUND AND NOT (WIN32 OR WINDOWS_STORE))
+    pkg_check_modules(PC_XSLT libxslt QUIET)
+  endif()
 
-set(XSLT_VERSION ${PC_XSLT_VERSION})
+  find_path(XSLT_INCLUDE_DIR NAMES libxslt/xslt.h
+                             HINTS ${DEPENDS_PATH}/include ${PC_XSLT_INCLUDEDIR}
+                             ${${CORE_PLATFORM_NAME_LC}_SEARCH_CONFIG})
+  find_library(XSLT_LIBRARY NAMES xslt libxslt
+                            HINTS ${DEPENDS_PATH}/lib ${PC_XSLT_LIBDIR}
+                            ${${CORE_PLATFORM_NAME_LC}_SEARCH_CONFIG})
 
-include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(XSLT
-                                  REQUIRED_VARS XSLT_LIBRARY XSLT_INCLUDE_DIR
-                                  VERSION_VAR XSLT_VERSION)
+  set(XSLT_VERSION ${PC_XSLT_VERSION})
 
-if(XSLT_FOUND)
-  set(XSLT_LIBRARIES ${XSLT_LIBRARY} ${LIBXML2_LIBRARIES})
-  set(XSLT_INCLUDE_DIRS ${XSLT_INCLUDE_DIR} ${LIBXML2_INCLUDE_DIR})
-  set(XSLT_DEFINITIONS -DHAVE_LIBXSLT=1)
+  include(FindPackageHandleStandardArgs)
+  find_package_handle_standard_args(XSLT
+                                    REQUIRED_VARS XSLT_LIBRARY XSLT_INCLUDE_DIR
+                                    VERSION_VAR XSLT_VERSION)
 
-  if(NOT TARGET XSLT::XSLT)
-    add_library(XSLT::XSLT UNKNOWN IMPORTED)
-    set_target_properties(XSLT::XSLT PROPERTIES
-                                     IMPORTED_LOCATION "${XSLT_LIBRARY}"
-                                     INTERFACE_INCLUDE_DIRECTORIES "${XSLT_INCLUDE_DIR} ${LIBXML2_INCLUDE_DIR}"
-                                     INTERFACE_COMPILE_DEFINITIONS HAVE_LIBXSLT=1
-                                     INTERFACE_LINK_LIBRARIES "${LIBXML2_LIBRARIES}")
+  if(XSLT_FOUND)
+    add_library(${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME} UNKNOWN IMPORTED)
+    set_target_properties(${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME} PROPERTIES
+                                                                     IMPORTED_LOCATION "${XSLT_LIBRARY}"
+                                                                     INTERFACE_INCLUDE_DIRECTORIES "${XSLT_INCLUDE_DIR}"
+                                                                     INTERFACE_COMPILE_DEFINITIONS HAVE_LIBXSLT)
+
+    target_link_libraries(${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME} INTERFACE LibXml2::LibXml2)
   endif()
 endif()
-
-mark_as_advanced(XSLT_INCLUDE_DIR XSLT_LIBRARY)

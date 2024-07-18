@@ -18,13 +18,15 @@
 #include "utils/Variant.h"
 #include "utils/log.h"
 #include "video/VideoDatabase.h"
+#include "video/VideoFileItemClassify.h"
 
+#include <memory>
 #include <mutex>
-#include <stdio.h>
 
 #define LOOKUP_PROPERTY "database-lookup"
 
 using namespace ANNOUNCEMENT;
+using namespace KODI;
 
 const std::string CAnnouncementManager::ANNOUNCEMENT_SENDER = "xbmc";
 
@@ -135,7 +137,7 @@ void CAnnouncementManager::Announce(AnnouncementFlag flag,
   announcement.data = data;
 
   if (item != nullptr)
-    announcement.item = CFileItemPtr(new CFileItem(*item));
+    announcement.item = std::make_shared<CFileItem>(*item);
 
   {
     std::unique_lock<CCriticalSection> lock(m_queueCritSection);
@@ -188,8 +190,9 @@ void CAnnouncementManager::DoAnnounce(AnnouncementFlag flag,
 
     if (data.isMember("player") && data["player"].isMember("playerid"))
     {
-      object["player"]["playerid"] =
-          channel->IsRadio() ? PLAYLIST::TYPE_MUSIC : PLAYLIST::TYPE_VIDEO;
+      object["player"]["playerid"] = channel->IsRadio()
+                                         ? static_cast<int>(PLAYLIST::Id::TYPE_MUSIC)
+                                         : static_cast<int>(PLAYLIST::Id::TYPE_VIDEO);
     }
   }
   else if (item->HasVideoInfoTag() && !item->HasPVRRecordingInfoTag())
@@ -295,7 +298,7 @@ void CAnnouncementManager::DoAnnounce(AnnouncementFlag flag,
         object["item"]["artist"] = item->GetMusicInfoTag()->GetArtist();
     }
   }
-  else if (item->IsVideo())
+  else if (VIDEO::IsVideo(*item))
   {
     // video item but has no video info tag.
     type = "movie";

@@ -12,16 +12,20 @@
 #include "URL.h"
 #include "Util.h"
 #include "filesystem/File.h"
+#include "music/MusicFileItemClassify.h"
 #include "music/tags/MusicInfoTag.h"
 #include "utils/CharsetConverter.h"
 #include "utils/URIUtils.h"
 #include "utils/log.h"
+#include "video/VideoFileItemClassify.h"
 #include "video/VideoInfoTag.h"
 
 #include <inttypes.h>
 
-using namespace PLAYLIST;
 using namespace XFILE;
+
+namespace KODI::PLAYLIST
+{
 
 const char* CPlayListM3U::StartMarker = "#EXTCPlayListM3U::M3U";
 const char* CPlayListM3U::InfoMarker = "#EXTINF";
@@ -183,9 +187,10 @@ bool CPlayListM3U::Load(const std::string& strFileName)
           if (iEndOffset)
             lDuration = static_cast<int>(CUtil::ConvertMilliSecsToSecsIntRounded(iEndOffset - iStartOffset));
         }
-        if (newItem->IsVideo() && !newItem->HasVideoInfoTag()) // File is a video and needs a VideoInfoTag
+        if (VIDEO::IsVideo(*newItem) &&
+            !newItem->HasVideoInfoTag()) // File is a video and needs a VideoInfoTag
           newItem->GetVideoInfoTag()->Reset(); // Force VideoInfoTag creation
-        if (lDuration && newItem->IsAudio())
+        if (lDuration && MUSIC::IsAudio(*newItem))
           newItem->GetMusicInfoTag()->SetDuration(lDuration);
         for (auto &prop : properties)
         {
@@ -287,3 +292,4 @@ std::map< std::string, std::string > CPlayListM3U::ParseStreamLine(const std::st
   return params;
 }
 
+} // namespace KODI::PLAYLIST

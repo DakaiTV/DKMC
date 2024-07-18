@@ -9,6 +9,10 @@ POPD
 SET TARGETPLATFORM=%1
 SET NATIVEPLATFORM=%2
 
+REM Build tools location. We may want to add an extra folder for HOST ARCH
+REM if we want end up having build tools other than win32 arch
+SET HOST_BUILDTOOLS=tools
+
 IF "%TARGETPLATFORM%" == "" SET TARGETPLATFORM=win32
 IF "%NATIVEPLATFORM%" == "" SET NATIVEPLATFORM=win32
 
@@ -22,6 +26,7 @@ echo Downloading from mirror %KODI_MIRROR%
 REM Locate the BuildDependencies directory, based on the path of this script
 SET BUILD_DEPS_PATH=%WORKSPACE%\project\BuildDependencies
 SET APP_PATH=%WORKSPACE%\project\BuildDependencies\%TARGETPLATFORM%
+SET NATIVE_PATH=%WORKSPACE%\project\BuildDependencies\%HOST_BUILDTOOLS%
 SET TMP_PATH=%BUILD_DEPS_PATH%\scripts\tmp
 
 REM Change to the BuildDependencies directory, if we're not there already
@@ -31,7 +36,6 @@ REM Can't run rmdir and md back to back. access denied error otherwise.
 IF EXIST %TMP_PATH% rmdir %TMP_PATH% /S /Q
 
 SET DL_PATH="%BUILD_DEPS_PATH%\downloads"
-SET WGET=%BUILD_DEPS_PATH%\bin\wget
 SET ZIP=%BUILD_DEPS_PATH%\..\Win32BuildSetup\tools\7z\7za
 
 IF NOT EXIST %DL_PATH% md %DL_PATH%

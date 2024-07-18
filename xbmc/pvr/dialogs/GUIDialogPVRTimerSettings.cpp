@@ -120,7 +120,7 @@ void CGUIDialogPVRTimerSettings::SetTimer(const std::shared_ptr<CPVRTimerInfoTag
   m_firstDayLocalTime = m_timerInfoTag->FirstDayAsLocalTime();
 
   m_strEpgSearchString = m_timerInfoTag->m_strEpgSearchString;
-  if ((m_bIsNewTimer || !m_timerType->SupportsEpgTitleMatch()) && m_strEpgSearchString.empty())
+  if (!m_bIsNewTimer && m_strEpgSearchString.empty())
     m_strEpgSearchString = m_strTitle;
 
   m_bFullTextEpgSearch = m_timerInfoTag->m_bFullTextEpgSearch;
@@ -445,6 +445,23 @@ void CGUIDialogPVRTimerSettings::OnSettingChanged(const std::shared_ptr<const CS
     {
       m_timerType = it->second;
 
+      // reset certain settings to the defaults of the new timer type
+
+      if (m_timerType->SupportsPriority())
+        m_iPriority = m_timerType->GetPriorityDefault();
+
+      if (m_timerType->SupportsLifetime())
+        m_iLifetime = m_timerType->GetLifetimeDefault();
+
+      if (m_timerType->SupportsMaxRecordings())
+        m_iMaxRecordings = m_timerType->GetMaxRecordingsDefault();
+
+      if (m_timerType->SupportsRecordingGroup())
+        m_iRecordingGroup = m_timerType->GetRecordingGroupDefault();
+
+      if (m_timerType->SupportsRecordOnlyNewEpisodes())
+        m_iPreventDupEpisodes = m_timerType->GetPreventDuplicateEpisodesDefault();
+
       if (m_timerType->IsTimerRule() && (m_iWeekdays == PVR_WEEKDAY_ALLDAYS))
         SetButtonLabels(); // update "Any day" vs. "Every day"
     }
@@ -761,8 +778,8 @@ void CGUIDialogPVRTimerSettings::AddCondition(const std::shared_ptr<CSetting>& s
 {
   GetSettingsManager()->AddDynamicCondition(identifier, condition, this);
   CSettingDependency dep(depType, GetSettingsManager());
-  dep.And()->Add(CSettingDependencyConditionPtr(
-      new CSettingDependencyCondition(identifier, "true", settingId, false, GetSettingsManager())));
+  dep.And()->Add(std::make_shared<CSettingDependencyCondition>(identifier, "true", settingId, false,
+                                                               GetSettingsManager()));
   SettingDependencies deps(setting->GetDependencies());
   deps.push_back(dep);
   setting->SetDependencies(deps);
@@ -824,7 +841,7 @@ void CGUIDialogPVRTimerSettings::InitializeTypesList()
     // Drop TimerTypes without 'Series' EPG attributes if none are set
     if (type->RequiresEpgSeriesOnCreate())
     {
-      const std::shared_ptr<CPVREpgInfoTag> epgTag(m_timerInfoTag->GetEpgInfoTag());
+      const std::shared_ptr<const CPVREpgInfoTag> epgTag(m_timerInfoTag->GetEpgInfoTag());
       if (epgTag && !epgTag->IsSeries())
         continue;
     }
@@ -832,7 +849,7 @@ void CGUIDialogPVRTimerSettings::InitializeTypesList()
     // Drop TimerTypes which need series link if none is set
     if (type->RequiresEpgSeriesLinkOnCreate())
     {
-      const std::shared_ptr<CPVREpgInfoTag> epgTag(m_timerInfoTag->GetEpgInfoTag());
+      const std::shared_ptr<const CPVREpgInfoTag> epgTag(m_timerInfoTag->GetEpgInfoTag());
       if (!epgTag || epgTag->SeriesLink().empty())
         continue;
     }
@@ -844,7 +861,7 @@ void CGUIDialogPVRTimerSettings::InitializeTypesList()
     // Drop TimerTypes that aren't rules and cannot be recorded
     if (!type->IsTimerRule())
     {
-      const std::shared_ptr<CPVREpgInfoTag> epgTag(m_timerInfoTag->GetEpgInfoTag());
+      const std::shared_ptr<const CPVREpgInfoTag> epgTag(m_timerInfoTag->GetEpgInfoTag());
       bool bCanRecord = epgTag ? epgTag->IsRecordable()
                                : m_timerInfoTag->EndAsLocalTime() > CDateTime::GetCurrentDateTime();
       if (!bCanRecord)
@@ -867,24 +884,35 @@ void CGUIDialogPVRTimerSettings::InitializeChannelsList()
 
   int index = 0;
 
-  // Add special "any channel" entries - one for every client (used for epg-based timer rules).
+  // Add special "any channel" entries - one for every client (used for epg-based timer rules),
+  // and for reminder rules another one representing any channel from any client.
   const CPVRClientMap clients = CServiceBroker::GetPVRManager().Clients()->GetCreatedClients();
+  if (clients.size() > 1)
+    m_channelEntries.insert({index++, ChannelDescriptor(PVR_CHANNEL_INVALID_UID, PVR_ANY_CLIENT_ID,
+                                                        // Any channel from any client
+                                                        g_localizeStrings.Get(854))});
+
   for (const auto& client : clients)
   {
     m_channelEntries.insert(
         {index, ChannelDescriptor(PVR_CHANNEL_INVALID_UID, client.second->GetID(),
-                                  g_localizeStrings.Get(809))}); // "Any channel"
+                                  clients.size() == 1
+                                      // Any channel
+                                      ? g_localizeStrings.Get(809)
+                                      // Any channel from client "X"
+                                      : StringUtils::Format(g_localizeStrings.Get(853),
+                                                            client.second->GetFullClientName()))});
     ++index;
   }
 
   // Add regular channels
-  const std::shared_ptr<CPVRChannelGroup> allGroup =
+  const std::shared_ptr<const CPVRChannelGroup> allGroup =
       CServiceBroker::GetPVRManager().ChannelGroups()->GetGroupAll(m_bIsRadio);
   const std::vector<std::shared_ptr<CPVRChannelGroupMember>> groupMembers =
       allGroup->GetMembers(CPVRChannelGroup::Include::ONLY_VISIBLE);
   for (const auto& groupMember : groupMembers)
   {
-    const std::shared_ptr<CPVRChannel> channel = groupMember->Channel();
+    const std::shared_ptr<const CPVRChannel> channel = groupMember->Channel();
     const std::string channelDescription = StringUtils::Format(
         "{} {}", groupMember->ChannelNumber().FormattedChannelNumber(), channel->ChannelName());
     m_channelEntries.insert(
@@ -918,7 +946,7 @@ void CGUIDialogPVRTimerSettings::TypesFiller(const SettingConstPtr& setting,
 
       const auto client = clients->GetCreatedClient(typeEntry.second->GetClientId());
       if (client)
-        clientName = client->GetFriendlyName();
+        clientName = client->GetFullClientName();
 
       list.emplace_back(typeEntry.second->GetDescription(), clientName, typeEntry.first,
                         typeEntry.second->IsReminder() ? reminderTimerProps : recordingTimerProps);
@@ -949,7 +977,7 @@ void CGUIDialogPVRTimerSettings::ChannelsFiller(const SettingConstPtr& setting,
     for (const auto& channelEntry : pThis->m_channelEntries)
     {
       // Only include channels for the currently selected timer type or all channels if type is client-independent.
-      if (pThis->m_timerType->GetClientId() == -1 || // client-independent
+      if (pThis->m_timerType->GetClientId() == PVR_ANY_CLIENT_ID || // client-independent
           pThis->m_timerType->GetClientId() == channelEntry.second.clientId)
       {
         // Do not add "any channel" entry if not supported by selected timer type.
@@ -957,14 +985,44 @@ void CGUIDialogPVRTimerSettings::ChannelsFiller(const SettingConstPtr& setting,
             !pThis->m_timerType->SupportsAnyChannel())
           continue;
 
-        list.emplace_back(
-            IntegerSettingOption(channelEntry.second.description, channelEntry.first));
+        // Do not add "any channel from any client" entry for reminder rules.
+        if (channelEntry.second.channelUid == PVR_CHANNEL_INVALID_UID &&
+            channelEntry.second.clientId == PVR_ANY_CLIENT_ID &&
+            !pThis->m_timerType->IsReminder() && !pThis->m_timerType->IsTimerRule())
+          continue;
+
+        list.emplace_back(channelEntry.second.description, channelEntry.first);
       }
 
       if (!foundCurrent && (pThis->m_channel == channelEntry.second))
       {
         current = channelEntry.first;
         foundCurrent = true;
+      }
+    }
+
+    if (foundCurrent)
+    {
+      // Verify m_channel is still valid. Update if not.
+      if (std::find_if(list.cbegin(), list.cend(),
+                       [&current](const auto& channel)
+                       { return channel.value == current; }) == list.cend())
+      {
+        // Set m_channel and current to first valid channel in list
+        const int first{list.front().value};
+        const auto it =
+            std::find_if(pThis->m_channelEntries.cbegin(), pThis->m_channelEntries.cend(),
+                         [first](const auto& channel) { return channel.first == first; });
+
+        if (it != pThis->m_channelEntries.cend())
+        {
+          current = (*it).first;
+          pThis->m_channel = (*it).second;
+        }
+        else
+        {
+          CLog::LogF(LOGERROR, "Unable to find channel to select");
+        }
       }
     }
   }

@@ -11,13 +11,13 @@ set(HEADERS CWIID_WiiRemote.h)
 add_executable(${APP_NAME_LC}-wiiremote ${SOURCES} ${HEADERS})
 
 target_include_directories(${APP_NAME_LC}-wiiremote
-                           PRIVATE ${BLUETOOTH_INCLUDE_DIRS}
-                                   ${CWIID_INCLUDE_DIRS})
+                           PRIVATE $<TARGET_PROPERTY:${APP_NAME_LC}::Bluetooth,INTERFACE_INCLUDE_DIRECTORIES>
+                                   $<TARGET_PROPERTY:${APP_NAME_LC}::CWiid,INTERFACE_INCLUDE_DIRECTORIES>)
 
 target_link_libraries(${APP_NAME_LC}-wiiremote
                       PRIVATE ${SYSTEM_LDFLAGS}
-                              ${BLUETOOTH_LIBRARIES}
-                              ${CWIID_LIBRARIES})
+                              ${APP_NAME_LC}::Bluetooth
+                              ${APP_NAME_LC}::CWiid)
 
 target_compile_options(${APP_NAME_LC}-wiiremote PRIVATE ${ARCH_DEFINES})
 

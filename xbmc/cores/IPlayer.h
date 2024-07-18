@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "Direction.h"
 #include "IPlayerCallback.h"
 #include "Interface/StreamInfo.h"
 #include "MenuType.h"
@@ -105,7 +106,7 @@ public:
   virtual bool IsPassthrough() const { return false;}
   virtual bool CanSeek() const { return true; }
   virtual void Seek(bool bPlus = true, bool bLargeStep = false, bool bChapterOverride = false) = 0;
-  virtual bool SeekScene(bool bPlus = true) {return false;}
+  virtual bool SeekScene(Direction seekDirection) { return false; }
   virtual void SeekPercentage(float fPercent = 0){}
   virtual float GetCachePercentage() const { return 0; }
   virtual void SetMute(bool bOnOff){}
@@ -204,7 +205,6 @@ public:
   */
   virtual MenuType GetSupportedMenuType() const { return MenuType::NONE; }
 
-  virtual void DoAudioWork() {}
   virtual bool OnAction(const CAction& action) { return false; }
 
   //returns a state that is needed for resuming from a specific time
@@ -232,7 +232,13 @@ public:
   virtual float GetRenderAspectRatio() const { return 1.0; }
   virtual void TriggerUpdateResolution() {}
   virtual bool IsRenderingVideo() const { return false; }
-
+  virtual void GetRects(CRect& source, CRect& dest, CRect& view) const
+  {
+    source = {};
+    dest = {};
+    view = {};
+  }
+  virtual unsigned int GetOrientation() const { return 0; }
   virtual bool Supports(EINTERLACEMETHOD method) const { return false; }
   virtual EINTERLACEMETHOD GetDeinterlacingMethodDefault() const
   {

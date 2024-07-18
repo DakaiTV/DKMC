@@ -11,6 +11,7 @@
 #include "CompileInfo.h"
 #include "ServiceBroker.h"
 #include "Util.h"
+#include "WinRtUtil.h"
 #include "WindowHelper.h"
 #include "guilib/LocalizeStrings.h"
 #include "my_ntddscsi.h"
@@ -30,7 +31,9 @@
 #ifdef TARGET_WINDOWS_DESKTOP
 #include <cassert>
 #endif
+#include <array>
 #include <locale.h>
+#include <sstream>
 
 #include <shellapi.h>
 #include <shlobj.h>
@@ -58,6 +61,21 @@ using namespace winrt::Windows::Graphics::Display;
 using namespace winrt::Windows::Graphics::Display::Core;
 using namespace winrt::Windows::Storage;
 #endif
+
+void VideoDriverInfo::Log()
+{
+  if (!valid)
+  {
+    CLog::LogF(LOGERROR, "video driver version information is not valid");
+    return;
+  }
+
+  if (vendorId == PCIV_NVIDIA)
+    CLog::LogF(LOGINFO, "video driver version is {} {}.{} ({})", DX::GetGFXProviderName(vendorId),
+               majorVersion, minorVersion, version);
+  else
+    CLog::LogF(LOGINFO, "video driver version is {} {}", DX::GetGFXProviderName(vendorId), version);
+}
 
 CWIN32Util::CWIN32Util(void)
 {
@@ -839,7 +857,7 @@ extern "C" {
 
       case 'k':  /* The hour (24-hour clock representation). */
         LEGAL_ALT(0);
-        /* FALLTHROUGH */
+        [[fallthrough]];
       case 'H':
         bp = conv_num(bp, &tm->tm_hour, 0, 23);
         LEGAL_ALT(ALT_O);
@@ -847,7 +865,7 @@ extern "C" {
 
       case 'l':  /* The hour (12-hour clock representation). */
         LEGAL_ALT(0);
-        /* FALLTHROUGH */
+        [[fallthrough]];
       case 'I':
         bp = conv_num(bp, &tm->tm_hour, 1, 12);
         if (tm->tm_hour == 12)
@@ -1196,7 +1214,36 @@ HDR_STATUS CWIN32Util::ToggleWindowsHDR(DXGI_MODE_DESC& modeDesc)
   HDR_STATUS status = HDR_STATUS::HDR_TOGGLE_FAILED;
 
 #ifdef TARGET_WINDOWS_STORE
-  // Not supported - not implemented yet
+  auto hdmi = HdmiDisplayInformation::GetForCurrentView();
+
+  if (!hdmi)
+    return status;
+
+  const auto current = hdmi.GetCurrentDisplayMode();
+
+  for (const auto& mode : hdmi.GetSupportedDisplayModes())
+  {
+    if (mode.IsSmpte2084Supported() != current.IsSmpte2084Supported() &&
+        mode.ResolutionHeightInRawPixels() == current.ResolutionHeightInRawPixels() &&
+        mode.ResolutionWidthInRawPixels() == current.ResolutionWidthInRawPixels() &&
+        mode.StereoEnabled() == false &&
+        fabs(mode.RefreshRate() - current.RefreshRate()) <= 0.00001)
+    {
+      if (current.IsSmpte2084Supported()) // HDR is ON
+      {
+        CLog::LogF(LOGINFO, "Toggle Windows HDR Off (ON => OFF).");
+        if (Wait(hdmi.RequestSetCurrentDisplayModeAsync(mode, HdmiDisplayHdrOption::None)))
+          status = HDR_STATUS::HDR_OFF;
+      }
+      else // HDR is OFF
+      {
+        CLog::LogF(LOGINFO, "Toggle Windows HDR On (OFF => ON).");
+        if (Wait(hdmi.RequestSetCurrentDisplayModeAsync(mode, HdmiDisplayHdrOption::Eotf2084)))
+          status = HDR_STATUS::HDR_ON;
+      }
+      break;
+    }
+  }
 #else
   uint32_t pathCount = 0;
   uint32_t modeCount = 0;
@@ -1301,53 +1348,13 @@ HDR_STATUS CWIN32Util::ToggleWindowsHDR(DXGI_MODE_DESC& modeDesc)
   return status;
 }
 
-HDR_STATUS CWIN32Util::GetWindowsHDRStatus()
+HDR_STATUS CWIN32Util::GetWindowsHDRStatusWin32()
 {
+  HDR_STATUS status = HDR_STATUS::HDR_UNKNOWN;
+
+#ifdef TARGET_WINDOWS_DESKTOP
   bool advancedColorSupported = false;
   bool advancedColorEnabled = false;
-  HDR_STATUS status = HDR_STATUS::HDR_UNSUPPORTED;
-
-#ifdef TARGET_WINDOWS_STORE
-  auto displayInformation = DisplayInformation::GetForCurrentView();
-
-  if (displayInformation)
-  {
-    auto advancedColorInfo = displayInformation.GetAdvancedColorInfo();
-
-    if (advancedColorInfo)
-    {
-      if (advancedColorInfo.CurrentAdvancedColorKind() == AdvancedColorKind::HighDynamicRange)
-      {
-        advancedColorSupported = true;
-        advancedColorEnabled = true;
-      }
-    }
-  }
-  // Try to find out if the display supports HDR even if Windows HDR switch is OFF
-  if (!advancedColorEnabled)
-  {
-    auto displayManager = DisplayManager::Create(DisplayManagerOptions::None);
-
-    if (displayManager)
-    {
-      auto targets = displayManager.GetCurrentTargets();
-
-      for (const auto& target : targets)
-      {
-        if (target.IsConnected())
-        {
-          auto displayMonitor = target.TryGetMonitor();
-          if (displayMonitor.MaxLuminanceInNits() >= 400.0f)
-          {
-            advancedColorSupported = true;
-            break;
-          }
-        }
-      }
-      displayManager.Close();
-    }
-  }
-#else
   uint32_t pathCount = 0;
   uint32_t modeCount = 0;
 
@@ -1405,7 +1412,6 @@ HDR_STATUS CWIN32Util::GetWindowsHDRStatus()
       }
     }
   }
-#endif
 
   if (!advancedColorSupported)
   {
@@ -1420,8 +1426,33 @@ HDR_STATUS CWIN32Util::GetWindowsHDRStatus()
       CLog::LogF(LOGDEBUG, "Display is HDR capable and current HDR status is {}",
                  advancedColorEnabled ? "ON" : "OFF");
   }
+#endif // TARGET_WINDOWS_DESKTOP
 
   return status;
+}
+
+HDR_STATUS CWIN32Util::GetWindowsHDRStatus()
+{
+  HDR_STATUS status = HDR_STATUS::HDR_UNKNOWN;
+
+#ifdef TARGET_WINDOWS_STORE
+  if (CSysInfo::GetWindowsDeviceFamily() == CSysInfo::Xbox &&
+      HDR_STATUS::HDR_UNKNOWN != (status = CWinRtUtil::GetWindowsHDRStatus()))
+    return status;
+
+  // Not Xbox or detection failure: fallback to traditional UWP method
+  status = CWinRtUtil::GetWindowsHDRStatusUWP();
+  return status == HDR_STATUS::HDR_UNKNOWN ? HDR_STATUS::HDR_UNSUPPORTED : status;
+#else
+  // WinRT detection available for Win 11 22621 and above.
+  if (CSysInfo::IsWindowsVersionAtLeast(CSysInfo::WindowsVersionWin11_22H2) &&
+      HDR_STATUS::HDR_UNKNOWN != (status = CWinRtUtil::GetWindowsHDRStatus()))
+    return status;
+
+  // Not Win11 or detection failure: fallback to traditional Win32 method
+  status = GetWindowsHDRStatusWin32();
+  return status == HDR_STATUS::HDR_UNKNOWN ? HDR_STATUS::HDR_UNSUPPORTED : status;
+#endif
 }
 
 /*!
@@ -1571,9 +1602,8 @@ VideoDriverInfo CWIN32Util::GetVideoDriverInfo(const UINT vendorId, const std::w
     subkey.append(L"\\");
     subkey.append(L"0000");
     DWORD lg;
-
     wchar_t desc[128] = {};
-    lg = sizeof(desc) / sizeof(wchar_t);
+    lg = sizeof(desc);
     if (ERROR_SUCCESS != RegGetValueW(HKEY_LOCAL_MACHINE, subkey.c_str(), L"DriverDesc",
                                       RRF_RT_REG_SZ, nullptr, desc, &lg))
       continue;
@@ -1583,33 +1613,110 @@ VideoDriverInfo CWIN32Util::GetVideoDriverInfo(const UINT vendorId, const std::w
       continue;
 
     // driver of interest found, we read version
-    wchar_t version[64] = {};
-    lg = sizeof(version) / sizeof(wchar_t);
+    wchar_t wversion[64] = {};
+    lg = sizeof(wversion);
     if (ERROR_SUCCESS != RegGetValueW(HKEY_LOCAL_MACHINE, subkey.c_str(), L"DriverVersion",
-                                      RRF_RT_REG_SZ, nullptr, version, &lg))
+                                      RRF_RT_REG_SZ, nullptr, wversion, &lg))
       continue;
 
-    info.valid = true;
-    info.version = FromW(std::wstring(version));
+    const std::string version = FromW(std::wstring(wversion));
 
-    // convert driver store version to Nvidia version
-    if (vendorId == PCIV_NVIDIA)
-    {
-      std::string ver(info.version);
-      StringUtils::Replace(ver, ".", "");
-      info.majorVersion = std::stoi(ver.substr(ver.length() - 5, 3));
-      info.minorVersion = std::stoi(ver.substr(ver.length() - 2, 2));
-    }
-    else // for Intel/AMD fill major version only. Single-digit for WDDM < 1.3.
-    {
-      info.majorVersion = std::stoi(info.version.substr(0, info.version.find('.')));
-    }
+    info = FormatVideoDriverInfo(vendorId, version);
 
   } while (sta == ERROR_SUCCESS && !info.valid);
 
   RegCloseKey(hKey);
 #endif
 
+  return info;
+}
+
+VideoDriverInfo CWIN32Util::GetVideoDriverInfoDX(const UINT vendorId, LUID adapterLuid)
+{
+  VideoDriverInfo info = {};
+
+#ifdef TARGET_WINDOWS_DESKTOP
+  HKEY hKey = nullptr;
+  const wchar_t* SUBKEY = L"SOFTWARE\\Microsoft\\DirectX";
+
+  if (ERROR_SUCCESS != RegOpenKeyExW(HKEY_LOCAL_MACHINE, SUBKEY, 0, KEY_ENUMERATE_SUB_KEYS, &hKey))
+    return {};
+
+  LSTATUS sta = ERROR_SUCCESS;
+  wchar_t keyName[128] = {};
+  DWORD index = 0;
+  DWORD len;
+
+  using KODI::PLATFORM::WINDOWS::FromW;
+
+  do
+  {
+    len = sizeof(keyName) / sizeof(wchar_t);
+    sta = RegEnumKeyExW(hKey, index, keyName, &len, nullptr, nullptr, nullptr, nullptr);
+    index++;
+
+    if (sta != ERROR_SUCCESS)
+      continue;
+
+    LUID luid = {};
+    DWORD qwordSize = sizeof(luid);
+
+    if (ERROR_SUCCESS !=
+        RegGetValueW(hKey, keyName, L"AdapterLuid", RRF_RT_QWORD, nullptr, &luid, &qwordSize))
+      continue;
+
+    if (luid.HighPart != adapterLuid.HighPart || luid.LowPart != adapterLuid.LowPart)
+      continue;
+
+    // driver of interest found, read the version
+    uint64_t rawDriverVersion{};
+    if (ERROR_SUCCESS != RegGetValueW(hKey, keyName, L"DriverVersion", RRF_RT_QWORD, nullptr,
+                                      &rawDriverVersion, &qwordSize))
+      continue;
+
+    info = FormatVideoDriverInfo(vendorId, rawDriverVersion);
+
+  } while (sta == ERROR_SUCCESS && !info.valid);
+
+  RegCloseKey(hKey);
+#endif
+
+  return info;
+}
+
+VideoDriverInfo CWIN32Util::FormatVideoDriverInfo(const UINT vendorId, uint64_t rawVersion)
+{
+  const unsigned int part1 = static_cast<unsigned int>(rawVersion >> 48);
+  const unsigned int part2 = static_cast<unsigned int>((rawVersion >> 32) & 0xFFFF);
+  const unsigned int part3 = static_cast<unsigned int>((rawVersion >> 16) & 0xFFFF);
+  const unsigned int part4 = static_cast<unsigned int>(rawVersion & 0xFFFF);
+
+  std::ostringstream ss;
+  ss << part1 << '.' << part2 << '.' << part3 << '.' << part4;
+
+  return FormatVideoDriverInfo(vendorId, ss.str());
+}
+
+VideoDriverInfo CWIN32Util::FormatVideoDriverInfo(const UINT vendorId, const std::string version)
+{
+  VideoDriverInfo info = {};
+
+  info.valid = true;
+  info.vendorId = vendorId;
+  info.version = version;
+
+  // convert driver store version to Nvidia version
+  if (vendorId == PCIV_NVIDIA)
+  {
+    std::string ver(version);
+    StringUtils::Replace(ver, ".", "");
+    info.majorVersion = std::stoi(ver.substr(ver.length() - 5, 3));
+    info.minorVersion = std::stoi(ver.substr(ver.length() - 2, 2));
+  }
+  else // for Intel/AMD fill major version only
+  {
+    info.majorVersion = std::stoi(version.substr(0, version.find('.')));
+  }
   return info;
 }
 
@@ -1671,4 +1778,84 @@ std::wstring CWIN32Util::GetDisplayFriendlyName(const std::wstring& gdiDeviceNam
   }
   return std::wstring();
 #endif
+}
+
+using SETTHREADDESCRIPTION = HRESULT(WINAPI*)(HANDLE hThread, PCWSTR lpThreadDescription);
+
+bool CWIN32Util::SetThreadName(const HANDLE handle, const std::string& name)
+{
+#if defined(TARGET_WINDOWS_STORE)
+  //not supported
+  return false;
+#else
+  static bool initialized = false;
+  static HINSTANCE hinstLib = NULL;
+  static SETTHREADDESCRIPTION pSetThreadDescription = nullptr;
+
+  if (!initialized)
+  {
+    initialized = true;
+
+    // MS documentation: SetThreadDescription available since Windows 10 1607
+    // function located in Kernel32.dll
+    // except for Windows 10 1607, where it is located in KernelBase.dll
+    CSysInfo::WindowsVersion winver = CSysInfo::GetWindowsVersion();
+
+    if (winver < CSysInfo::WindowsVersion::WindowsVersionWin10_1607)
+      return false;
+    else if (winver == CSysInfo::WindowsVersion::WindowsVersionWin10_1607)
+      hinstLib = LoadLibrary(L"KernelBase.dll");
+    else if (winver > CSysInfo::WindowsVersion::WindowsVersionWin10_1607)
+      hinstLib = LoadLibrary(L"Kernel32.dll");
+
+    if (hinstLib != NULL)
+    {
+      pSetThreadDescription = reinterpret_cast<SETTHREADDESCRIPTION>(
+          ::GetProcAddress(hinstLib, "SetThreadDescription"));
+    }
+
+    if (pSetThreadDescription == nullptr && hinstLib)
+      FreeLibrary(hinstLib);
+  }
+
+  if (pSetThreadDescription != nullptr &&
+      SUCCEEDED(pSetThreadDescription(handle, KODI::PLATFORM::WINDOWS::ToW(name).c_str())))
+    return true;
+  else
+    return false;
+
+#endif
+}
+
+static std::array<int, 4> ParseVideoDriverInfo(const std::string& version)
+{
+  std::array<int, 4> result{};
+
+  // the string is destroyed in the process, make a copy first.
+  std::string v{version};
+
+  char* p = std::strtok(v.data(), ".");
+  for (int idx = 0; p && idx < 4; ++idx)
+  {
+    result[idx] = std::stoi(p);
+    p = std::strtok(NULL, ".");
+  }
+
+  return result;
+}
+
+bool CWIN32Util::IsDriverVersionAtLeast(const std::string& version1, const std::string& version2)
+{
+  const std::array<int, 4> v1 = ParseVideoDriverInfo(version1);
+  const std::array<int, 4> v2 = ParseVideoDriverInfo(version2);
+
+  for (int idx = 0; idx < 4; ++idx)
+  {
+    if (v1[idx] > v2[idx])
+      return true;
+    else if (v1[idx] < v2[idx])
+      return false;
+    // equality: compare the next segment.
+  }
+  return true;
 }

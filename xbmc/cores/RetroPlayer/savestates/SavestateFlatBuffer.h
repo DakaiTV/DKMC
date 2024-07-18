@@ -14,17 +14,14 @@
 
 #include <flatbuffers/flatbuffers.h>
 
-namespace flatbuffers
-{
-class FlatBufferBuilder;
-}
-
 namespace KODI
 {
 namespace RETRO
 {
+namespace SAVESTATE
+{
 struct Savestate;
-struct SavestateBuilder;
+}
 
 class CSavestateFlatBuffer : public ISavestate
 {
@@ -100,7 +97,7 @@ private:
   /*!
    * \brief FlatBuffer struct used for accessing data
    */
-  const Savestate* m_savestate = nullptr;
+  const SAVESTATE::Savestate* m_savestate = nullptr;
 
   using StringOffset = flatbuffers::Offset<flatbuffers::String>;
   using VectorOffset = flatbuffers::Offset<flatbuffers::Vector<uint8_t>>;

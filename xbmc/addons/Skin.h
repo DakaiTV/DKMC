@@ -22,6 +22,7 @@
 #define CREDIT_LINE_LENGTH 50
 
 class CSetting;
+class TiXmlElement;
 struct IntegerSettingOption;
 struct StringSettingOption;
 
@@ -283,7 +284,7 @@ protected:
   bool m_debugging;
 
   /*! Manager/Owner of skin timers */
-  CSkinTimerManager m_skinTimerManager;
+  std::unique_ptr<CSkinTimerManager> m_skinTimerManager;
 
 private:
   std::map<int, CSkinSettingStringPtr> m_strings;

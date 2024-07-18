@@ -19,6 +19,7 @@
 #include "guilib/LocalizeStrings.h"
 #include "input/actions/Action.h"
 #include "input/actions/ActionIDs.h"
+#include "music/MusicFileItemClassify.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
@@ -33,6 +34,8 @@
 #include <cmath>
 #include <mutex>
 #include <stdlib.h>
+
+using namespace KODI;
 
 CSeekHandler::~CSeekHandler()
 {
@@ -275,7 +278,8 @@ bool CSeekHandler::OnAction(const CAction &action)
   if (!appPlayer->IsPlaying() || !appPlayer->CanSeek())
     return false;
 
-  SeekType type = g_application.CurrentFileItem().IsAudio() ? SEEK_TYPE_MUSIC : SEEK_TYPE_VIDEO;
+  SeekType type =
+      MUSIC::IsAudio(g_application.CurrentFileItem()) ? SEEK_TYPE_MUSIC : SEEK_TYPE_VIDEO;
 
   if (SeekTimeCode(action))
     return true;
@@ -307,12 +311,12 @@ bool CSeekHandler::OnAction(const CAction &action)
     }
     case ACTION_NEXT_SCENE:
     {
-      appPlayer->SeekScene(true);
+      appPlayer->SeekScene(Direction::FORWARD);
       return true;
     }
     case ACTION_PREV_SCENE:
     {
-      appPlayer->SeekScene(false);
+      appPlayer->SeekScene(Direction::BACKWARD);
       return true;
     }
     case ACTION_ANALOG_SEEK_FORWARD:

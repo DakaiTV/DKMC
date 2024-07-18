@@ -17,6 +17,8 @@
 #include "guilib/GUIEditControl.h"
 #include "guilib/GUIRadioButtonControl.h"
 #include "guilib/GUIWindowManager.h"
+#include "input/actions/Action.h"
+#include "input/actions/ActionIDs.h"
 #include "messaging/ApplicationMessenger.h"
 #include "utils/StringUtils.h"
 #include "utils/Variant.h"
@@ -550,20 +552,24 @@ namespace XBMCAddon
           throw WindowException("Control does not exist in window");
       }
 
+      CGUIMessage msg(GUI_MSG_REMOVE_CONTROL, 0, 0);
+      msg.SetPointer(pControl->pGUIControl);
+      CServiceBroker::GetAppMessenger()->SendGUIMessage(msg, iWindowId, wait);
+
       // delete control from vecControls in window object
-      std::vector<AddonClass::Ref<Control> >::iterator it = vecControls.begin();
+      std::vector<AddonClass::Ref<Control>>::iterator it = vecControls.begin();
       while (it != vecControls.end())
       {
         AddonClass::Ref<Control> control = (*it);
         if (control->iControlId == pControl->iControlId)
         {
           it = vecControls.erase(it);
-        } else ++it;
+        }
+        else
+        {
+          ++it;
+        }
       }
-
-      CGUIMessage msg(GUI_MSG_REMOVE_CONTROL, 0, 0);
-      msg.SetPointer(pControl->pGUIControl);
-      CServiceBroker::GetAppMessenger()->SendGUIMessage(msg, iWindowId, wait);
 
       // initialize control to zero
       pControl->pGUIControl = NULL;
@@ -662,16 +668,6 @@ namespace XBMCAddon
 
         while (bModal && !g_application.m_bStop)
         {
-//! @todo garbear added this code to the python window.cpp class and
-//!  commented in XBPyThread.cpp. I'm not sure how to handle this
-//! in this native implementation.
-//          // Check if XBPyThread::stop() raised a SystemExit exception
-//          if (PyThreadState_Get()->async_exc == PyExc_SystemExit)
-//          {
-//            CLog::Log(LOGDEBUG, "PYTHON: doModal() encountered a SystemExit exception, closing window and returning");
-//            Window_Close(self, NULL);
-//            break;
-//          }
           languageHook->MakePendingCalls(); // MakePendingCalls
 
           bool stillWaiting;
@@ -681,6 +677,14 @@ namespace XBMCAddon
               DelayedCallGuard dcguard(languageHook);
               stillWaiting = WaitForActionEvent(100) ? false : true;
             }
+
+            // If application has quit, close the window
+            if (bModal && g_application.m_bStop)
+            {
+              CLog::Log(LOGDEBUG, "PYTHON: Application quit inside doModal(), closing window");
+              close();
+            }
+
             languageHook->MakePendingCalls();
           } while (stillWaiting);
         }

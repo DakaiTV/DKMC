@@ -10,16 +10,19 @@
 
 #include <limits>
 
-CGUILabel::CGUILabel(float posX, float posY, float width, float height, const CLabelInfo& labelInfo, CGUILabel::OVER_FLOW overflow)
-    : m_label(labelInfo)
-    , m_textLayout(labelInfo.font, overflow == OVER_FLOW_WRAP, height)
-    , m_scrolling(overflow == OVER_FLOW_SCROLL)
-    , m_overflowType(overflow)
-    , m_scrollInfo(50, 0, labelInfo.scrollSpeed, labelInfo.scrollSuffix)
-    , m_renderRect()
-    , m_maxRect(posX, posY, posX + width, posY + height)
-    , m_invalid(true)
-    , m_color(COLOR_TEXT)
+CGUILabel::CGUILabel(float posX,
+                     float posY,
+                     float width,
+                     float height,
+                     const CLabelInfo& labelInfo,
+                     CGUILabel::OVER_FLOW overflow)
+  : m_label(labelInfo),
+    m_textLayout(labelInfo.font, overflow == OVER_FLOW_WRAP, height),
+    m_scrolling(overflow == OVER_FLOW_SCROLL),
+    m_overflowType(overflow),
+    m_scrollInfo(50, 0, labelInfo.scrollSpeed, labelInfo.scrollSuffix),
+    m_renderRect(),
+    m_maxRect(posX, posY, posX + width, posY + height)
 {
 }
 
@@ -66,7 +69,7 @@ bool CGUILabel::SetColor(CGUILabel::COLOR color)
   return changed;
 }
 
-UTILS::COLOR::Color CGUILabel::GetColor() const
+KODI::UTILS::COLOR::Color CGUILabel::GetColor() const
 {
   switch (m_color)
   {
@@ -104,7 +107,7 @@ bool CGUILabel::Process(unsigned int currentTime)
 
 void CGUILabel::Render()
 {
-  UTILS::COLOR::Color color = GetColor();
+  KODI::UTILS::COLOR::Color color = GetColor();
   bool renderSolid = (m_color == COLOR_DISABLED);
   bool overFlows = (m_renderRect.Width() + 0.5f < m_textLayout.GetTextWidth()); // 0.5f to deal with floating point rounding issues
   if (overFlows && m_scrolling && !renderSolid)
@@ -115,20 +118,32 @@ void CGUILabel::Render()
     float posY = m_renderRect.y1;
     uint32_t align = 0;
     if (!overFlows)
-    { // hack for right and centered multiline text, as GUITextLayout::Render() treats posX as the right hand
-      // or center edge of the text (see GUIFontTTF::DrawTextInternal), and this has already been taken care of
+    { // hack for centered multiline text, as GUITextLayout::Render() treats posX as
+      // center edge of the text (see GUIFontTTF::DrawTextInternal), and this has already been taken care of
       // in UpdateRenderRect(), but we wish to still pass the horizontal alignment info through (so that multiline text
       // is aligned correctly), so we must undo the UpdateRenderRect() changes for horizontal alignment.
-      if (m_label.align & XBFONT_RIGHT)
-        posX += m_renderRect.Width();
-      else if (m_label.align & XBFONT_CENTER_X)
+      if (m_label.align & XBFONT_CENTER_X)
         posX += m_renderRect.Width() * 0.5f;
       if (m_label.align & XBFONT_CENTER_Y) // need to pass a centered Y so that <angle> will rotate around the correct point.
         posY += m_renderRect.Height() * 0.5f;
       align = m_label.align;
     }
     else
-      align |= XBFONT_TRUNCATED;
+    {
+      if (m_overflowType == OVER_FLOW_TRUNCATE_LEFT)
+        align |= XBFONT_TRUNCATED_LEFT;
+      else
+        align |= XBFONT_TRUNCATED;
+
+      if (m_label.align & XBFONT_RIGHT)
+        align |= XBFONT_RIGHT;
+
+      if (m_label.align & XBFONT_CENTER_X)
+      {
+        posX += m_renderRect.Width() * 0.5f; // hack for centered multiline text, same of above
+        align |= XBFONT_CENTER_X;
+      }
+    }
     m_textLayout.Render(posX, posY, m_label.angle, color, m_label.shadowColor, align, m_overflowType == OVER_FLOW_CLIP ? m_textLayout.GetTextWidth() : m_renderRect.Width(), renderSolid);
   }
 }
@@ -163,7 +178,8 @@ bool CGUILabel::SetAlign(uint32_t align)
   return changed;
 }
 
-bool CGUILabel::SetStyledText(const vecText& text, const std::vector<UTILS::COLOR::Color>& colors)
+bool CGUILabel::SetStyledText(const vecText& text,
+                              const std::vector<KODI::UTILS::COLOR::Color>& colors)
 {
   m_textLayout.UpdateStyled(text, colors, m_maxRect.Width());
   m_invalid = false;

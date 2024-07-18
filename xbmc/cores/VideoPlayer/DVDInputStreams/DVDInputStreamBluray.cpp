@@ -27,15 +27,18 @@
 #include "utils/URIUtils.h"
 #include "utils/XTimeUtils.h"
 #include "utils/log.h"
+#include "video/VideoFileItemClassify.h"
 
 #include <functional>
 #include <limits>
+#include <memory>
 
 #include <libbluray/bluray.h>
 #include <libbluray/log_control.h>
 
 #define LIBBLURAY_BYTESEEK 0
 
+using namespace KODI;
 using namespace XFILE;
 
 using namespace std::chrono_literals;
@@ -151,7 +154,7 @@ bool CDVDInputStreamBluray::Open()
     // Check whether disc is AACS protected
     CURL url3(root);
     CFileItem base(url3, false);
-    openDisc = base.IsProtectedBlurayDisc();
+    openDisc = VIDEO::IsProtectedBlurayDisc(base);
 
     // check for a menu call for an image file
     if (StringUtils::EqualsNoCase(filename, "menu"))
@@ -165,7 +168,7 @@ bool CDVDInputStreamBluray::Open()
 
       // Check whether disc is AACS protected
       if (!openDisc)
-        openDisc = item.IsProtectedBlurayDisc();
+        openDisc = VIDEO::IsProtectedBlurayDisc(item);
 
       if (item.IsDiscImage())
       {
@@ -183,7 +186,7 @@ bool CDVDInputStreamBluray::Open()
 
     openStream = true;
   }
-  else if (m_item.IsProtectedBlurayDisc())
+  else if (VIDEO::IsProtectedBlurayDisc(m_item))
   {
     openDisc = true;
   }
@@ -331,7 +334,7 @@ bool CDVDInputStreamBluray::Open()
     m_navmode = false;
     m_titleInfo = GetTitleLongest();
   }
-  else if (resumable && m_item.GetStartOffset() == STARTOFFSET_RESUME)
+  else if (resumable && m_item.GetStartOffset() == STARTOFFSET_RESUME && m_item.IsResumable())
   {
     // resuming a bluray for which we have a saved state - the playlist will be open later on SetState
     m_navmode = false;
@@ -1241,7 +1244,8 @@ void CDVDInputStreamBluray::SetupPlayerSettings()
 
 bool CDVDInputStreamBluray::OpenStream(CFileItem &item)
 {
-  m_pstream.reset(new CDVDInputStreamFile(item, 0));
+  m_pstream = std::make_unique<CDVDInputStreamFile>(item, READ_TRUNCATED | READ_BITRATE |
+                                                              READ_CHUNKED | READ_NO_CACHE);
 
   if (!m_pstream->Open())
   {

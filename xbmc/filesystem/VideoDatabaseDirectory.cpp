@@ -10,6 +10,7 @@
 
 #include "File.h"
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "VideoDatabaseDirectory/QueryParams.h"
 #include "guilib/LocalizeStrings.h"
@@ -75,6 +76,8 @@ std::string GetChildContentType(const std::unique_ptr<CDirectoryNode>& node)
       return "sets";
     case NODE_TYPE_TAGS:
       return "tags";
+    case NODE_TYPE_VIDEOVERSIONS:
+      return "videoversions";
     default:
       break;
   }
@@ -103,7 +106,7 @@ bool CVideoDatabaseDirectory::GetDirectory(const CURL& url, CFileItemList &items
       if (!strImage.empty() && CServiceBroker::GetGUI()->GetTextureManager().HasTexture(strImage))
         item->SetArt("icon", strImage);
     }
-    if (item->GetVideoInfoTag())
+    if (item->HasVideoInfoTag())
     {
       item->SetDynPath(item->GetVideoInfoTag()->GetPath());
     }
@@ -228,6 +231,10 @@ bool CVideoDatabaseDirectory::GetLabel(const std::string& strDirectory, std::str
     strLabel += strTemp;
   }
 
+  // get videoversions
+  if (params.GetVideoVersionId() != -1)
+    strLabel += videodatabase.GetVideoVersionById(params.GetVideoVersionId());
+
   if (strLabel.empty())
   {
     switch (pNode->GetChildType())
@@ -250,6 +257,9 @@ bool CVideoDatabaseDirectory::GetLabel(const std::string& strDirectory, std::str
       strLabel = g_localizeStrings.Get(20434); break;
     case NODE_TYPE_TAGS: // Tags
       strLabel = g_localizeStrings.Get(20459); break;
+    case NODE_TYPE_VIDEOVERSIONS: // Video versions
+      strLabel = g_localizeStrings.Get(40000);
+      break;
     case NODE_TYPE_MOVIES_OVERVIEW: // Movies
       strLabel = g_localizeStrings.Get(342); break;
     case NODE_TYPE_TVSHOWS_OVERVIEW: // TV Shows
@@ -317,6 +327,8 @@ std::string CVideoDatabaseDirectory::GetIcon(const std::string &strDirectory)
     return "DefaultSets.png";
   case NODE_TYPE_TAGS: // Tags
     return "DefaultTags.png";
+  case NODE_TYPE_VIDEOVERSIONS: // Video versions
+    return "DefaultVideoVersions.png";
   case NODE_TYPE_YEAR: // Year
     return "DefaultYear.png";
   case NODE_TYPE_DIRECTOR: // Director
@@ -349,7 +361,11 @@ std::string CVideoDatabaseDirectory::GetIcon(const std::string &strDirectory)
 bool CVideoDatabaseDirectory::ContainsMovies(const std::string &path)
 {
   VIDEODATABASEDIRECTORY::NODE_TYPE type = GetDirectoryChildType(path);
-  if (type == VIDEODATABASEDIRECTORY::NODE_TYPE_TITLE_MOVIES || type == VIDEODATABASEDIRECTORY::NODE_TYPE_EPISODES || type == VIDEODATABASEDIRECTORY::NODE_TYPE_TITLE_MUSICVIDEOS) return true;
+  if (type == VIDEODATABASEDIRECTORY::NODE_TYPE_TITLE_MOVIES ||
+      type == VIDEODATABASEDIRECTORY::NODE_TYPE_EPISODES ||
+      type == VIDEODATABASEDIRECTORY::NODE_TYPE_TITLE_MUSICVIDEOS ||
+      type == VIDEODATABASEDIRECTORY::NODE_TYPE_VIDEOVERSIONS)
+    return true;
   return false;
 }
 

@@ -9,10 +9,9 @@
 #include "MusicThumbLoader.h"
 
 #include "FileItem.h"
-#include "TextureDatabase.h"
+#include "imagefiles/ImageFileURL.h"
 #include "music/infoscanner/MusicInfoScanner.h"
 #include "music/tags/MusicInfoTag.h"
-#include "music/tags/MusicInfoTagLoaderFactory.h"
 #include "utils/StringUtils.h"
 #include "video/VideoThumbLoader.h"
 
@@ -120,7 +119,7 @@ bool CMusicThumbLoader::LoadItemLookup(CFileItem* pItem)
       if (!FillThumb(*pItem, false)) // Check for user thumbs but ignore folder thumbs
       {
         // No user thumb, use embedded art
-        std::string thumb = CTextureUtils::GetWrappedImageURL(pItem->GetPath(), "music");
+        std::string thumb = IMAGE_FILES::URLFromFile(pItem->GetPath(), "music");
         pItem->SetArt("thumb", thumb);
       }
     }
@@ -367,19 +366,8 @@ bool CMusicThumbLoader::FillLibraryArt(CFileItem &item)
     }
 
     item.AppendArt(artmap);
+    item.SetProperty("libraryartfilled", true);
   }
 
-  item.SetProperty("libraryartfilled", true);
   return artfound;
-}
-
-bool CMusicThumbLoader::GetEmbeddedThumb(const std::string &path, EmbeddedArt &art)
-{
-  CFileItem item(path, false);
-  std::unique_ptr<IMusicInfoTagLoader> pLoader (CMusicInfoTagLoaderFactory::CreateLoader(item));
-  CMusicInfoTag tag;
-  if (nullptr != pLoader)
-    pLoader->Load(path, tag, &art);
-
-  return !art.Empty();
 }

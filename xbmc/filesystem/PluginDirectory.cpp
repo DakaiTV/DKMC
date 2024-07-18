@@ -9,6 +9,7 @@
 #include "PluginDirectory.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "URL.h"
 #include "addons/AddonInstaller.h"
@@ -545,4 +546,9 @@ bool CPluginDirectory::CheckExists(const std::string& content, const std::string
   url.SetOption("kodi_action", "check_exists");
   CFileItem item;
   return CPluginDirectory::GetPluginResult(url.Get(), item, false);
+}
+
+bool CPluginDirectory::Resolve(CFileItem& item) const
+{
+  return GetResolvedPluginResult(item);
 }

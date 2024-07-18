@@ -9,6 +9,7 @@
 #include "ControllerSelect.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "dialogs/GUIDialogSelect.h"
 #include "games/controllers/Controller.h"
@@ -38,6 +39,9 @@ void CControllerSelect::Initialize(ControllerVector controllers,
   // Validate parameters
   if (!callback)
     return;
+
+  // Stop thread and reset state
+  Deinitialize();
 
   // Initialize state
   m_controllers = std::move(controllers);

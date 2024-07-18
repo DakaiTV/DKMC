@@ -16,6 +16,7 @@
 #include <string>
 
 class CSettingList;
+class TiXmlElement;
 class TiXmlNode;
 
 /*!
@@ -45,8 +46,6 @@ public:
   static constexpr auto SETTING_LOCALE_CHARSET = "locale.charset";
   static constexpr auto SETTING_LOCALE_KEYBOARDLAYOUTS = "locale.keyboardlayouts";
   static constexpr auto SETTING_LOCALE_ACTIVEKEYBOARDLAYOUT = "locale.activekeyboardlayout";
-  static constexpr auto SETTING_LOCALE_TIMEZONECOUNTRY = "locale.timezonecountry";
-  static constexpr auto SETTING_LOCALE_TIMEZONE = "locale.timezone";
   static constexpr auto SETTING_LOCALE_SHORTDATEFORMAT = "locale.shortdateformat";
   static constexpr auto SETTING_LOCALE_LONGDATEFORMAT = "locale.longdateformat";
   static constexpr auto SETTING_LOCALE_TIMEFORMAT = "locale.timeformat";
@@ -96,6 +95,11 @@ public:
       "videolibrary.musicvideoartwhitelist";
   static constexpr auto SETTING_VIDEOLIBRARY_SHOWPERFORMERS =
       "videolibrary.musicvideosallperformers";
+  static constexpr auto SETTING_VIDEOLIBRARY_IGNOREVIDEOVERSIONS =
+      "videolibrary.ignorevideoversions";
+  static constexpr auto SETTING_VIDEOLIBRARY_IGNOREVIDEOEXTRAS = "videolibrary.ignorevideoextras";
+  static constexpr auto SETTING_VIDEOLIBRARY_SHOWVIDEOVERSIONSASFOLDER =
+      "videolibrary.showvideoversionsasfolder";
   static constexpr auto SETTING_LOCALE_AUDIOLANGUAGE = "locale.audiolanguage";
   static constexpr auto SETTING_VIDEOPLAYER_PREFERDEFAULTFLAG = "videoplayer.preferdefaultflag";
   static constexpr auto SETTING_VIDEOPLAYER_AUTOPLAYNEXTITEM = "videoplayer.autoplaynextitem";
@@ -113,6 +117,9 @@ public:
       "videoplayer.quitstereomodeonstop";
   static constexpr auto SETTING_VIDEOPLAYER_RENDERMETHOD = "videoplayer.rendermethod";
   static constexpr auto SETTING_VIDEOPLAYER_HQSCALERS = "videoplayer.hqscalers";
+  static constexpr auto SETTING_VIDEOPLAYER_HQSCALERPRECISION = "videoplayer.hqscalerprecision";
+  static constexpr auto SETTING_VIDEOPLAYER_USESUPERRESOLUTION = "videoplayer.usesuperresolution";
+  static constexpr auto SETTING_VIDEOPLAYER_HIGHPRECISIONPROCESSING = "videoplayer.highprecision";
   static constexpr auto SETTING_VIDEOPLAYER_USEMEDIACODEC = "videoplayer.usemediacodec";
   static constexpr auto SETTING_VIDEOPLAYER_USEMEDIACODECSURFACE =
       "videoplayer.usemediacodecsurface";
@@ -127,7 +134,13 @@ public:
   static constexpr auto SETTING_VIDEOPLAYER_USESTAGEFRIGHT = "videoplayer.usestagefright";
   static constexpr auto SETTING_VIDEOPLAYER_LIMITGUIUPDATE = "videoplayer.limitguiupdate";
   static constexpr auto SETTING_VIDEOPLAYER_SUPPORTMVC = "videoplayer.supportmvc";
+  static constexpr auto SETTING_VIDEOPLAYER_CONVERTDOVI = "videoplayer.convertdovi";
+  static constexpr auto SETTING_VIDEOPLAYER_ALLOWEDHDRFORMATS = "videoplayer.allowedhdrformats";
+  static constexpr auto SETTING_VIDEOPLAYER_QUEUETIMESIZE = "videoplayer.queuetimesize";
+  static constexpr auto SETTING_VIDEOPLAYER_QUEUEDATASIZE = "videoplayer.queuedatasize";
   static constexpr auto SETTING_MYVIDEOS_SELECTACTION = "myvideos.selectaction";
+  static constexpr auto SETTING_MYVIDEOS_SELECTDEFAULTVERSION = "myvideos.selectdefaultversion";
+  static constexpr auto SETTING_MYVIDEOS_PLAYACTION = "myvideos.playaction";
   static constexpr auto SETTING_MYVIDEOS_USETAGS = "myvideos.usetags";
   static constexpr auto SETTING_MYVIDEOS_EXTRACTFLAGS = "myvideos.extractflags";
   static constexpr auto SETTING_MYVIDEOS_EXTRACTCHAPTERTHUMBS = "myvideos.extractchapterthumbs";
@@ -213,6 +226,8 @@ public:
   static constexpr auto SETTING_PVRPLAYBACK_DELAYMARKLASTWATCHED =
       "pvrplayback.delaymarklastwatched";
   static constexpr auto SETTING_PVRPLAYBACK_FPS = "pvrplayback.fps";
+  static constexpr auto SETTING_PVRPLAYBACK_AUTOPLAYNEXTPROGRAMME =
+      "pvrplayback.autoplaynextprogramme";
   static constexpr auto SETTING_PVRRECORD_INSTANTRECORDACTION = "pvrrecord.instantrecordaction";
   static constexpr auto SETTING_PVRRECORD_INSTANTRECORDTIME = "pvrrecord.instantrecordtime";
   static constexpr auto SETTING_PVRRECORD_MARGINSTART = "pvrrecord.marginstart";
@@ -317,6 +332,7 @@ public:
   static constexpr auto SETTING_SERVICES_UPNPLOOKFOREXTERNALSUBTITLES =
       "services.upnplookforexternalsubtitles";
   static constexpr auto SETTING_SERVICES_UPNPCONTROLLER = "services.upnpcontroller";
+  static constexpr auto SETTING_SERVICES_UPNPPLAYERVOLUMESYNC = "services.upnpplayervolumesync";
   static constexpr auto SETTING_SERVICES_UPNPRENDERER = "services.upnprenderer";
   static constexpr auto SETTING_SERVICES_WEBSERVER = "services.webserver";
   static constexpr auto SETTING_SERVICES_WEBSERVERPORT = "services.webserverport";
@@ -344,6 +360,7 @@ public:
   static constexpr auto SETTING_SMB_MINPROTOCOL = "smb.minprotocol";
   static constexpr auto SETTING_SMB_MAXPROTOCOL = "smb.maxprotocol";
   static constexpr auto SETTING_SMB_LEGACYSECURITY = "smb.legacysecurity";
+  static constexpr auto SETTING_SMB_CHUNKSIZE = "smb.chunksize";
   static constexpr auto SETTING_SERVICES_WSDISCOVERY = "services.wsdiscovery";
   static constexpr auto SETTING_VIDEOSCREEN_MONITOR = "videoscreen.monitor";
   static constexpr auto SETTING_VIDEOSCREEN_SCREEN = "videoscreen.screen";
@@ -366,6 +383,8 @@ public:
   static constexpr auto SETTING_VIDEOSCREEN_USESYSTEMSDRPEAKLUMINANCE =
       "videoscreen.usesystemsdrpeakluminance";
   static constexpr auto SETTING_VIDEOSCREEN_GUISDRPEAKLUMINANCE = "videoscreen.guipeakluminance";
+  static constexpr auto SETTING_VIDEOSCREEN_DITHER = "videoscreen.dither";
+  static constexpr auto SETTING_VIDEOSCREEN_DITHERDEPTH = "videoscreen.ditherdepth";
   static constexpr auto SETTING_AUDIOOUTPUT_AUDIODEVICE = "audiooutput.audiodevice";
   static constexpr auto SETTING_AUDIOOUTPUT_CHANNELS = "audiooutput.channels";
   static constexpr auto SETTING_AUDIOOUTPUT_CONFIG = "audiooutput.config";
@@ -454,6 +473,10 @@ public:
   static constexpr auto SETTING_SOURCE_VIDEOS = "source.videos";
   static constexpr auto SETTING_SOURCE_MUSIC = "source.music";
   static constexpr auto SETTING_SOURCE_PICTURES = "source.pictures";
+  static constexpr auto SETTING_FILECACHE_BUFFERMODE = "filecache.buffermode";
+  static constexpr auto SETTING_FILECACHE_MEMORYSIZE = "filecache.memorysize"; // in MBytes
+  static constexpr auto SETTING_FILECACHE_READFACTOR = "filecache.readfactor"; // as integer (x100)
+  static constexpr auto SETTING_FILECACHE_CHUNKSIZE = "filecache.chunksize"; // in Bytes
 
   // values for SETTING_VIDEOLIBRARY_SHOWUNWATCHEDPLOTS
   static const int VIDEOLIBRARY_PLOTS_SHOW_UNWATCHED_MOVIES = 0;
@@ -477,6 +500,10 @@ public:
   static constexpr int SETTING_AUTOPLAYNEXT_EPISODES = 2;
   static constexpr int SETTING_AUTOPLAYNEXT_MOVIES = 3;
   static constexpr int SETTING_AUTOPLAYNEXT_UNCATEGORIZED = 4;
+
+  // values for SETTING_VIDEOPLAYER_ALLOWEDHDRFORMATS
+  static const int VIDEOPLAYER_ALLOWED_HDR_TYPE_DOLBY_VISION = 0;
+  static const int VIDEOPLAYER_ALLOWED_HDR_TYPE_HDR10PLUS = 1;
 
   /*!
    \brief Creates a new settings wrapper around a new settings manager.
@@ -577,7 +604,6 @@ protected:
   void UninitializeOptionFillers() override;
   void InitializeConditions() override;
   void UninitializeConditions() override;
-  void InitializeVisibility() override;
   void InitializeDefaults() override;
   void InitializeISettingsHandlers() override;
   void UninitializeISettingsHandlers() override;

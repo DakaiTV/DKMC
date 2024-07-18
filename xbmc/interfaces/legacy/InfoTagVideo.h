@@ -2300,6 +2300,23 @@ namespace XBMCAddon
 #ifdef DOXYGEN_SHOULD_USE_THIS
       ///
       /// \ingroup python_InfoTagVideo
+      /// @brief \python_func{ setVideoAssetTitle(videoAssetTitle) }
+      /// Set the video asset title of the item.
+      ///
+      /// @param videoAssetTitle     string - Video asset title.
+      ///
+      ///
+      ///-----------------------------------------------------------------------
+      /// @python_v21 New function added.
+      ///
+      setVideoAssetTitle(...);
+#else
+      void setVideoAssetTitle(const String& videoAssetTitle);
+#endif
+
+#ifdef DOXYGEN_SHOULD_USE_THIS
+      ///
+      /// \ingroup python_InfoTagVideo
       /// @brief \python_func{ setProductionCode(const String& productioncode) }
       /// Set the production code of the video item.
       ///
@@ -2734,6 +2751,7 @@ namespace XBMCAddon
       static void setSetRaw(CVideoInfoTag* infoTag, const String& set);
       static void setSetOverviewRaw(CVideoInfoTag* infoTag, const String& setOverview);
       static void setTagsRaw(CVideoInfoTag* infoTag, std::vector<String> tags);
+      static void setVideoAssetTitleRaw(CVideoInfoTag* infoTag, const String& videoAssetTitle);
       static void setProductionCodeRaw(CVideoInfoTag* infoTag, const String& productionCode);
       static void setFirstAiredRaw(CVideoInfoTag* infoTag, const String& firstAired);
       static void setLastPlayedRaw(CVideoInfoTag* infoTag, const String& lastPlayed);

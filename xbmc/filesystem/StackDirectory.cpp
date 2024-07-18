@@ -9,6 +9,7 @@
 #include "StackDirectory.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "URL.h"
 #include "settings/AdvancedSettings.h"
@@ -57,7 +58,7 @@ namespace XFILE
         RegExps.push_back(tempRE);
       else
         CLog::Log(LOGERROR, "Invalid video stack RE ({}). Must have exactly 4 captures.",
-                  itRegExp->c_str());
+                  *itRegExp);
       ++itRegExp;
     }
     return GetStackedTitlePath(strPath, RegExps);

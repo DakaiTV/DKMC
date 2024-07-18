@@ -10,6 +10,7 @@
 
 #include "FileItem.h"
 #include "ServiceBroker.h"
+#include "dialogs/GUIDialogBusy.h"
 #include "dialogs/GUIDialogProgress.h"
 #include "dialogs/GUIDialogSelect.h"
 #include "dialogs/GUIDialogYesNo.h"
@@ -35,6 +36,7 @@
 #include "pvr/timers/PVRTimerInfoTag.h"
 #include "pvr/timers/PVRTimers.h"
 #include "settings/Settings.h"
+#include "threads/IRunnable.h"
 #include "utils/StringUtils.h"
 #include "utils/SystemInfo.h"
 #include "utils/Variant.h"
@@ -49,6 +51,69 @@
 
 using namespace PVR;
 using namespace KODI::MESSAGING;
+
+namespace
+{
+class AsyncUpdateTimer : private IRunnable
+{
+public:
+  AsyncUpdateTimer(const CPVRGUIActionsTimers& guiActions,
+                   const std::shared_ptr<CPVRTimerInfoTag>& oldTimer,
+                   const std::shared_ptr<CPVRTimerInfoTag>& newTimer)
+    : m_guiActions(guiActions), m_oldTimer(oldTimer), m_newTimer(newTimer)
+  {
+  }
+
+  bool Execute()
+  {
+    CGUIDialogBusy::Wait(this, 100, false);
+    return m_success;
+  }
+
+private:
+  // IRunnable implementation
+  void Run() override
+  {
+    m_success = true;
+
+    if (m_newTimer->GetTimerType() == m_oldTimer->GetTimerType() &&
+        m_newTimer->ClientID() == m_oldTimer->ClientID())
+    {
+      if (CServiceBroker::GetPVRManager().Timers()->UpdateTimer(m_newTimer))
+        return;
+
+      HELPERS::ShowOKDialogText(CVariant{257},
+                                CVariant{19263}); // "Error", "Could not update the timer."
+      m_success = false;
+      return;
+    }
+    else
+    {
+      // Timer type or client changed. Delete the original timer, then create the new timer. This
+      // order is important. for instance, the new timer might be a rule which schedules the
+      // original timer. Deleting the original timer after creating the rule would do literally this
+      // and we would end up with one timer missing wrt to the rule defined by the new timer.
+      if (m_guiActions.DeleteTimer(m_oldTimer, m_oldTimer->IsRecording(), false))
+      {
+        if (m_newTimer->IsTimerRule())
+          m_newTimer->ResetChildState();
+
+        m_success = m_guiActions.AddTimer(m_newTimer);
+        if (!m_success)
+        {
+          // rollback.
+          m_success = m_guiActions.AddTimer(m_oldTimer);
+        }
+      }
+    }
+  }
+
+  const CPVRGUIActionsTimers& m_guiActions;
+  std::shared_ptr<CPVRTimerInfoTag> m_oldTimer;
+  std::shared_ptr<CPVRTimerInfoTag> m_newTimer;
+  bool m_success{false};
+};
+} // unnamed namespace
 
 CPVRGUIActionsTimers::CPVRGUIActionsTimers()
   : m_settings({CSettings::SETTING_PVRRECORD_INSTANTRECORDTIME,
@@ -199,10 +264,8 @@ bool CPVRGUIActionsTimers::AddTimer(const std::shared_ptr<CPVRTimerInfoTag>& ite
   if (!item->Channel() && !item->GetTimerType()->IsEpgBasedTimerRule())
   {
     CLog::LogF(LOGERROR, "No channel given");
-    HELPERS::ShowOKDialogText(
-        CVariant{257},
-        CVariant{
-            19109}); // "Error", "Could not save the timer. Check the log for more information about this message."
+    HELPERS::ShowOKDialogText(CVariant{257},
+                              CVariant{19109}); // "Error", "Could not save the timer."
     return false;
   }
 
@@ -220,10 +283,8 @@ bool CPVRGUIActionsTimers::AddTimer(const std::shared_ptr<CPVRTimerInfoTag>& ite
 
   if (!CServiceBroker::GetPVRManager().Timers()->AddTimer(item))
   {
-    HELPERS::ShowOKDialogText(
-        CVariant{257},
-        CVariant{
-            19109}); // "Error", "Could not save the timer. Check the log for more information about this message."
+    HELPERS::ShowOKDialogText(CVariant{257},
+                              CVariant{19109}); // "Error", "Could not save the timer"
     return false;
   }
 
@@ -371,7 +432,7 @@ bool CPVRGUIActionsTimers::SetRecordingOnChannel(const std::shared_ptr<CPVRChann
       ParentalCheckResult::SUCCESS)
     return bReturn;
 
-  const std::shared_ptr<CPVRClient> client =
+  const std::shared_ptr<const CPVRClient> client =
       CServiceBroker::GetPVRManager().GetClient(channel->ClientID());
   if (client && client->GetClientCapabilities().SupportsTimers())
   {
@@ -507,10 +568,8 @@ bool CPVRGUIActionsTimers::SetRecordingOnChannel(const std::shared_ptr<CPVRChann
         bReturn = CServiceBroker::GetPVRManager().Timers()->AddTimer(newTimer);
 
       if (!bReturn)
-        HELPERS::ShowOKDialogText(
-            CVariant{257},
-            CVariant{
-                19164}); // "Error", "Could not start recording. Check the log for more information about this message."
+        HELPERS::ShowOKDialogText(CVariant{257},
+                                  CVariant{19164}); // "Error", "Could not start recording."
     }
     else if (!bOnOff && CServiceBroker::GetPVRManager().Timers()->IsRecordingOnChannel(*channel))
     {
@@ -519,10 +578,8 @@ bool CPVRGUIActionsTimers::SetRecordingOnChannel(const std::shared_ptr<CPVRChann
           CServiceBroker::GetPVRManager().Timers()->DeleteTimersOnChannel(channel, true, true);
 
       if (!bReturn)
-        HELPERS::ShowOKDialogText(
-            CVariant{257},
-            CVariant{
-                19170}); // "Error", "Could not stop recording. Check the log for more information about this message."
+        HELPERS::ShowOKDialogText(CVariant{257},
+                                  CVariant{19170}); // "Error", "Could not stop recording."
     }
   }
 
@@ -534,7 +591,7 @@ bool CPVRGUIActionsTimers::ToggleTimer(const CFileItem& item) const
   if (!item.HasEPGInfoTag())
     return false;
 
-  const std::shared_ptr<CPVRTimerInfoTag> timer(CPVRItem(item).GetTimerInfoTag());
+  const std::shared_ptr<const CPVRTimerInfoTag> timer(CPVRItem(item).GetTimerInfoTag());
   if (timer)
   {
     if (timer->IsRecording())
@@ -560,10 +617,8 @@ bool CPVRGUIActionsTimers::ToggleTimerState(const CFileItem& item) const
   if (CServiceBroker::GetPVRManager().Timers()->UpdateTimer(timer))
     return true;
 
-  HELPERS::ShowOKDialogText(
-      CVariant{257},
-      CVariant{
-          19263}); // "Error", "Could not update the timer. Check the log for more information about this message."
+  HELPERS::ShowOKDialogText(CVariant{257},
+                            CVariant{19263}); // "Error", "Could not update the timer."
   return false;
 }
 
@@ -583,32 +638,8 @@ bool CPVRGUIActionsTimers::EditTimer(const CFileItem& item) const
   if (ShowTimerSettings(newTimer) &&
       (!timer->GetTimerType()->IsReadOnly() || timer->GetTimerType()->SupportsEnableDisable()))
   {
-    if (newTimer->GetTimerType() == timer->GetTimerType())
-    {
-      if (CServiceBroker::GetPVRManager().Timers()->UpdateTimer(newTimer))
-        return true;
-
-      HELPERS::ShowOKDialogText(
-          CVariant{257},
-          CVariant{
-              19263}); // "Error", "Could not update the timer. Check the log for more information about this message."
-      return false;
-    }
-    else
-    {
-      // timer type changed. delete the original timer, then create the new timer. this order is
-      // important. for instance, the new timer might be a rule which schedules the original timer.
-      // deleting the original timer after creating the rule would do literally this and we would
-      // end up with one timer missing wrt to the rule defined by the new timer.
-      if (DeleteTimer(timer, timer->IsRecording(), false))
-      {
-        if (AddTimer(newTimer))
-          return true;
-
-        // rollback.
-        return AddTimer(timer);
-      }
-    }
+    AsyncUpdateTimer asyncUpdate(*this, timer, newTimer);
+    return asyncUpdate.Execute();
   }
   return false;
 }
@@ -654,7 +685,7 @@ bool CPVRGUIActionsTimers::DeleteTimer(const CFileItem& item,
                                        bool bDeleteRule) const
 {
   std::shared_ptr<CPVRTimerInfoTag> timer;
-  const std::shared_ptr<CPVRRecording> recording(CPVRItem(item).GetRecording());
+  const std::shared_ptr<const CPVRRecording> recording(CPVRItem(item).GetRecording());
   if (recording)
     timer = recording->GetRecordingTimer();
 
@@ -684,10 +715,8 @@ bool CPVRGUIActionsTimers::DeleteTimer(const CFileItem& item,
           TimerOperationResult::OK)
         return true;
 
-      HELPERS::ShowOKDialogText(
-          CVariant{257},
-          CVariant{
-              19170}); // "Error", "Could not stop recording. Check the log for more information about this message."
+      HELPERS::ShowOKDialogText(CVariant{257},
+                                CVariant{19170}); // "Error", "Could not stop recording."
       return false;
     }
   }
@@ -730,10 +759,8 @@ bool CPVRGUIActionsTimers::DeleteTimer(const std::shared_ptr<CPVRTimerInfoTag>& 
     }
     case TimerOperationResult::FAILED:
     {
-      HELPERS::ShowOKDialogText(
-          CVariant{257},
-          CVariant{
-              19110}); // "Error", "Could not delete the timer. Check the log for more information about this message."
+      HELPERS::ShowOKDialogText(CVariant{257},
+                                CVariant{19110}); // "Error", "Could not delete the timer."
       return false;
     }
     default:
@@ -745,11 +772,11 @@ bool CPVRGUIActionsTimers::DeleteTimer(const std::shared_ptr<CPVRTimerInfoTag>& 
   return false;
 }
 
-bool CPVRGUIActionsTimers::ConfirmDeleteTimer(const std::shared_ptr<CPVRTimerInfoTag>& timer,
+bool CPVRGUIActionsTimers::ConfirmDeleteTimer(const std::shared_ptr<const CPVRTimerInfoTag>& timer,
                                               bool& bDeleteRule) const
 {
   bool bConfirmed(false);
-  const std::shared_ptr<CPVRTimerInfoTag> parentTimer(
+  const std::shared_ptr<const CPVRTimerInfoTag> parentTimer(
       CServiceBroker::GetPVRManager().Timers()->GetTimerRule(timer));
 
   if (parentTimer && parentTimer->GetTimerType()->AllowsDelete())
@@ -792,7 +819,7 @@ bool CPVRGUIActionsTimers::StopRecording(const CFileItem& item) const
 }
 
 bool CPVRGUIActionsTimers::ConfirmStopRecording(
-    const std::shared_ptr<CPVRTimerInfoTag>& timer) const
+    const std::shared_ptr<const CPVRTimerInfoTag>& timer) const
 {
   return CGUIDialogYesNo::ShowAndGetInput(
       CVariant{847}, // "Confirm stop recording"
@@ -802,7 +829,9 @@ bool CPVRGUIActionsTimers::ConfirmStopRecording(
 
 namespace
 {
-std::string GetAnnouncerText(const std::shared_ptr<CPVRTimerInfoTag>& timer, int idEpg, int idNoEpg)
+std::string GetAnnouncerText(const std::shared_ptr<const CPVRTimerInfoTag>& timer,
+                             int idEpg,
+                             int idNoEpg)
 {
   std::string text;
   if (timer->IsEpgBased())
@@ -820,16 +849,16 @@ std::string GetAnnouncerText(const std::shared_ptr<CPVRTimerInfoTag>& timer, int
   return text;
 }
 
-void AddEventLogEntry(const std::shared_ptr<CPVRTimerInfoTag>& timer, int idEpg, int idNoEpg)
+void AddEventLogEntry(const std::shared_ptr<const CPVRTimerInfoTag>& timer, int idEpg, int idNoEpg)
 {
   std::string name;
   std::string icon;
 
-  const std::shared_ptr<CPVRClient> client =
+  const std::shared_ptr<const CPVRClient> client =
       CServiceBroker::GetPVRManager().GetClient(timer->GetTimerType()->GetClientId());
   if (client)
   {
-    name = client->GetFriendlyName();
+    name = client->GetFullClientName();
     icon = client->Icon();
   }
   else
@@ -882,7 +911,7 @@ void CPVRGUIActionsTimers::AnnounceReminder(const std::shared_ptr<CPVRTimerInfoT
   std::string text = GetAnnouncerText(timer, 19307, 19308); // Reminder for ...
 
   bool bCanRecord = false;
-  const std::shared_ptr<CPVRClient> client =
+  const std::shared_ptr<const CPVRClient> client =
       CServiceBroker::GetPVRManager().GetClient(timer->ClientID());
   if (client && client->GetClientCapabilities().SupportsTimers())
   {

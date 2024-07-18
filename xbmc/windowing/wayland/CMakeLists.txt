@@ -49,16 +49,16 @@ set(HEADERS Connection.h
             WinSystemWayland.h
             XkbcommonKeymap.h)
 
-if(EGL_FOUND)
+if(TARGET ${APP_NAME_LC}::EGL)
   list(APPEND SOURCES WinSystemWaylandEGLContext.cpp)
   list(APPEND HEADERS WinSystemWaylandEGLContext.h)
 endif()
 
-if(OPENGL_FOUND)
+if(TARGET ${APP_NAME_LC}::OpenGl)
   list(APPEND SOURCES WinSystemWaylandEGLContextGL.cpp)
   list(APPEND HEADERS WinSystemWaylandEGLContextGL.h)
 endif()
-if(OPENGLES_FOUND)
+if(TARGET ${APP_NAME_LC}::OpenGLES)
   list(APPEND SOURCES WinSystemWaylandEGLContextGLES.cpp)
   list(APPEND HEADERS WinSystemWaylandEGLContextGLES.h)
 endif()
@@ -67,10 +67,14 @@ if(TARGET_WEBOS)
                               ${WAYLAND_EXTRA_PROTOCOL_GENERATED_DIR}/wayland-webos-protocols.hpp
                               PROPERTIES GENERATED TRUE)
 
-  list(APPEND SOURCES ShellSurfaceWebOSShell.cpp
+  list(APPEND SOURCES OSScreenSaverWebOS.cpp
+                      SeatWebOS.cpp
+                      ShellSurfaceWebOSShell.cpp
                       WinSystemWaylandWebOS.cpp
                       ${WAYLAND_EXTRA_PROTOCOL_GENERATED_DIR}/wayland-webos-protocols.cpp)
-  list(APPEND HEADERS ShellSurfaceWebOSShell.h
+  list(APPEND HEADERS OSScreenSaverWebOS.h
+                      SeatWebOS.h
+                      ShellSurfaceWebOSShell.h
                       WinSystemWaylandWebOS.h
                       ${WAYLAND_EXTRA_PROTOCOL_GENERATED_DIR}/wayland-webos-protocols.hpp)
 endif()

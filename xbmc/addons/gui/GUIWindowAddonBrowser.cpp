@@ -10,6 +10,7 @@
 
 #include "ContextMenuManager.h"
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "GUIDialogAddonInfo.h"
 #include "GUIUserMessages.h"
 #include "LangInfo.h"
@@ -29,7 +30,7 @@
 #include "guilib/GUIComponent.h"
 #include "guilib/GUIWindowManager.h"
 #include "guilib/LocalizeStrings.h"
-#include "input/Key.h"
+#include "input/actions/ActionIDs.h"
 #include "messaging/helpers/DialogHelper.h"
 #include "platform/Platform.h"
 #include "settings/MediaSourceSettings.h"

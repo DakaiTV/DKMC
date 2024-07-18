@@ -97,6 +97,7 @@ public:
 
   void EnumerateSinkList(bool force, std::string driver);
   void EnumerateOutputDevices(AEDeviceList &devices, bool passthrough);
+  std::string ValidateOuputDevice(const std::string& device, bool passthrough) const;
   void Start();
   void Dispose();
   AEDeviceType GetDeviceType(const std::string &device);
@@ -142,8 +143,6 @@ protected:
     NEED_BYTESWAP,
     SKIP_SWAP,
   } m_swapState;
-
-  std::vector<uint8_t> m_mergeBuffer;
 
   std::string m_deviceFriendlyName;
   std::string m_device;

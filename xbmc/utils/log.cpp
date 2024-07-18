@@ -38,9 +38,7 @@ CLog::CLog()
   : m_platform(IPlatformLog::CreatePlatformLog()),
     m_sinks(std::make_shared<spdlog::sinks::dist_sink_mt>()),
     m_defaultLogger(CreateLogger("general")),
-    m_logLevel(LOG_LEVEL_DEBUG),
-    m_componentLogEnabled(false),
-    m_componentLogLevels(0)
+    m_logLevel(LOG_LEVEL_DEBUG)
 {
   // add platform-specific debug sinks
   m_platform->AddSinks(m_sinks);
@@ -177,7 +175,7 @@ void CLog::SetLogLevel(int level)
 
   spdlog::set_level(spdLevel);
   FormatAndLogInternal(spdlog::level::info, "Log level changed to \"{}\"",
-                       spdlog::level::to_string_view(spdLevel));
+                       fmt::make_format_args(spdlog::level::to_string_view(spdLevel)));
 }
 
 bool CLog::IsLogLevelLogged(int loglevel)

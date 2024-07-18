@@ -348,10 +348,25 @@ void CAESinkPipewire::EnumerateDevicesEx(AEDeviceInfoList& list, bool force)
                                   streamTypes.end());
     }
 
-    if (device.m_channels.Count() == 2 && !device.m_streamTypes.empty())
+    // If DTS-HD-MA or TrueHD are configured 8 channels are needed
+    bool hasHBRFormat = std::any_of(device.m_streamTypes.cbegin(), device.m_streamTypes.cend(),
+                                    [](const auto& streamType)
+                                    {
+                                      return streamType == CAEStreamInfo::STREAM_TYPE_TRUEHD ||
+                                             streamType == CAEStreamInfo::STREAM_TYPE_DTSHD_MA;
+                                    });
+
+    if (!device.m_streamTypes.empty())
     {
-      device.m_deviceType = AE_DEVTYPE_IEC958;
       device.m_dataFormats.emplace_back(AE_FMT_RAW);
+      if (!hasHBRFormat && device.m_channels.Count() == 2)
+      {
+        device.m_deviceType = AE_DEVTYPE_IEC958;
+      }
+      else
+      {
+        device.m_deviceType = AE_DEVTYPE_HDMI;
+      }
     }
 
     list.emplace_back(device);
@@ -410,12 +425,15 @@ bool CAESinkPipewire::Initialize(AEAudioFormat& format, std::string& device)
   std::string fraction =
       StringUtils::Format("{}/{}", frames / DEFAULT_LATENCY_DIVIDER, format.m_sampleRate);
 
-  std::array<spa_dict_item, 5> items = {
+  std::string srate = StringUtils::Format("1/{}", format.m_sampleRate);
+
+  std::array<spa_dict_item, 6> items = {
       SPA_DICT_ITEM_INIT(PW_KEY_MEDIA_TYPE, "Audio"),
       SPA_DICT_ITEM_INIT(PW_KEY_MEDIA_CATEGORY, "Playback"),
       SPA_DICT_ITEM_INIT(PW_KEY_APP_NAME, CCompileInfo::GetAppName()),
       SPA_DICT_ITEM_INIT(PW_KEY_NODE_NAME, CCompileInfo::GetAppName()),
-      SPA_DICT_ITEM_INIT(PW_KEY_NODE_LATENCY, fraction.c_str())};
+      SPA_DICT_ITEM_INIT(PW_KEY_NODE_LATENCY, fraction.c_str()),
+      SPA_DICT_ITEM_INIT(PW_KEY_NODE_RATE, srate.c_str())};
 
   auto properties = SPA_DICT_INIT(items.data(), items.size());
   m_stream->UpdateProperties(&properties);

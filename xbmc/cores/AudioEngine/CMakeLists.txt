@@ -14,7 +14,8 @@ set(SOURCES AEResampleFactory.cpp
             Utils/AELimiter.cpp
             Utils/AEPackIEC61937.cpp
             Utils/AEStreamInfo.cpp
-            Utils/AEUtil.cpp)
+            Utils/AEUtil.cpp
+            Utils/PackerMAT.cpp)
 
 set(HEADERS AEResampleFactory.h
             AESinkFactory.h
@@ -44,9 +45,10 @@ set(HEADERS AEResampleFactory.h
             Utils/AERingBuffer.h
             Utils/AEStreamData.h
             Utils/AEStreamInfo.h
-            Utils/AEUtil.h)
+            Utils/AEUtil.h
+            Utils/PackerMAT.h)
 
-if(ALSA_FOUND)
+if(TARGET ${APP_NAME_LC}::Alsa)
   list(APPEND SOURCES Sinks/AESinkALSA.cpp
                       Utils/AEELDParser.cpp)
   list(APPEND HEADERS Sinks/AESinkALSA.h
@@ -57,18 +59,18 @@ if(ALSA_FOUND)
     list(APPEND HEADERS Sinks/alsa/ALSAHControlMonitor.h)
   endif()
 
-  if(UDEV_FOUND)
+  if(TARGET ${APP_NAME_LC}::UDEV)
     list(APPEND SOURCES Sinks/alsa/ALSADeviceMonitor.cpp)
     list(APPEND HEADERS Sinks/alsa/ALSADeviceMonitor.h)
   endif()
 endif()
 
-if(PULSEAUDIO_FOUND)
+if(TARGET ${APP_NAME_LC}::PulseAudio)
   list(APPEND SOURCES Sinks/AESinkPULSE.cpp)
   list(APPEND HEADERS Sinks/AESinkPULSE.h)
 endif()
 
-if(PIPEWIRE_FOUND)
+if(TARGET ${APP_NAME_LC}::Pipewire)
   list(APPEND SOURCES Sinks/pipewire/AESinkPipewire.cpp
                       Sinks/pipewire/Pipewire.cpp
                       Sinks/pipewire/PipewireContext.cpp
@@ -91,12 +93,12 @@ if(PIPEWIRE_FOUND)
                       Sinks/pipewire/PipewireThreadLoop.h)
 endif()
 
-if(SNDIO_FOUND)
+if(TARGET ${APP_NAME_LC}::Sndio)
   list(APPEND SOURCES Sinks/AESinkSNDIO.cpp)
   list(APPEND HEADERS Sinks/AESinkSNDIO.h)
 endif()
 
-if(FFMPEG_FOUND)
+if(TARGET ${APP_NAME_LC}::FFMPEG)
   list(APPEND SOURCES Engines/ActiveAE/ActiveAEResampleFFMPEG.cpp)
   list(APPEND HEADERS Engines/ActiveAE/ActiveAEResampleFFMPEG.h)
 endif()

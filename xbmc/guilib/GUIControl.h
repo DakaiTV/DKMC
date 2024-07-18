@@ -24,9 +24,17 @@
 
 class CGUIListItem; // forward
 class CAction;
-class CMouseEvent;
+
 class CGUIMessage;
 class CGUIAction;
+
+namespace KODI
+{
+namespace MOUSE
+{
+class CMouseEvent;
+} // namespace MOUSE
+} // namespace KODI
 
 enum ORIENTATION { HORIZONTAL = 0, VERTICAL };
 
@@ -123,7 +131,7 @@ public:
    \return EVENT_RESULT corresponding to whether the control handles this event
    \sa HitTest, CanFocusFromPoint, CMouseEvent, EVENT_RESULT
    */
-  virtual EVENT_RESULT SendMouseEvent(const CPoint &point, const CMouseEvent &event);
+  virtual EVENT_RESULT SendMouseEvent(const CPoint& point, const KODI::MOUSE::CMouseEvent& event);
 
   /*! \brief Perform a mouse action
 
@@ -135,7 +143,7 @@ public:
    \return EVENT_RESULT corresponding to whether the control handles this event
    \sa SendMouseEvent, HitTest, CanFocusFromPoint, CMouseEvent
    */
-  virtual EVENT_RESULT OnMouseEvent(const CPoint& point, const CMouseEvent& event)
+  virtual EVENT_RESULT OnMouseEvent(const CPoint& point, const KODI::MOUSE::CMouseEvent& event)
   {
     return EVENT_RESULT_UNHANDLED;
   }
@@ -167,7 +175,7 @@ public:
   bool IsVisibleFromSkin() const { return m_visibleFromSkinCondition; }
   virtual bool IsDisabled() const;
   virtual void SetPosition(float posX, float posY);
-  virtual void SetHitRect(const CRect& rect, const UTILS::COLOR::Color& color);
+  virtual void SetHitRect(const CRect& rect, const KODI::UTILS::COLOR::Color& color);
   virtual void SetCamera(const CPoint &camera);
   virtual void SetStereoFactor(const float &factor);
   bool SetColorDiffuse(const KODI::GUILIB::GUIINFO::CGUIInfoColor &color);
@@ -176,6 +184,7 @@ public:
   virtual float GetYPosition() const;
   virtual float GetWidth() const;
   virtual float GetHeight() const;
+  virtual void AssignDepth();
 
   void MarkDirtyRegion(const unsigned int dirtyState = DIRTY_STATE_CONTROL);
   bool IsControlDirty() const { return m_controlDirtyState != 0; }
@@ -271,6 +280,7 @@ public:
     GUICONTROL_FADELABEL,
     GUICONTROL_GAME,
     GUICONTROL_GAMECONTROLLER,
+    GUICONTROL_GAMECONTROLLERLIST,
     GUICONTROL_GROUP,
     GUICONTROL_GROUPLIST,
     GUICONTROL_IMAGE,
@@ -296,6 +306,11 @@ public:
     GUICONTROL_VISUALISATION,
   };
   GUICONTROLTYPES GetControlType() const { return ControlType; }
+
+  /*! \brief Test whether the control is "drawable" (not a group or similar)
+   \return true if the control has textures/labels it wants to render
+   */
+  bool IsControlRenderable();
 
   enum GUIVISIBLE { HIDDEN = 0, DELAYED, VISIBLE };
 
@@ -339,7 +354,7 @@ protected:
   float m_height;
   float m_width;
   CRect m_hitRect;
-  UTILS::COLOR::Color m_hitColor = 0xffffffff;
+  KODI::UTILS::COLOR::Color m_hitColor = 0xffffffff;
   KODI::GUILIB::GUIINFO::CGUIInfoColor m_diffuseColor;
   int m_controlID;
   int m_parentID;

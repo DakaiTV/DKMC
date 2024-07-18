@@ -9,6 +9,7 @@
 #pragma once
 
 #include "WinSystemGbm.h"
+#include "utils/EGLFence.h"
 #include "utils/EGLUtils.h"
 #include "windowing/linux/WinSystemEGL.h"
 
@@ -34,6 +35,10 @@ public:
                        RESOLUTION_INFO& res) override;
   bool DestroyWindow() override;
 
+  bool BindTextureUploadContext() override;
+  bool UnbindTextureUploadContext() override;
+  bool HasContext() override;
+
 protected:
   CWinSystemGbmEGLContext(EGLenum platform, std::string const& platformExtension)
     : CWinSystemEGL{platform, platformExtension}
@@ -45,6 +50,8 @@ protected:
    */
   bool InitWindowSystemEGL(EGLint renderableType, EGLint apiType);
   virtual bool CreateContext() = 0;
+
+  std::unique_ptr<KODI::UTILS::EGL::CEGLFence> m_eglFence;
 
   struct delete_CVaapiProxy
   {

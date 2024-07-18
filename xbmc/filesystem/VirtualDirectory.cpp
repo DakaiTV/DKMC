@@ -11,6 +11,7 @@
 #include "Directory.h"
 #include "DirectoryFactory.h"
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "SourcesDirectory.h"
 #include "URL.h"
@@ -170,7 +171,7 @@ void CVirtualDirectory::GetSources(VECSOURCES &shares) const
   if (m_allowNonLocalSources)
     CServiceBroker::GetMediaManager().GetRemovableDrives(shares);
 
-#ifdef HAS_DVD_DRIVE
+#ifdef HAS_OPTICAL_DRIVE
   // and update our dvd share
   for (unsigned int i = 0; i < shares.size(); ++i)
   {

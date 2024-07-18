@@ -9,6 +9,7 @@
 
 #include "File.h"
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "LangInfo.h"
 #include "URL.h"
 #include "filesystem/BlurayCallback.h"
@@ -24,6 +25,7 @@
 #include <array>
 #include <cassert>
 #include <climits>
+#include <memory>
 #include <stdlib.h>
 #include <string>
 
@@ -187,7 +189,7 @@ void CBlurayDirectory::GetRoot(CFileItemList &items)
     CFileItemPtr item;
 
     path.SetFileName(URIUtils::AddFileToFolder(m_url.GetFileName(), "titles"));
-    item.reset(new CFileItem());
+    item = std::make_shared<CFileItem>();
     item->SetPath(path.Get());
     item->m_bIsFolder = true;
     item->SetLabel(g_localizeStrings.Get(25002) /* All titles */);
@@ -202,7 +204,7 @@ void CBlurayDirectory::GetRoot(CFileItemList &items)
     }
 
     path.SetFileName("menu");
-    item.reset(new CFileItem());
+    item = std::make_shared<CFileItem>();
     item->SetPath(path.Get());
     item->m_bIsFolder = false;
     item->SetLabel(g_localizeStrings.Get(25003) /* Menus */);

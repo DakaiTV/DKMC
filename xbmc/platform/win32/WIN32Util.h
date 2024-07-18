@@ -22,10 +22,13 @@
 
 struct VideoDriverInfo
 {
+  UINT vendorId;
   int majorVersion;
   int minorVersion;
   bool valid;
   std::string version;
+
+  void Log();
 };
 
 class CURL; // forward declaration
@@ -83,5 +86,26 @@ public:
   static void PlatformSyslog();
 
   static VideoDriverInfo GetVideoDriverInfo(const UINT vendorId, const std::wstring& driverDesc);
+  static VideoDriverInfo GetVideoDriverInfoDX(const UINT vendorId, LUID adapterLuid);
+  static VideoDriverInfo FormatVideoDriverInfo(const UINT vendorId, uint64_t rawVersion);
+  static VideoDriverInfo FormatVideoDriverInfo(const UINT vendorId, const std::string version);
   static std::wstring GetDisplayFriendlyName(const std::wstring& GdiDeviceName);
+  /*!
+   * \brief Set the thread name using SetThreadDescription when available
+   * \param handle handle of the thread
+   * \param name name of the thread
+   * \return true if the name was successfully set, false otherwise (API not supported or API failure)
+   */
+  static bool SetThreadName(const HANDLE handle, const std::string& name);
+  /*!
+   * \brief Compare two Windows driver versions (xx.xx.xx.xx string format)
+   * \param version1 First version to compare
+   * \param version2 Second version to compare
+   * \return true when version1 is greater or equal to version2.
+   * Undefined results when the strings are not formatted properly.
+  */
+  static bool IsDriverVersionAtLeast(const std::string& version1, const std::string& version2);
+
+private:
+  static HDR_STATUS GetWindowsHDRStatusWin32();
 };

@@ -10,11 +10,11 @@ NATIVE= \
   autoconf-archive \
   automake \
   cmake \
+  bison \
   gas-preprocessor \
   gettext \
   giflib \
   heimdal \
-  JsonSchemaBuilder \
   libjpeg-turbo \
   liblzo2 \
   libpng \
@@ -24,7 +24,7 @@ NATIVE= \
   nasm \
   ninja \
   openssl \
-  pcre \
+  pcre2 \
   perlmodule-parseyapp \
   pkg-config \
   python3 \
@@ -48,6 +48,14 @@ ifeq ($(OS),linux)
   ifeq ($(RENDER_SYSTEM),gles)
     NATIVE += MarkupSafe Mako
   endif
+
+  ifeq ($(TARGET_PLATFORM),webos)
+    NATIVE += rustup cargo-c
+  endif
+endif
+
+ifeq ($(OS),android)
+  NATIVE += rustup cargo-c
 endif
 
 .PHONY: $(NATIVE) native download $(DOWNLOAD_TARGETS)
@@ -66,9 +74,11 @@ download: $(DOWNLOAD_TARGETS)
 autoconf-archive: autoconf
 autoconf: m4
 automake: autoconf
+bison: gettext
+cargo-c: pkg-config openssl rustup
 dpkg: automake gettext libtool pkg-config tar
 heimdal: libtool
-JsonSchemaBuilder: automake
+JsonSchemaBuilder: cmake
 libjpeg-turbo: cmake nasm
 libpng: zlib automake
 libtool: automake
@@ -76,12 +86,13 @@ Mako: MarkupSafe
 meson: python3
 ninja: meson
 openssl: zlib
+pcre2: cmake
 pugixml: cmake
 python3: $(EXPAT) $(LIBFFI) pkg-config zlib openssl autoconf-archive
-swig: pcre
+swig: bison cmake pcre2
 tar: xz automake
-TexturePacker: automake pkg-config libpng liblzo2 giflib libjpeg-turbo
-wayland-scanner: expat pkg-config
+TexturePacker: cmake libpng liblzo2 giflib libjpeg-turbo
+wayland-scanner: expat ninja pkg-config
 waylandpp-scanner: cmake pugixml
 
 # python installs are not thread safe when using easy_install method.

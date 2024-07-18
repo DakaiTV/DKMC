@@ -37,8 +37,6 @@ public:
   bool OnAction(const CAction &action) override;
   bool OnMessage(CGUIMessage& message) override;
 
-  void OnItemInfo(const CFileItem& fileItem, ADDON::ScraperPtr &info) override;
-
 protected:
   bool ApplyWatchedFilter(CFileItemList &items);
   bool GetFilteredItems(const std::string &filter, CFileItemList &items) override;
@@ -50,7 +48,6 @@ protected:
   bool GetDirectory(const std::string &strDirectory, CFileItemList &items) override;
   void UpdateButtons() override;
   void DoSearch(const std::string& strSearch, CFileItemList& items) override;
-  virtual void PlayItem(int iItem);
   void OnDeleteItem(const CFileItemPtr& pItem) override;
   void GetContextButtons(int itemNumber, CContextButtons &buttons) override;
   bool OnPopupMenu(int iItem) override;

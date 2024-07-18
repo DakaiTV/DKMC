@@ -12,6 +12,7 @@
 #include "../RenderFlags.h"
 #include "ConvolutionKernels.h"
 #include "ServiceBroker.h"
+#include "ToneMappers.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/SettingsComponent.h"
 #include "utils/GLUtils.h"
@@ -192,13 +193,16 @@ bool BaseYUV2RGBGLSLShader::OnEnabled()
     }
     else if (m_toneMappingMethod == VS_TONEMAPMETHOD_ACES)
     {
-      glUniform1f(m_hLuminance, GetLuminanceValue());
+      const float lumin = CToneMappers::GetLuminanceValue(m_hasDisplayMetadata, m_displayMetadata,
+                                                          m_hasLightMetadata, m_lightMetadata);
+      glUniform1f(m_hLuminance, lumin);
       glUniform1f(m_hToneP1, m_toneMappingParam);
     }
     else if (m_toneMappingMethod == VS_TONEMAPMETHOD_HABLE)
     {
-      float lumin = GetLuminanceValue();
-      float param = (10000.0f / lumin) * (2.0f / m_toneMappingParam);
+      const float lumin = CToneMappers::GetLuminanceValue(m_hasDisplayMetadata, m_displayMetadata,
+                                                          m_hasLightMetadata, m_lightMetadata);
+      const float param = (10000.0f / lumin) * (2.0f / m_toneMappingParam);
       glUniform1f(m_hLuminance, lumin);
       glUniform1f(m_hToneP1, param);
     }
@@ -256,38 +260,6 @@ void BaseYUV2RGBGLSLShader::SetToneMapParam(ETONEMAPMETHOD method, float param)
   m_toneMappingParam = param;
 }
 
-float BaseYUV2RGBGLSLShader::GetLuminanceValue() const //Maybe move this to linuxrenderer?! same as in baserenderer
-{
-  float lum1 = 400.0f; // default for bad quality HDR-PQ sources (with no metadata)
-  float lum2 = lum1;
-  float lum3 = lum1;
-
-  if (m_hasLightMetadata)
-  {
-    uint16_t lum = m_displayMetadata.max_luminance.num / m_displayMetadata.max_luminance.den;
-    if (m_lightMetadata.MaxCLL >= lum)
-    {
-      lum1 = static_cast<float>(lum);
-      lum2 = static_cast<float>(m_lightMetadata.MaxCLL);
-    }
-    else
-    {
-      lum1 = static_cast<float>(m_lightMetadata.MaxCLL);
-      lum2 = static_cast<float>(lum);
-    }
-    lum3 = static_cast<float>(m_lightMetadata.MaxFALL);
-    lum1 = (lum1 * 0.5f) + (lum2 * 0.2f) + (lum3 * 0.3f);
-  }
-  else if (m_hasDisplayMetadata && m_displayMetadata.has_luminance &&
-           m_displayMetadata.max_luminance.num)
-  {
-    uint16_t lum = m_displayMetadata.max_luminance.num / m_displayMetadata.max_luminance.den;
-    lum1 = static_cast<float>(lum);
-  }
-
-  return lum1;
-}
-
 //////////////////////////////////////////////////////////////////////
 // YUV2RGBProgressiveShader - YUV2RGB with no deinterlacing
 // Use for weave deinterlacing / progressive
@@ -300,7 +272,8 @@ YUV2RGBProgressiveShader::YUV2RGBProgressiveShader(bool rect,
                                                    AVColorPrimaries srcPrimaries,
                                                    bool toneMap,
                                                    ETONEMAPMETHOD toneMapMethod,
-                                                   std::shared_ptr<GLSLOutput> output)
+                                                   std::shared_ptr<GLSLOutput> output,
+                                                   bool gammaCorrection)
   : BaseYUV2RGBGLSLShader(rect,
                           format,
                           stretch,
@@ -310,6 +283,9 @@ YUV2RGBProgressiveShader::YUV2RGBProgressiveShader(bool rect,
                           toneMapMethod,
                           std::move(output))
 {
+  if (gammaCorrection)
+    m_defines += "#define KODI_GAMMA_LINEARIZATION_FAST\n";
+
   PixelShader()->LoadSource("gl_yuv2rgb_basic.glsl", m_defines);
   PixelShader()->AppendSource("gl_output.glsl");
 

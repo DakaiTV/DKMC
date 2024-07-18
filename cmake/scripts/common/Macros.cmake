@@ -72,7 +72,10 @@ function(core_add_library name)
     add_library(${name} STATIC ${SOURCES} ${HEADERS} ${OTHERS})
     set_target_properties(${name} PROPERTIES PREFIX "")
     set(core_DEPENDS ${name} ${core_DEPENDS} CACHE STRING "" FORCE)
-    add_dependencies(${name} ${GLOBAL_TARGET_DEPS})
+
+    # Adds global target to library. This propagates dep lib info (eg include_dir locations)
+    core_target_link_libraries(${name})
+
     set(CORE_LIBRARY ${name} PARENT_SCOPE)
 
     if(NOT MSVC)
@@ -82,8 +85,6 @@ function(core_add_library name)
     # Add precompiled headers to Kodi main libraries
     if(CORE_SYSTEM_NAME MATCHES windows)
       add_precompiled_header(${name} pch.h ${CMAKE_SOURCE_DIR}/xbmc/platform/win32/pch.cpp PCH_TARGET kodi)
-      set_language_cxx(${name})
-      target_link_libraries(${name} PUBLIC effects11)
     endif()
   else()
     foreach(src IN LISTS SOURCES HEADERS OTHERS)
@@ -102,7 +103,7 @@ function(core_add_test_library name)
     set_target_properties(${name} PROPERTIES PREFIX ""
                                              EXCLUDE_FROM_ALL 1
                                              FOLDER "Build Utilities/tests")
-    add_dependencies(${name} ${GLOBAL_TARGET_DEPS})
+
     set(test_archives ${test_archives} ${name} CACHE STRING "" FORCE)
 
     if(NOT MSVC)
@@ -178,19 +179,6 @@ function(core_add_shared_library name)
   endif()
 endfunction()
 
-# Sets the compile language for all C source files in a target to CXX.
-# Needs to be called from the CMakeLists.txt that defines the target.
-# Arguments:
-#   target   target
-function(set_language_cxx target)
-  get_property(sources TARGET ${target} PROPERTY SOURCES)
-  foreach(file IN LISTS sources)
-    if(file MATCHES "\.c$")
-      set_source_files_properties(${file} PROPERTIES LANGUAGE CXX)
-    endif()
-  endforeach()
-endfunction()
-
 # Add a data file to installation list with a mirror in build tree
 # Mirroring files in the buildtree allows to execute the app from there.
 # Arguments:
@@ -204,6 +192,14 @@ endfunction()
 #   Files is mirrored to the build tree and added to ${install_data}
 #   (if NO_INSTALL is not given).
 function(copy_file_to_buildtree file)
+  # Exclude autotools build artifacts and other blacklisted files in source tree.
+  if(file MATCHES "(Makefile|\\.in|\\.xbt|\\.so|\\.dylib|\\.gitignore)$")
+    if(VERBOSE)
+      message(STATUS "copy_file_to_buildtree - ignoring file: ${file}")
+    endif()
+    return()
+  endif()
+
   cmake_parse_arguments(arg "NO_INSTALL" "DIRECTORY;KEEP_DIR_STRUCTURE" "" ${ARGN})
   if(arg_DIRECTORY)
     set(outdir ${arg_DIRECTORY})
@@ -223,40 +219,54 @@ function(copy_file_to_buildtree file)
   endif()
 
   if(NOT TARGET export-files)
+    if(${CORE_SYSTEM_NAME} MATCHES "windows")
+      set(_bundle_dir $<TARGET_FILE_DIR:${APP_NAME_LC}>)
+    else()
+      set(_bundle_dir ${CMAKE_BINARY_DIR})
+    endif()
     file(REMOVE ${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR}/ExportFiles.cmake)
     add_custom_target(export-files ALL COMMENT "Copying files into build tree"
-                      COMMAND ${CMAKE_COMMAND} -P ${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR}/ExportFiles.cmake)
+                                       COMMAND ${CMAKE_COMMAND} -DBUNDLEDIR=${_bundle_dir}
+                                                                -P ${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR}/ExportFiles.cmake)
     set_target_properties(export-files PROPERTIES FOLDER "Build Utilities")
+    # Add comment to ensure ExportFiles.cmake is created even if not used.
     file(APPEND ${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR}/ExportFiles.cmake "# Export files to build tree\n")
   endif()
 
-  # Exclude autotools build artefacts and other blacklisted files in source tree.
-  if(file MATCHES "(Makefile|\\.in|\\.xbt|\\.so|\\.dylib|\\.gitignore)$")
-    if(VERBOSE)
-      message(STATUS "copy_file_to_buildtree - ignoring file: ${file}")
-    endif()
-    return()
-  endif()
-
-  if(NOT file STREQUAL ${CMAKE_BINARY_DIR}/${outfile})
-    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Windows" OR NOT IS_SYMLINK "${file}")
-      if(VERBOSE)
-        message(STATUS "copy_file_to_buildtree - copying file: ${file} -> ${CMAKE_BINARY_DIR}/${outfile}")
-      endif()
+  if(${CORE_SYSTEM_NAME} MATCHES "windows")
+    # if DEPENDS_PATH in fille
+    if(${file} MATCHES ${DEPENDS_PATH})
       file(APPEND ${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR}/ExportFiles.cmake
-           "file(COPY \"${file}\" DESTINATION \"${CMAKE_BINARY_DIR}/${outdir}\")\n" )
+"file(GLOB filenames ${file})
+foreach(filename \$\{filenames\})
+  file(COPY \"\$\{filename\}\" DESTINATION \"\$\{BUNDLEDIR\}/${outdir}\")
+endforeach()\n"
+      )
     else()
-      if(VERBOSE)
-        message(STATUS "copy_file_to_buildtree - copying symlinked file: ${file} -> ${CMAKE_BINARY_DIR}/${outfile}")
-      endif()
       file(APPEND ${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR}/ExportFiles.cmake
-           "execute_process(COMMAND \"\${CMAKE_COMMAND}\" -E copy_if_different \"${file}\" \"${CMAKE_BINARY_DIR}/${outfile}\")\n")
+               "file(COPY \"${file}\" DESTINATION \"\$\{BUNDLEDIR\}/${outdir}\")\n" )
     endif()
-  endif()
+  else()
+    if(NOT file STREQUAL ${CMAKE_BINARY_DIR}/${outfile})
+      if(NOT IS_SYMLINK "${file}")
+        if(VERBOSE)
+          message(STATUS "copy_file_to_buildtree - copying file: ${file} -> ${CMAKE_BINARY_DIR}/${outfile}")
+        endif()
+        file(APPEND ${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR}/ExportFiles.cmake
+             "file(COPY \"${file}\" DESTINATION \"${CMAKE_BINARY_DIR}/${outdir}\")\n" )
+      else()
+        if(VERBOSE)
+          message(STATUS "copy_file_to_buildtree - copying symlinked file: ${file} -> ${CMAKE_BINARY_DIR}/${outfile}")
+        endif()
+        file(APPEND ${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR}/ExportFiles.cmake
+             "execute_process(COMMAND \"\${CMAKE_COMMAND}\" -E copy_if_different \"${file}\" \"${CMAKE_BINARY_DIR}/${outfile}\")\n")
+      endif()
+    endif()
 
-  if(NOT arg_NO_INSTALL)
-    list(APPEND install_data ${outfile})
-    set(install_data ${install_data} PARENT_SCOPE)
+    if(NOT arg_NO_INSTALL)
+      list(APPEND install_data ${outfile})
+      set(install_data ${install_data} PARENT_SCOPE)
+    endif()
   endif()
 endfunction()
 
@@ -305,11 +315,16 @@ function(copy_files_from_filelist_to_buildtree pattern)
           list(GET dir -1 dest)
         endif()
 
-        # If the full path to an existing file is specified then add that single file.
-        # Don't recursively add all files with the given name.
-        if(EXISTS ${CMAKE_SOURCE_DIR}/${src} AND (NOT IS_DIRECTORY ${CMAKE_SOURCE_DIR}/${src} OR DIR_OPTION))
+        if((${CMAKE_SOURCE_DIR}/${src} MATCHES ${DEPENDS_PATH}) OR
+           (EXISTS ${CMAKE_SOURCE_DIR}/${src} AND (NOT IS_DIRECTORY ${CMAKE_SOURCE_DIR}/${src} OR DIR_OPTION)))
+          # If the path is in DEPENDS_PATH, pass through as is. This will be handled in a build time
+          # glob of the location. This insures any dependencies built at build time can be bundled if 
+          # required.
+          # OR If the full path to an existing file is specified then add that single file.
+          # Don't recursively add all files with the given name.
           set(files ${src})
         else()
+          # Static path contents, so we can just glob at generation time
           file(GLOB_RECURSE files RELATIVE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/${src})
         endif()
 
@@ -326,15 +341,6 @@ function(copy_files_from_filelist_to_buildtree pattern)
   endforeach()
   set(install_data ${install_data} PARENT_SCOPE)
 endfunction()
-
-# helper macro to set modified variables in parent scope
-macro(export_dep)
-  set(SYSTEM_INCLUDES ${SYSTEM_INCLUDES} PARENT_SCOPE)
-  set(DEPLIBS ${DEPLIBS} PARENT_SCOPE)
-  set(DEP_DEFINES ${DEP_DEFINES} PARENT_SCOPE)
-  set(${depup}_FOUND ${${depup}_FOUND} PARENT_SCOPE)
-  mark_as_advanced(${depup}_LIBRARIES)
-endmacro()
 
 # split dependency specification to name and version
 # Arguments:
@@ -378,17 +384,20 @@ endmacro()
 # Arguments:
 #   dep_list One or many dependency specifications (see split_dependency_specification)
 #            for syntax). The dependency name is used uppercased as variable prefix.
-# On return:
-#   dependencies added to ${SYSTEM_INCLUDES}, ${DEPLIBS} and ${DEP_DEFINES}
 function(core_require_dep)
   foreach(depspec ${ARGN})
     split_dependency_specification(${depspec} dep version)
     find_package_with_ver(${dep} ${version} REQUIRED)
     string(TOUPPER ${dep} depup)
-    list(APPEND SYSTEM_INCLUDES ${${depup}_INCLUDE_DIRS})
-    list(APPEND DEPLIBS ${${depup}_LIBRARIES})
-    list(APPEND DEP_DEFINES ${${depup}_DEFINITIONS})
-    export_dep()
+
+    # We dont want to add a build tool
+    if (NOT ${depspec} IN_LIST optional_buildtools AND NOT ${depspec} IN_LIST required_buildtools)
+      # If dependency is found and is not in the list (eg shairplay) add to list
+      if (NOT ${depspec} IN_LIST required_deps)
+        set(required_deps  ${required_deps} ${depspec} PARENT_SCOPE)
+      endif()
+    endif()
+
   endforeach()
 endfunction()
 
@@ -408,8 +417,6 @@ endmacro()
 # Arguments:
 #   dep_list One or many dependency specifications (see split_dependency_specification)
 #            for syntax). The dependency name is used uppercased as variable prefix.
-# On return:
-#   dependency optionally added to ${SYSTEM_INCLUDES}, ${DEPLIBS} and ${DEP_DEFINES}
 function(core_optional_dep)
   foreach(depspec ${ARGN})
     set(_required False)
@@ -422,12 +429,21 @@ function(core_optional_dep)
       set(_required True)
     endif()
 
-    if(${depup}_FOUND)
-      list(APPEND SYSTEM_INCLUDES ${${depup}_INCLUDE_DIRS})
-      list(APPEND DEPLIBS ${${depup}_LIBRARIES})
-      list(APPEND DEP_DEFINES ${${depup}_DEFINITIONS})
+    if(TARGET ${APP_NAME_LC}::${dep} OR (${depup}_FOUND AND ${depspec} IN_LIST optional_buildtools))
       set(final_message ${final_message} "${depup} enabled: Yes")
-      export_dep()
+
+      # We dont want to add a build tool
+      if (NOT ${depspec} IN_LIST optional_buildtools)
+        # If dependency is found and is not in the list (eg mariadb/mysql) add to list
+        if (NOT ${depspec} IN_LIST optional_deps)
+          set(optional_deps  ${optional_deps} ${depspec} PARENT_SCOPE)
+        endif()
+      else()
+        # Propagate _FOUND variable for build tool optional deps. We dont use targets
+        # for build tools in general, and still rely on variables
+        set(${depup}_FOUND ${${depup}_FOUND} PARENT_SCOPE)
+      endif()
+
     elseif(_required)
       message(FATAL_ERROR "${depup} enabled but not found")
     else()
@@ -529,38 +545,6 @@ macro(core_add_optional_subdirs_from_filelist pattern)
     endforeach()
   endforeach()
 endmacro()
-
-# Generates an RFC2822 timestamp
-#
-# The following variable is set:
-#   RFC2822_TIMESTAMP
-function(rfc2822stamp)
-  execute_process(COMMAND date -R
-                  OUTPUT_VARIABLE RESULT)
-  set(RFC2822_TIMESTAMP ${RESULT} PARENT_SCOPE)
-endfunction()
-
-# Generates an user stamp from git config info
-#
-# The following variable is set:
-#   PACKAGE_MAINTAINER - user stamp in the form of "username <username@example.com>"
-#                        if no git tree is found, value is set to "nobody <nobody@example.com>"
-function(userstamp)
-  find_package(Git)
-  if(GIT_FOUND AND EXISTS ${CMAKE_SOURCE_DIR}/.git)
-    execute_process(COMMAND ${GIT_EXECUTABLE} config user.name
-                    OUTPUT_VARIABLE username
-                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-                    OUTPUT_STRIP_TRAILING_WHITESPACE)
-    execute_process(COMMAND ${GIT_EXECUTABLE} config user.email
-                    OUTPUT_VARIABLE useremail
-                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-                    OUTPUT_STRIP_TRAILING_WHITESPACE)
-    set(PACKAGE_MAINTAINER "${username} <${useremail}>" PARENT_SCOPE)
-  else()
-    set(PACKAGE_MAINTAINER "nobody <nobody@example.com>" PARENT_SCOPE)
-  endif()
-endfunction()
 
 # Parses git info and sets variables used to identify the build
 # Arguments:
@@ -799,3 +783,39 @@ macro(find_addon_xml_in_files)
   # Append also versions.h to depends
   list(APPEND ADDON_XML_DEPENDS "${CORE_SOURCE_DIR}/xbmc/addons/kodi-dev-kit/include/kodi/versions.h")
 endmacro()
+
+# Iterate over optional/required dep lists and link any created targets
+# to the target supplied as first argument
+function(core_target_link_libraries core_lib)
+  foreach(_depspec ${required_deps})
+    split_dependency_specification(${_depspec} dep version)
+    if(TARGET ${APP_NAME_LC}::${dep})
+      target_link_libraries(${core_lib} PUBLIC ${APP_NAME_LC}::${dep})
+    endif()
+  endforeach()
+
+  foreach(_depspec ${optional_deps})
+    split_dependency_specification(${_depspec} dep version)
+    if(TARGET ${APP_NAME_LC}::${dep})
+      target_link_libraries(${core_lib} PUBLIC ${APP_NAME_LC}::${dep})
+    endif()
+  endforeach()
+endfunction()
+
+# Iterate over optional/required dep lists and create dependency
+# to the target supplied as first argument
+function(core_target_add_dependencies core_target)
+  foreach(_depspec ${required_deps})
+    split_dependency_specification(${_depspec} dep version)
+    if(TARGET ${APP_NAME_LC}::${dep})
+      add_dependencies(${core_target} ${APP_NAME_LC}::${dep})
+    endif()
+  endforeach()
+
+  foreach(_depspec ${optional_deps})
+    split_dependency_specification(${_depspec} dep version)
+    if(TARGET ${APP_NAME_LC}::${dep})
+      add_dependencies(${core_target} ${APP_NAME_LC}::${dep})
+    endif()
+  endforeach()
+endfunction()

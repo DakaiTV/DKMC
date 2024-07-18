@@ -13,6 +13,7 @@
 #include "ServiceBroker.h"
 #include "VideoSyncGbm.h"
 #include "cores/VideoPlayer/Buffers/VideoBufferDRMPRIME.h"
+#include "cores/VideoPlayer/VideoReferenceClock.h"
 #include "drm/DRMAtomic.h"
 #include "drm/DRMLegacy.h"
 #include "drm/OffScreenModeSetting.h"
@@ -22,6 +23,7 @@
 #include "settings/SettingsComponent.h"
 #include "settings/lib/Setting.h"
 #include "utils/DisplayInfo.h"
+#include "utils/Map.h"
 #include "utils/StringUtils.h"
 #include "utils/log.h"
 #include "windowing/GraphicContext.h"
@@ -61,6 +63,27 @@ struct hdr_output_metadata
 using namespace KODI::WINDOWING::GBM;
 
 using namespace std::chrono_literals;
+
+namespace
+{
+
+// These map to the definitions in the linux kernel
+// drivers/gpu/drm/drm_connector.c
+
+constexpr auto ColorimetryMap = make_map<KODI::UTILS::Colorimetry, std::string_view>({
+    {KODI::UTILS::Colorimetry::DEFAULT, "Default"},
+    {KODI::UTILS::Colorimetry::XVYCC_601, "XVYCC_601"},
+    {KODI::UTILS::Colorimetry::XVYCC_709, "XVYCC_709"},
+    {KODI::UTILS::Colorimetry::SYCC_601, "SYCC_601"},
+    {KODI::UTILS::Colorimetry::OPYCC_601, "opYCC_601"},
+    {KODI::UTILS::Colorimetry::OPRGB, "opRGB"},
+    {KODI::UTILS::Colorimetry::BT2020_CYCC, "BT2020_CYCC"},
+    {KODI::UTILS::Colorimetry::BT2020_YCC, "BT2020_YCC"},
+    {KODI::UTILS::Colorimetry::BT2020_RGB, "BT2020_RGB"},
+    {KODI::UTILS::Colorimetry::ST2113_RGB, "Default"},
+    {KODI::UTILS::Colorimetry::ICTCP, "Default"},
+});
+} // namespace
 
 CWinSystemGbm::CWinSystemGbm() :
   m_DRM(nullptr),
@@ -161,7 +184,15 @@ void CWinSystemGbm::UpdateResolutions()
   auto resolutions = m_DRM->GetModes();
   if (resolutions.empty())
   {
-    CLog::Log(LOGWARNING, "CWinSystemGbm::{} - Failed to get resolutions", __FUNCTION__);
+    CDisplaySettings::GetInstance().ClearCustomResolutions();
+
+    CServiceBroker::GetWinSystem()->GetGfxContext().ResetOverscan(current);
+    CDisplaySettings::GetInstance().AddResolutionInfo(current);
+    CDisplaySettings::GetInstance().GetResolutionInfo(RES_DESKTOP) = current;
+
+    CLog::Log(LOGINFO, "Found resolution {}x{} with {}x{}{} @ {:f} Hz", current.iWidth,
+              current.iHeight, current.iScreenWidth, current.iScreenHeight,
+              current.dwFlags & D3DPRESENTFLAG_INTERLACED ? "i" : "", current.fRefreshRate);
   }
   else
   {
@@ -211,7 +242,7 @@ bool CWinSystemGbm::SetFullScreen(bool fullScreen, RESOLUTION_INFO& res, bool bl
 
   if (!std::dynamic_pointer_cast<CDRMAtomic>(m_DRM))
   {
-    bo = m_GBM->GetDevice()->GetSurface()->LockFrontBuffer()->Get();
+    bo = m_GBM->GetDevice().GetSurface().LockFrontBuffer().Get();
   }
 
   auto result = m_DRM->SetVideoMode(res, bo);
@@ -247,7 +278,7 @@ void CWinSystemGbm::UpdateDisplayHardwareScaling(const RESOLUTION_INFO& resInfo)
   SetFullScreen(true, resMutable, false);
 }
 
-void CWinSystemGbm::FlipPage(bool rendered, bool videoLayer)
+void CWinSystemGbm::FlipPage(bool rendered, bool videoLayer, bool async)
 {
   if (m_videoLayerBridge && !videoLayer)
   {
@@ -259,10 +290,10 @@ void CWinSystemGbm::FlipPage(bool rendered, bool videoLayer)
 
   if (rendered)
   {
-    bo = m_GBM->GetDevice()->GetSurface()->LockFrontBuffer()->Get();
+    bo = m_GBM->GetDevice().GetSurface().LockFrontBuffer().Get();
   }
 
-  m_DRM->FlipPage(bo, rendered, videoLayer);
+  m_DRM->FlipPage(bo, rendered, videoLayer, async);
 
   if (m_videoLayerBridge && !videoLayer)
   {
@@ -279,14 +310,14 @@ bool CWinSystemGbm::UseLimitedColor()
 bool CWinSystemGbm::Hide()
 {
   bool ret = m_DRM->SetActive(false);
-  FlipPage(false, false);
+  FlipPage(false, false, false);
   return ret;
 }
 
 bool CWinSystemGbm::Show(bool raise)
 {
   bool ret = m_DRM->SetActive(true);
-  FlipPage(false, false);
+  FlipPage(false, false, false);
   return ret;
 }
 
@@ -316,7 +347,7 @@ void CWinSystemGbm::OnLostDevice()
     resource->OnLostDisplay();
 }
 
-std::unique_ptr<CVideoSync> CWinSystemGbm::GetVideoSync(void* clock)
+std::unique_ptr<CVideoSync> CWinSystemGbm::GetVideoSync(CVideoReferenceClock* clock)
 {
   return std::make_unique<CVideoSyncGbm>(clock);
 }
@@ -343,9 +374,23 @@ bool CWinSystemGbm::SetHDR(const VideoPicture* videoPicture)
   if (!drm)
     return false;
 
+  auto connector = drm->GetConnector();
+  if (!connector)
+    return false;
+
   if (!videoPicture)
   {
-    auto connector = drm->GetConnector();
+    if (connector->SupportsProperty("Colorspace"))
+    {
+      std::optional<uint64_t> colorspace = connector->GetPropertyValue("Colorspace", "Default");
+      if (colorspace)
+      {
+        CLog::LogF(LOGDEBUG, "setting connector colorspace to Default");
+        drm->AddProperty(connector, "Colorspace", colorspace.value());
+        drm->SetActive(true);
+      }
+    }
+
     if (connector->SupportsProperty("HDR_OUTPUT_METADATA"))
     {
       drm->AddProperty(connector, "HDR_OUTPUT_METADATA", 0);
@@ -356,12 +401,26 @@ bool CWinSystemGbm::SetHDR(const VideoPicture* videoPicture)
       m_hdr_blob_id = 0;
     }
 
-    return true;
+    return false;
+  }
+
+  KODI::UTILS::Colorimetry colorimetry = DRMPRIME::GetColorimetry(*videoPicture);
+
+  if (connector->SupportsProperty("Colorspace") && m_info &&
+      m_info->SupportsColorimetry(colorimetry))
+  {
+    std::optional<uint64_t> colorspace =
+        connector->GetPropertyValue("Colorspace", ColorimetryMap.at(colorimetry));
+    if (colorspace)
+    {
+      CLog::LogF(LOGDEBUG, "setting connector colorspace to {}", ColorimetryMap.at(colorimetry));
+      drm->AddProperty(connector, "Colorspace", colorspace.value());
+      drm->SetActive(true);
+    }
   }
 
   KODI::UTILS::Eotf eotf = DRMPRIME::GetEOTF(*videoPicture);
 
-  auto connector = drm->GetConnector();
   if (connector->SupportsProperty("HDR_OUTPUT_METADATA") && m_info &&
       m_info->SupportsHDRStaticMetadataType1() && m_info->SupportsEOTF(eotf))
   {
@@ -442,7 +501,7 @@ bool CWinSystemGbm::SetHDR(const VideoPicture* videoPicture)
     drm->SetActive(true);
   }
 
-  return true;
+  return m_hdr_blob_id != 0;
 }
 
 bool CWinSystemGbm::IsHDRDisplay()

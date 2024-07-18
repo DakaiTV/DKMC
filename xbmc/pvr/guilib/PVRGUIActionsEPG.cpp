@@ -21,9 +21,12 @@
 #include "pvr/dialogs/GUIDialogPVRChannelGuide.h"
 #include "pvr/dialogs/GUIDialogPVRGuideInfo.h"
 #include "pvr/epg/EpgContainer.h"
+#include "pvr/epg/EpgInfoTag.h"
 #include "pvr/epg/EpgSearchFilter.h"
 #include "pvr/guilib/PVRGUIActionsParentalControl.h"
 #include "pvr/windows/GUIWindowPVRSearch.h"
+#include "settings/Settings.h"
+#include "settings/SettingsComponent.h"
 #include "utils/Variant.h"
 #include "utils/log.h"
 
@@ -55,7 +58,7 @@ PVR::CGUIWindowPVRSearchBase* GetSearchWindow(bool bRadio)
 
 bool CPVRGUIActionsEPG::ShowEPGInfo(const CFileItem& item) const
 {
-  const std::shared_ptr<CPVRChannel> channel(CPVRItem(item).GetChannel());
+  const std::shared_ptr<const CPVRChannel> channel(CPVRItem(item).GetChannel());
   if (channel && CServiceBroker::GetPVRManager().Get<PVR::GUI::Parental>().CheckParentalLock(
                      channel) != ParentalCheckResult::SUCCESS)
     return false;
@@ -83,7 +86,7 @@ bool CPVRGUIActionsEPG::ShowEPGInfo(const CFileItem& item) const
 
 bool CPVRGUIActionsEPG::ShowChannelEPG(const CFileItem& item) const
 {
-  const std::shared_ptr<CPVRChannel> channel(CPVRItem(item).GetChannel());
+  const std::shared_ptr<const CPVRChannel> channel(CPVRItem(item).GetChannel());
   if (channel && CServiceBroker::GetPVRManager().Get<PVR::GUI::Parental>().CheckParentalLock(
                      channel) != ParentalCheckResult::SUCCESS)
     return false;
@@ -214,4 +217,21 @@ bool CPVRGUIActionsEPG::DeleteSavedSearch(const CFileItem& item)
     return CServiceBroker::GetPVRManager().EpgContainer().DeleteSavedSearch(*searchFilter);
   }
   return false;
+}
+
+std::string CPVRGUIActionsEPG::GetTitleForEpgTag(const std::shared_ptr<const CPVREpgInfoTag>& tag)
+{
+  if (tag)
+  {
+    if (CServiceBroker::GetPVRManager().IsParentalLocked(tag))
+      return g_localizeStrings.Get(19266); // Parental locked
+    else if (!tag->Title().empty())
+      return tag->Title();
+  }
+
+  if (!CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
+          CSettings::SETTING_EPG_HIDENOINFOAVAILABLE))
+    return g_localizeStrings.Get(19055); // no information available
+
+  return {};
 }

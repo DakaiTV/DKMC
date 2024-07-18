@@ -11,13 +11,15 @@
 #include "pictures/PictureScalingAlgorithm.h"
 #include "utils/Job.h"
 
-#include <cstddef>
 #include <memory>
-#include <stdint.h>
 #include <string>
 #include <vector>
 
 class CTexture;
+namespace IMAGE_FILES
+{
+class CImageFileURL;
+}
 
 /*!
  \ingroup textures
@@ -26,24 +28,20 @@ class CTexture;
 class CTextureDetails
 {
 public:
-  CTextureDetails()
-  {
-    id = -1;
-    width = height = 0;
-    updateable = false;
-  };
   bool operator==(const CTextureDetails &right) const
   {
     return (id    == right.id    &&
             file  == right.file  &&
             width == right.width );
   };
-  int          id;
-  std::string  file;
-  std::string  hash;
-  unsigned int width;
-  unsigned int height;
-  bool         updateable;
+
+  int id{-1};
+  std::string file;
+  std::string hash;
+  unsigned int width{0};
+  unsigned int height{0};
+  bool updateable{false};
+  bool hashRevalidated{false};
 };
 
 /*!
@@ -69,7 +67,12 @@ public:
    */
   bool CacheTexture(std::unique_ptr<CTexture>* texture = nullptr);
 
-  static bool ResizeTexture(const std::string &url, uint8_t* &result, size_t &result_size);
+  static bool ResizeTexture(const std::string& url,
+                            unsigned int height,
+                            unsigned int width,
+                            CPictureScalingAlgorithm::Algorithm scalingAlgorithm,
+                            uint8_t*& result,
+                            size_t& result_size);
 
   std::string m_url;
   std::string m_oldHash;
@@ -82,41 +85,15 @@ private:
    */
   static std::string GetImageHash(const std::string &url);
 
-  /*! \brief Check whether a given URL represents an image that can be updated
-   We currently don't check http:// and https:// URLs for updates, under the assumption that
-   a image URL is much more likely to be static and the actual image at the URL is unlikely
-   to change, so no point checking all the time.
-   \param url the url to check
-   \return true if the image given by the URL should be checked for updates, false otherwise
-   */
-  bool UpdateableURL(const std::string &url) const;
-
-  /*! \brief Decode an image URL to the underlying image, width, height and orientation
-   \param url wrapped URL of the image
-   \param width width derived from URL
-   \param height height derived from URL
-   \param scalingAlgorithm scaling algorithm derived from URL
-   \param additional_info additional information, such as "flipped" to flip horizontally
-   \return URL of the underlying image file.
-   */
-  static std::string DecodeImageURL(const std::string &url, unsigned int &width, unsigned int &height, CPictureScalingAlgorithm::Algorithm& scalingAlgorithm, std::string &additional_info);
-
   /*! \brief Load an image at a given target size and orientation.
 
    Doesn't necessarily load the image at the desired size - the loader *may* decide to load it slightly larger
    or smaller than the desired size for speed reasons.
 
    \param image the URL of the image file.
-   \param width the desired maximum width.
-   \param height the desired maximum height.
-   \param additional_info extra info for loading, such as whether to flip horizontally.
    \return a pointer to a CTexture object, NULL if failed.
    */
-  static std::unique_ptr<CTexture> LoadImage(const std::string& image,
-                                             unsigned int width,
-                                             unsigned int height,
-                                             const std::string& additional_info,
-                                             bool requirePixels = false);
+  static std::unique_ptr<CTexture> LoadImage(const IMAGE_FILES::CImageFileURL& imageURL);
 
   std::string    m_cachePath;
 };

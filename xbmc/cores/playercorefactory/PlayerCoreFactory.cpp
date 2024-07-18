@@ -16,6 +16,7 @@
 #include "cores/VideoPlayer/Interface/InputStreamConstants.h"
 #include "dialogs/GUIDialogContextMenu.h"
 #include "guilib/LocalizeStrings.h"
+#include "music/MusicFileItemClassify.h"
 #include "profiles/ProfileManager.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/Settings.h"
@@ -25,11 +26,14 @@
 #include "utils/StringUtils.h"
 #include "utils/XMLUtils.h"
 #include "utils/log.h"
+#include "video/VideoFileItemClassify.h"
 
 #include <mutex>
 #include <sstream>
 
 #define PLAYERCOREFACTORY_XML "playercorefactory.xml"
+
+using namespace KODI;
 
 CPlayerCoreFactory::CPlayerCoreFactory(const CProfileManager& profileManager)
   : m_settings(CServiceBroker::GetSettingsComponent()->GetSettings()),
@@ -141,15 +145,18 @@ void CPlayerCoreFactory::GetPlayers(const CFileItem& item, std::vector<std::stri
   // "videodefaultplayer"
   if (defaultInputstreamPlayerOverride == ForcedPlayer::VIDEO_DEFAULT ||
       (defaultInputstreamPlayerOverride == ForcedPlayer::NONE &&
-       (item.IsVideo() || (!item.IsAudio() && !item.IsGame()))))
+       (VIDEO::IsVideo(item) || (!MUSIC::IsAudio(item) && !item.IsGame()))))
   {
     int idx = GetPlayerIndex("videodefaultplayer");
     if (idx > -1)
     {
-      std::string eVideoDefault = GetPlayerName(idx);
-      CLog::Log(LOGDEBUG, "CPlayerCoreFactory::GetPlayers: adding videodefaultplayer ({})",
-                eVideoDefault);
-      players.push_back(eVideoDefault);
+      const std::string videoDefault = GetPlayerName(idx);
+      if (std::find(players.cbegin(), players.cend(), videoDefault) == players.cend())
+      {
+        players.emplace_back(videoDefault);
+        CLog::Log(LOGDEBUG, "CPlayerCoreFactory::GetPlayers: adding videodefaultplayer ({})",
+                  videoDefault);
+      }
     }
     GetPlayers(players, false, true);  // Video-only players
     GetPlayers(players, true, true);   // Audio & video players
@@ -158,15 +165,18 @@ void CPlayerCoreFactory::GetPlayers(const CFileItem& item, std::vector<std::stri
   // Set audio default player
   // Pushback all audio players in case we don't know the type
   if (defaultInputstreamPlayerOverride == ForcedPlayer::AUDIO_DEFAULT ||
-      (defaultInputstreamPlayerOverride == ForcedPlayer::NONE && item.IsAudio()))
+      (defaultInputstreamPlayerOverride == ForcedPlayer::NONE && MUSIC::IsAudio(item)))
   {
     int idx = GetPlayerIndex("audiodefaultplayer");
     if (idx > -1)
     {
-      std::string eAudioDefault = GetPlayerName(idx);
-      CLog::Log(LOGDEBUG, "CPlayerCoreFactory::GetPlayers: adding audiodefaultplayer ({})",
-                eAudioDefault);
-      players.push_back(eAudioDefault);
+      const std::string audioDefault = GetPlayerName(idx);
+      if (std::find(players.cbegin(), players.cend(), audioDefault) == players.cend())
+      {
+        players.emplace_back(audioDefault);
+        CLog::Log(LOGDEBUG, "CPlayerCoreFactory::GetPlayers: adding audiodefaultplayer ({})",
+                  audioDefault);
+      }
     }
     GetPlayers(players, true, false); // Audio-only players
     GetPlayers(players, true, true);  // Audio & video players
@@ -246,6 +256,16 @@ std::string CPlayerCoreFactory::GetPlayerType(const std::string& player) const
     return "";
 
   return m_vecPlayerConfigs[idx]->m_type;
+}
+
+bool CPlayerCoreFactory::IsExternalPlayer(const std::string& player) const
+{
+  return (GetPlayerType(player) == "external");
+}
+
+bool CPlayerCoreFactory::IsRemotePlayer(const std::string& player) const
+{
+  return (GetPlayerType(player) == "remote");
 }
 
 bool CPlayerCoreFactory::PlaysAudio(const std::string& player) const

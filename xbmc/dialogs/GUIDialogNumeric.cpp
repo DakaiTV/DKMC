@@ -14,8 +14,10 @@
 #include "guilib/GUILabelControl.h"
 #include "guilib/GUIWindowManager.h"
 #include "guilib/LocalizeStrings.h"
-#include "input/Key.h"
-#include "input/XBMC_vkeys.h"
+#include "input/actions/Action.h"
+#include "input/actions/ActionIDs.h"
+#include "input/keyboard/KeyIDs.h"
+#include "input/keyboard/XBMC_vkeys.h"
 #include "interfaces/AnnouncementManager.h"
 #include "messaging/helpers/DialogOKHelper.h"
 #include "utils/Digest.h"
@@ -36,14 +38,7 @@
 using namespace KODI::MESSAGING;
 using KODI::UTILITY::CDigest;
 
-CGUIDialogNumeric::CGUIDialogNumeric(void)
-  : CGUIDialog(WINDOW_DIALOG_NUMERIC, "DialogNumeric.xml"),
-    m_bConfirmed{false},
-    m_bCanceled{false},
-    m_mode{INPUT_PASSWORD},
-    m_block{},
-    m_lastblock{},
-    m_dirty{false}
+CGUIDialogNumeric::CGUIDialogNumeric(void) : CGUIDialog(WINDOW_DIALOG_NUMERIC, "DialogNumeric.xml")
 {
   memset(&m_datetime, 0, sizeof(KODI::TIME::SystemTime));
   m_loadType = KEEP_IN_MEMORY;

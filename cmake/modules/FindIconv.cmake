@@ -1,44 +1,35 @@
 #.rst:
-# FindICONV
+# FindIconv
 # --------
 # Finds the ICONV library
 #
-# This will define the following variables::
+# This will define the following targets:
 #
-# ICONV_FOUND - system has ICONV
-# ICONV_INCLUDE_DIRS - the ICONV include directory
-# ICONV_LIBRARIES - the ICONV libraries
-#
-# and the following imported targets::
-#
-#   ICONV::ICONV   - The ICONV library
+#   ${APP_NAME_LC}::Iconv - An alias of the Iconv::Iconv target
+#   Iconv::Iconv - The ICONV library
 
-find_path(ICONV_INCLUDE_DIR NAMES iconv.h)
+if(NOT TARGET ${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME})
 
-find_library(ICONV_LIBRARY NAMES iconv libiconv c)
+  # We do this dance to utilise cmake system FindIconv. Saves us dealing with it
+  set(_temp_CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH})
+  unset(CMAKE_MODULE_PATH)
 
-set(CMAKE_REQUIRED_LIBRARIES ${ICONV_LIBRARY})
-check_function_exists(iconv HAVE_ICONV_FUNCTION)
-if(NOT HAVE_ICONV_FUNCTION)
-  check_function_exists(libiconv HAVE_LIBICONV_FUNCTION2)
-  set(HAVE_ICONV_FUNCTION ${HAVE_LIBICONV_FUNCTION2})
-  unset(HAVE_LIBICONV_FUNCTION2)
-endif()
+  if(Iconv_FIND_REQUIRED)
+    set(ICONV_REQUIRED "REQUIRED")
+  endif()
 
-include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(Iconv
-                                  REQUIRED_VARS ICONV_LIBRARY ICONV_INCLUDE_DIR HAVE_ICONV_FUNCTION)
+  find_package(Iconv ${ICONV_REQUIRED})
 
-if(ICONV_FOUND)
-  set(ICONV_LIBRARIES ${ICONV_LIBRARY})
-  set(ICONV_INCLUDE_DIRS ${ICONV_INCLUDE_DIR})
+  # Back to our normal module paths
+  set(CMAKE_MODULE_PATH ${_temp_CMAKE_MODULE_PATH})
 
-  if(NOT TARGET ICONV::ICONV)
-    add_library(ICONV::ICONV UNKNOWN IMPORTED)
-    set_target_properties(ICONV::ICONV PROPERTIES
-                                     IMPORTED_LOCATION "${ICONV_LIBRARY}"
-                                     INTERFACE_INCLUDE_DIRECTORIES "${ICONV_INCLUDE_DIR}")
+  if(ICONV_FOUND)
+    # We still want to Alias its "standard" target to our APP_NAME_LC based target
+    # for integration into our core dep packaging
+    add_library(${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME} ALIAS Iconv::Iconv)
+  else()
+    if(Iconv_FIND_REQUIRED)
+      message(FATAL_ERROR "Iconv libraries were not found.")
+    endif()
   endif()
 endif()
-
-mark_as_advanced(ICONV_INCLUDE_DIR ICONV_LIBRARY HAVE_ICONV_FUNCTION)

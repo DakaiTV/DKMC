@@ -9,6 +9,7 @@
 #include "PVRGUIActionsRecordings.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "Util.h"
 #include "dialogs/GUIDialogBusy.h"
@@ -159,7 +160,7 @@ private:
     const std::shared_ptr<CPVRClient> client = CServiceBroker::GetPVRManager().GetClient(*item);
     if (client)
     {
-      const std::shared_ptr<CPVRRecording> recording = item->GetPVRRecordingInfoTag();
+      const std::shared_ptr<const CPVRRecording> recording = item->GetPVRRecordingInfoTag();
       return client->SetRecordingPlayCount(*recording, recording->GetLocalPlayCount()) ==
              PVR_ERROR_NO_ERROR;
     }
@@ -255,10 +256,7 @@ bool CPVRGUIActionsRecordings::DeleteRecording(const CFileItem& item) const
 
   if (!AsyncDeleteRecording().Execute(item))
   {
-    HELPERS::ShowOKDialogText(
-        CVariant{257},
-        CVariant{
-            19111}); // "Error", "PVR backend error. Check the log for more information about this message."
+    HELPERS::ShowOKDialogText(CVariant{257}, CVariant{19111}); // "Error", "PVR backend error."
     return false;
   }
 
@@ -288,10 +286,7 @@ bool CPVRGUIActionsRecordings::DeleteWatchedRecordings(const CFileItem& item) co
 
   if (!AsyncDeleteRecording(true).Execute(item))
   {
-    HELPERS::ShowOKDialogText(
-        CVariant{257},
-        CVariant{
-            19111}); // "Error", "PVR backend error. Check the log for more information about this message."
+    HELPERS::ShowOKDialogText(CVariant{257}, CVariant{19111}); // "Error", "PVR backend error."
     return false;
   }
 
@@ -332,10 +327,7 @@ bool CPVRGUIActionsRecordings::UndeleteRecording(const CFileItem& item) const
 
   if (!AsyncUndeleteRecording().Execute(item))
   {
-    HELPERS::ShowOKDialogText(
-        CVariant{257},
-        CVariant{
-            19111}); // "Error", "PVR backend error. Check the log for more information about this message."
+    HELPERS::ShowOKDialogText(CVariant{257}, CVariant{19111}); // "Error", "PVR backend error."
     return false;
   }
 

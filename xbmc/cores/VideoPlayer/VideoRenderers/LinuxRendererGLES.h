@@ -75,7 +75,7 @@ public:
   void ReleaseBuffer(int idx) override;
   void RenderUpdate(int index, int index2, bool clear, unsigned int flags, unsigned int alpha) override;
   void Update() override;
-  bool RenderCapture(CRenderCapture* capture) override;
+  bool RenderCapture(int index, CRenderCapture* capture) override;
   CRenderInfo GetRenderInfo() override;
   bool ConfigChanged(const VideoPicture& picture) override;
 
@@ -91,7 +91,7 @@ protected:
   static const int FIELD_TOP{1};
   static const int FIELD_BOT{2};
 
-  virtual void Render(unsigned int flags, int index);
+  virtual bool Render(unsigned int flags, int index);
   virtual void RenderUpdateVideo(bool clear, unsigned int flags = 0, unsigned int alpha = 255);
 
   int NextYV12Texture();
@@ -212,5 +212,7 @@ protected:
   CRect m_viewRect;
 
 private:
+  void ClearBackBuffer();
+  void ClearBackBufferQuad();
   void DrawBlackBars();
 };

@@ -9,9 +9,11 @@
 #include "VideoLibraryRefreshingJob.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "TextureDatabase.h"
 #include "URL.h"
+#include "Util.h"
 #include "addons/Scraper.h"
 #include "dialogs/GUIDialogSelect.h"
 #include "dialogs/GUIDialogYesNo.h"
@@ -32,10 +34,11 @@
 #include "video/tags/VideoInfoTagLoaderFactory.h"
 #include "video/tags/VideoTagLoaderPlugin.h"
 
+#include <memory>
 #include <utility>
 
+using namespace KODI;
 using namespace KODI::MESSAGING;
-using namespace VIDEO;
 
 CVideoLibraryRefreshingJob::CVideoLibraryRefreshingJob(std::shared_ptr<CFileItem> item,
                                                        bool forceRefresh,
@@ -106,9 +109,9 @@ bool CVideoLibraryRefreshingJob::Work(CVideoDatabase &db)
 
     if (!ignoreNfo)
     {
-      std::unique_ptr<IVideoInfoTagLoader> loader;
-      loader.reset(CVideoInfoTagLoaderFactory::CreateLoader(*m_item, scraper,
-                                                            scanSettings.parent_name_root, m_forceRefresh));
+      std::unique_ptr<VIDEO::IVideoInfoTagLoader> loader;
+      loader.reset(VIDEO::CVideoInfoTagLoaderFactory::CreateLoader(
+          *m_item, scraper, scanSettings.parent_name_root, m_forceRefresh));
       // check if there's an NFO for the item
       CInfoScanner::INFO_TYPE nfoResult = CInfoScanner::NO_NFO;
       if (loader)
@@ -173,6 +176,21 @@ bool CVideoLibraryRefreshingJob::Work(CVideoDatabase &db)
 
       // create the info downloader for the scraper
       CVideoInfoDownloader infoDownloader(scraper);
+
+      // try adding by filename identifier
+      if (scraper->IsPython() && CUtil::HasFilenameIdentifier(itemTitle))
+      {
+        CFileItemList items;
+        items.Add(m_item);
+        items.SetPath(m_item->m_bIsFolder ? URIUtils::GetParentPath(m_item->GetPath())
+                                          : URIUtils::GetDirectory(m_item->GetPath()));
+        VIDEO::CVideoInfoScanner scanner;
+        if (scanner.RetrieveVideoInfo(items, scanSettings.parent_name, scraper->Content(),
+                                      !ignoreNfo, nullptr, m_refreshAll, GetProgressDialog()))
+        {
+          return true;
+        }
+      }
 
       // try to find a matching item
       MOVIELIST itemResultList;
@@ -281,13 +299,13 @@ bool CVideoLibraryRefreshingJob::Work(CVideoDatabase &db)
       }
       // otherwise just add a copy of the item
       else
-        items.Add(CFileItemPtr(new CFileItem(*m_item->GetVideoInfoTag())));
+        items.Add(std::make_shared<CFileItem>(*m_item->GetVideoInfoTag()));
 
       // update the path to the real path (instead of a videodb:// one)
       path = m_item->GetVideoInfoTag()->m_strPath;
     }
     else
-      items.Add(CFileItemPtr(new CFileItem(*m_item)));
+      items.Add(std::make_shared<CFileItem>(*m_item));
 
     // set the proper path of the list of items to lookup
     items.SetPath(m_item->m_bIsFolder ? URIUtils::GetParentPath(path) : URIUtils::GetDirectory(path));
@@ -305,29 +323,34 @@ bool CVideoLibraryRefreshingJob::Work(CVideoDatabase &db)
 
     // prepare the progress dialog for downloading all the necessary information
     SetTitle(g_localizeStrings.Get(headingLabel));
-    SetText(scraperUrl.GetTitle());
+    SetText(itemTitle);
     SetProgress(0);
 
+    const bool hasAdditionalAssets{m_item->HasVideoVersions() || m_item->HasVideoExtras()};
+    const int origDbId{m_item->GetVideoInfoTag()->m_iDbId};
+
     // remove any existing data for the item we're going to refresh
-    if (m_item->GetVideoInfoTag()->m_iDbId > 0)
+    if (origDbId > 0)
     {
-      int dbId = m_item->GetVideoInfoTag()->m_iDbId;
       if (scraper->Content() == CONTENT_MOVIES)
-        db.DeleteMovie(dbId);
+        db.DeleteMovie(origDbId, DeleteMovieCascadeAction::DEFAULT_VERSION);
       else if (scraper->Content() == CONTENT_MUSICVIDEOS)
-        db.DeleteMusicVideo(dbId);
+        db.DeleteMusicVideo(origDbId);
       else if (scraper->Content() == CONTENT_TVSHOWS)
       {
         if (!m_item->m_bIsFolder)
-          db.DeleteEpisode(dbId);
+          db.DeleteEpisode(origDbId);
+        else if (m_item->GetVideoInfoTag()->m_type == MediaTypeSeason)
+          db.DeleteSeason(origDbId);
         else if (m_refreshAll)
-          db.DeleteTvShow(dbId);
+          db.DeleteTvShow(origDbId);
         else
-          db.DeleteDetailsForTvShow(dbId);
+          db.DeleteDetailsForTvShow(origDbId);
       }
     }
 
     if (pluginTag || pluginArt)
+    {
       // set video info and art from plugin source with metadata.local scraper to items
       for (auto &i: items)
       {
@@ -336,9 +359,10 @@ bool CVideoLibraryRefreshingJob::Work(CVideoDatabase &db)
         if (pluginArt)
           i->SetArt(*pluginArt);
       }
+    }
 
     // finally download the information for the item
-    CVideoInfoScanner scanner;
+    VIDEO::CVideoInfoScanner scanner;
     if (!scanner.RetrieveVideoInfo(items, scanSettings.parent_name,
                                    scraper->Content(), !ignoreNfo,
                                    scraperUrl.HasUrls() ? &scraperUrl : nullptr,
@@ -361,11 +385,28 @@ bool CVideoLibraryRefreshingJob::Work(CVideoDatabase &db)
       db.GetMusicVideoInfo(m_item->GetPath(), *m_item->GetVideoInfoTag());
     else if (scraper->Content() == CONTENT_TVSHOWS)
     {
-      // update tvshow info to get updated episode numbers
+      // update tvshow/season info to get updated episode numbers
       if (m_item->m_bIsFolder)
-        db.GetTvShowInfo(m_item->GetPath(), *m_item->GetVideoInfoTag());
+      {
+        // Note: don't use any database ids (m_iDbId, m_idSeason, m_IdShow) of m_item's video
+        // info tag here. The db information might have been deleted and recreated afterwards,
+        // invalidating the old db ids and m_item is not (yet) updated at this point.
+        bool hasInfo = false;
+        const CVideoInfoTag* videoTag = m_item->GetVideoInfoTag();
+        if (videoTag && videoTag->m_type == MediaTypeSeason && videoTag->m_iSeason != -1)
+          hasInfo = db.GetSeasonInfo(m_item->GetPath(), videoTag->m_iSeason,
+                                     *m_item->GetVideoInfoTag(), m_item.get());
+        if (!hasInfo)
+          db.GetTvShowInfo(m_item->GetPath(), *m_item->GetVideoInfoTag());
+      }
       else
         db.GetEpisodeInfo(m_item->GetPath(), *m_item->GetVideoInfoTag());
+    }
+
+    if (hasAdditionalAssets)
+    {
+      const auto videoTag{m_item->GetVideoInfoTag()};
+      db.UpdateAssetsOwner(videoTag->m_type, origDbId, videoTag->m_iDbId);
     }
 
     // we're finally done

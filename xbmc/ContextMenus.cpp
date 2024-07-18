@@ -14,18 +14,21 @@
 #include "guilib/GUIWindowManager.h"
 #include "guilib/LocalizeStrings.h"
 #include "input/WindowTranslator.h"
+#include "music/MusicFileItemClassify.h"
 #include "storage/MediaManager.h"
 #include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
 #include "utils/Variant.h"
+
+using namespace KODI;
 
 namespace CONTEXTMENU
 {
 
   bool CEjectDisk::IsVisible(const CFileItem& item) const
   {
-#ifdef HAS_DVD_DRIVE
-    return item.IsRemovable() && (item.IsDVD() || item.IsCDDA());
+#ifdef HAS_OPTICAL_DRIVE
+    return item.IsRemovable() && (item.IsDVD() || MUSIC::IsCDDA(item));
 #else
     return false;
 #endif
@@ -33,7 +36,7 @@ namespace CONTEXTMENU
 
   bool CEjectDisk::Execute(const std::shared_ptr<CFileItem>& item) const
   {
-#ifdef HAS_DVD_DRIVE
+#ifdef HAS_OPTICAL_DRIVE
     CServiceBroker::GetMediaManager().ToggleTray(
         CServiceBroker::GetMediaManager().TranslateDevicePath(item->GetPath())[0]);
 #endif
@@ -43,7 +46,7 @@ namespace CONTEXTMENU
   bool CEjectDrive::IsVisible(const CFileItem& item) const
   {
     // Must be HDD
-    return item.IsRemovable() && !item.IsDVD() && !item.IsCDDA();
+    return item.IsRemovable() && !item.IsDVD() && !MUSIC::IsCDDA(item);
   }
 
   bool CEjectDrive::Execute(const std::shared_ptr<CFileItem>& item) const
@@ -78,6 +81,9 @@ std::string CAddRemoveFavourite::GetLabel(const CFileItem& item) const
 
 bool CAddRemoveFavourite::IsVisible(const CFileItem& item) const
 {
+  if (item.GetProperty("hide_add_remove_favourite").asBoolean())
+    return false;
+
   return (!item.GetPath().empty() && !item.IsParentFolder() && !item.IsPath("add") &&
           !item.IsPath("newplaylist://") && !URIUtils::IsProtocol(item.GetPath(), "favourites") &&
           !URIUtils::IsProtocol(item.GetPath(), "newsmartplaylist") &&

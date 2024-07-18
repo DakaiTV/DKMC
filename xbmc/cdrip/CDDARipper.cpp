@@ -10,6 +10,7 @@
 
 #include "CDDARipJob.h"
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "Util.h"
 #include "addons/AddonManager.h"
@@ -184,7 +185,7 @@ bool CCDDARipper::CreateAlbumDir(const MUSIC_INFO::CMusicInfoTag& infoTag,
     URIUtils::AddSlashAtEnd(strDirectory);
   }
 
-  strDirectory = CUtil::MakeLegalPath(strDirectory, legalType);
+  strDirectory = CUtil::MakeLegalPath(std::move(strDirectory), legalType);
 
   // Create directory if it doesn't exist
   if (!CUtil::CreateDirectoryEx(strDirectory))

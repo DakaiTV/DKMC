@@ -71,6 +71,11 @@ void CRendererShaders::GetWeight(std::map<RenderMethod, int>& weights, const Vid
     weights[RENDER_PS] = weight;
 }
 
+CRendererShaders::CRendererShaders(CVideoSettings& videoSettings) : CRendererHQ(videoSettings)
+{
+  m_renderMethodName = "Pixel Shaders";
+}
+
 bool CRendererShaders::Supports(ESCALINGMETHOD method) const
 {
   if (method == VS_SCALINGMETHOD_LINEAR)
@@ -93,8 +98,9 @@ bool CRendererShaders::Configure(const VideoPicture& picture, float fps, unsigne
       if (!IsHWPicSupported(picture))
         m_format = GetAVFormat(dxgi_format);
     }
+    m_srcPrimaries = picture.color_primaries;
 
-    CreateIntermediateTarget(m_sourceWidth, m_sourceHeight);
+    CreateIntermediateTarget(m_sourceWidth, m_sourceHeight, false, CalcIntermediateTargetFormat());
     return true;
   }
   return false;
@@ -131,11 +137,10 @@ void CRendererShaders::CheckVideoParameters()
   __super::CheckVideoParameters();
 
   CRenderBuffer* buf = m_renderBuffers[m_iBufferIndex];
-  const AVColorPrimaries srcPrim = GetSrcPrimaries(buf->primaries, buf->GetWidth(), buf->GetHeight());
-  if (srcPrim != m_srcPrimaries)
+  if (buf->primaries != m_srcPrimaries)
   {
     // source params is changed, reset shader
-    m_srcPrimaries = srcPrim;
+    m_srcPrimaries = buf->primaries;
     m_colorShader.reset();
   }
 }
@@ -184,17 +189,34 @@ bool CRendererShaders::IsHWPicSupported(const VideoPicture& picture)
   return false;
 }
 
-AVColorPrimaries CRendererShaders::GetSrcPrimaries(AVColorPrimaries srcPrimaries, unsigned width, unsigned height)
+DXGI_FORMAT CRendererShaders::CalcIntermediateTargetFormat() const
 {
-  AVColorPrimaries ret = srcPrimaries;
-  if (ret == AVCOL_PRI_UNSPECIFIED)
-  {
-    if (width > 1024 || height >= 600)
-      ret = AVCOL_PRI_BT709;
-    else
-      ret = AVCOL_PRI_BT470BG;
-  }
-  return ret;
+  // Default value: same as the back buffer
+  DXGI_FORMAT format{DX::Windowing()->GetBackBuffer().GetFormat()};
+
+  // High precision setting not enabled: use back buffer format, 8 or 10 bits
+  // enabled: look for higher quality format
+  if (!DX::Windowing()->IsHighPrecisionProcessingSettingEnabled())
+    return format;
+
+  UINT reqSupport{D3D11_FORMAT_SUPPORT_SHADER_SAMPLE | D3D11_FORMAT_SUPPORT_RENDER_TARGET};
+
+  // Preferred: float16 as the yuv-rgb conversion takes place in float
+  // => avoids a conversion / quantization round-trip, but uses more memory / bandwidth
+  const std::array hdrformats{DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R10G10B10A2_UNORM,
+                              DXGI_FORMAT_R32G32B32A32_FLOAT};
+
+  const auto it =
+      std::find_if(hdrformats.cbegin(), hdrformats.cend(), [&](DXGI_FORMAT outputFormat) {
+        return DX::Windowing()->IsFormatSupport(outputFormat, reqSupport);
+      });
+
+  if (it != hdrformats.cend())
+    format = *it;
+  else
+    CLog::LogF(LOGDEBUG, "no compatible high precision format found.");
+
+  return format;
 }
 
 CRenderBuffer* CRendererShaders::CreateBuffer()

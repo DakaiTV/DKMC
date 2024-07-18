@@ -30,6 +30,7 @@
 #include "LangInfo.h"
 #include "StringUtils.h"
 #include "XBDateTime.h"
+#include "utils/RegExp.h"
 
 #include <algorithm>
 #include <array>
@@ -46,12 +47,10 @@
 #include <fstrcmp.h>
 #include <memory.h>
 
-// don't move or std functions end up in PCRE namespace
-// clang-format off
-#include "utils/RegExp.h"
-// clang-format on
-
 #define FORMAT_BLOCK_SIZE 512 // # of bytes for initial allocation for printf
+
+namespace KODI::UTILS
+{
 
 namespace
 {
@@ -589,6 +588,39 @@ std::string& StringUtils::RemoveDuplicatedSpacesAndTabs(std::string& str)
     ++it;
   }
   return str;
+}
+
+bool StringUtils::IsSpecialCharacter(char c)
+{
+  static constexpr std::string_view view(" .-_+,!'\"\t/\\*?#$%&@()[]{}");
+  if (std::any_of(view.begin(), view.end(), [c](char ch) { return ch == c; }))
+    return true;
+  else
+    return false;
+}
+
+std::string StringUtils::ReplaceSpecialCharactersWithSpace(const std::string& str)
+{
+  std::string result;
+  bool prevCharWasSpecial = false;
+
+  for (char c : str)
+  {
+    if (IsSpecialCharacter(c))
+    {
+      if (!prevCharWasSpecial)
+      {
+        result += ' ';
+      }
+      prevCharWasSpecial = true;
+    }
+    else
+    {
+      result += c;
+      prevCharWasSpecial = false;
+    }
+  }
+  return result;
 }
 
 int StringUtils::Replace(std::string &str, char oldChar, char newChar)
@@ -1889,6 +1921,22 @@ std::string StringUtils::FormatFileSize(uint64_t bytes)
   return Format("{:.{}f}{}", value, decimals, units[i]);
 }
 
+bool StringUtils::Contains(std::string_view str,
+                           std::string_view keyword,
+                           bool isCaseInsensitive /* = true */)
+{
+  if (isCaseInsensitive)
+  {
+    auto itStr = std::search(str.begin(), str.end(), keyword.begin(), keyword.end(),
+                             [](unsigned char ch1, unsigned char ch2) {
+                               return std::toupper(ch1) == std::toupper(ch2);
+                             });
+    return (itStr != str.end());
+  }
+
+  return str.find(keyword) != std::string_view::npos;
+}
+
 const std::locale& StringUtils::GetOriginalLocale() noexcept
 {
   return g_langInfo.GetOriginalLocale();
@@ -1898,3 +1946,5 @@ std::string StringUtils::CreateFromCString(const char* cstr)
 {
   return cstr != nullptr ? std::string(cstr) : std::string();
 }
+
+} // namespace KODI::UTILS

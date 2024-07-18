@@ -9,6 +9,7 @@
 #import "OSXGLView.h"
 
 #include "ServiceBroker.h"
+#include "utils/log.h"
 #import "windowing/osx/WinSystemOSX.h"
 
 #include "system_gl.h"
@@ -16,9 +17,7 @@
 @implementation OSXGLView
 {
   NSOpenGLContext* m_glcontext;
-  NSOpenGLPixelFormat* m_pixFmt;
   NSTrackingArea* m_trackingArea;
-  BOOL pause;
 }
 
 - (void)SendInputEvent:(NSEvent*)nsEvent
@@ -32,21 +31,39 @@
 
 - (id)initWithFrame:(NSRect)frameRect
 {
+  // clang-format off
   NSOpenGLPixelFormatAttribute wattrs[] = {
-      NSOpenGLPFANoRecovery,    NSOpenGLPFAAccelerated,
-      NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion3_2Core,
-      NSOpenGLPFAColorSize,     (NSOpenGLPixelFormatAttribute)32,
-      NSOpenGLPFAAlphaSize,     (NSOpenGLPixelFormatAttribute)8,
-      NSOpenGLPFADepthSize,     (NSOpenGLPixelFormatAttribute)24,
-      NSOpenGLPFADoubleBuffer,  (NSOpenGLPixelFormatAttribute)0};
+    NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion3_2Core,
+    NSOpenGLPFAAccelerated,
+    NSOpenGLPFAAlphaSize, 8,
+    NSOpenGLPFAColorSize, 32,
+    NSOpenGLPFADepthSize, 24,
+    NSOpenGLPFADoubleBuffer,
+    NSOpenGLPFANoRecovery,
+    0
+  };
+  // clang-format on
+  auto createGLContext = [&wattrs]
+  {
+    auto pixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:wattrs];
+    return [[NSOpenGLContext alloc] initWithFormat:pixelFormat shareContext:nil];
+  };
 
   self = [super initWithFrame:frameRect];
   if (self)
   {
-    m_pixFmt = [[NSOpenGLPixelFormat alloc] initWithAttributes:wattrs];
-    m_glcontext = [[NSOpenGLContext alloc] initWithFormat:m_pixFmt shareContext:nil];
-  }
+    m_glcontext = createGLContext();
+    if (!m_glcontext)
+    {
+      CLog::Log(LOGERROR,
+                "failed to create NSOpenGLContext, falling back to legacy OpenGL profile");
 
+      wattrs[1] = NSOpenGLProfileVersionLegacy;
+      m_glcontext = createGLContext();
+      assert(m_glcontext);
+    }
+  }
+  self.wantsBestResolutionOpenGLSurface = YES;
   [self updateTrackingAreas];
 
   GLint swapInterval = 1;
@@ -188,15 +205,8 @@
 - (void)Update
 {
   assert(m_glcontext);
-  [self NotifyContext];
-  [m_glcontext update];
-}
-
-- (void)NotifyContext
-{
-  assert(m_glcontext);
-  // signals/notifies the context that this view is current (required if we render out of DrawRect)
   [m_glcontext makeCurrentContext];
+  [m_glcontext update];
 }
 
 - (void)FlushBuffer

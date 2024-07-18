@@ -57,6 +57,7 @@ using namespace std::chrono_literals;
 
 constexpr auto SETTING_VIDEOPLAYER_USEVAAPI = "videoplayer.usevaapi";
 constexpr auto SETTING_VIDEOPLAYER_USEVAAPIAV1 = "videoplayer.usevaapiav1";
+constexpr auto SETTING_VIDEOPLAYER_USEVAAPIAVC = "videoplayer.usevaapiavc";
 constexpr auto SETTING_VIDEOPLAYER_USEVAAPIHEVC = "videoplayer.usevaapihevc";
 constexpr auto SETTING_VIDEOPLAYER_USEVAAPIMPEG2 = "videoplayer.usevaapimpeg2";
 constexpr auto SETTING_VIDEOPLAYER_USEVAAPIMPEG4 = "videoplayer.usevaapimpeg4";
@@ -518,7 +519,6 @@ CDecoder::CDecoder(CProcessInfo& processInfo) :
   m_vaapiConfig.context = 0;
   m_vaapiConfig.configId = VA_INVALID_ID;
   m_vaapiConfig.processInfo = &m_processInfo;
-  m_avctx = nullptr;
   m_getBufferError = 0;
 }
 
@@ -543,6 +543,7 @@ bool CDecoder::Open(AVCodecContext* avctx, AVCodecContext* mainctx, const enum A
       {AV_CODEC_ID_VP9, SETTING_VIDEOPLAYER_USEVAAPIVP9},
       {AV_CODEC_ID_HEVC, SETTING_VIDEOPLAYER_USEVAAPIHEVC},
       {AV_CODEC_ID_AV1, SETTING_VIDEOPLAYER_USEVAAPIAV1},
+      {AV_CODEC_ID_H264, SETTING_VIDEOPLAYER_USEVAAPIAVC},
   };
 
   auto entry = settings_map.find(avctx->codec_id);
@@ -715,7 +716,7 @@ bool CDecoder::Open(AVCodecContext* avctx, AVCodecContext* mainctx, const enum A
   else if (avctx->codec_id == AV_CODEC_ID_VP9)
     m_vaapiConfig.maxReferences = 8;
   else if (avctx->codec_id == AV_CODEC_ID_AV1)
-    m_vaapiConfig.maxReferences = 18;
+    m_vaapiConfig.maxReferences = 21;
   else
     m_vaapiConfig.maxReferences = 2;
 
@@ -753,7 +754,6 @@ bool CDecoder::Open(AVCodecContext* avctx, AVCodecContext* mainctx, const enum A
   avctx->get_buffer2 = CDecoder::FFGetBuffer;
   avctx->slice_flags = SLICE_FLAG_CODED_ORDER|SLICE_FLAG_ALLOW_FIELD;
 
-  m_avctx = mainctx;
   return true;
 }
 
@@ -774,12 +774,6 @@ void CDecoder::Close()
 
 long CDecoder::Release()
 {
-  // if ffmpeg holds any references, flush buffers
-  if (m_avctx && m_videoSurfaces.HasRefs())
-  {
-    avcodec_flush_buffers(m_avctx);
-  }
-
   if (m_presentPicture)
   {
     m_presentPicture->Release();
@@ -1159,7 +1153,7 @@ bool CDecoder::ConfigVAAPI()
   unsigned int format = VA_RT_FORMAT_YUV420;
   std::int32_t pixelFormat = VA_FOURCC_NV12;
 
-  if ((m_vaapiConfig.profile == VAProfileHEVCMain10
+  if ((m_vaapiConfig.profile == VAProfileHEVCMain10 || m_vaapiConfig.profile == VAProfileVP9Profile2
 #if VA_CHECK_VERSION(1, 8, 0)
        || m_vaapiConfig.profile == VAProfileAV1Profile0
 #endif
@@ -1285,12 +1279,12 @@ void CDecoder::Register(IVaapiWinSystem *winSystem, bool deepColor)
   if (!settings)
     return;
 
-  constexpr std::array<const char*, 9> vaapiSettings = {
+  constexpr std::array<const char*, 10> vaapiSettings = {
       SETTING_VIDEOPLAYER_USEVAAPI,     SETTING_VIDEOPLAYER_USEVAAPIMPEG4,
       SETTING_VIDEOPLAYER_USEVAAPIVC1,  SETTING_VIDEOPLAYER_USEVAAPIMPEG2,
       SETTING_VIDEOPLAYER_USEVAAPIVP8,  SETTING_VIDEOPLAYER_USEVAAPIVP9,
       SETTING_VIDEOPLAYER_USEVAAPIHEVC, SETTING_VIDEOPLAYER_PREFERVAAPIRENDER,
-      SETTING_VIDEOPLAYER_USEVAAPIAV1};
+      SETTING_VIDEOPLAYER_USEVAAPIAV1,  SETTING_VIDEOPLAYER_USEVAAPIAVC};
 
   for (const auto vaapiSetting : vaapiSettings)
   {
@@ -3007,7 +3001,7 @@ bool CFFmpegPostproc::Init(EINTERLACEMETHOD method)
   {
     std::string filter;
 
-    filter = "yadif=1:-1";
+    filter = "bwdif=1:-1";
 
     if (avfilter_graph_parse_ptr(m_pFilterGraph, filter.c_str(), &inputs, &outputs, NULL) < 0)
     {
@@ -3026,7 +3020,7 @@ bool CFFmpegPostproc::Init(EINTERLACEMETHOD method)
       return false;
     }
 
-    m_config.processInfo->SetVideoDeintMethod("yadif");
+    m_config.processInfo->SetVideoDeintMethod("bwdif");
   }
   else if (method == VS_INTERLACEMETHOD_RENDER_BOB ||
            method == VS_INTERLACEMETHOD_NONE)

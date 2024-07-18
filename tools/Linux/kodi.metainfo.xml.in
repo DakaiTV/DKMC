@@ -5,7 +5,7 @@
     <project_license>GPL-2.0-only GPL-2.0-or-later LGPL-2.1-or-later MIT BSD-3-Clause BSD-4-Clause</project_license>
     <metadata_license>CC0-1.0</metadata_license>
     <developer_name>@DEV_NAME@</developer_name>
-    <summary>The ultimate entertainment center</summary>
+    <summary>Ultimate entertainment center</summary>
     <url type="homepage">https://kodi.tv/</url>
     <url type="donation">https://kodi.tv/contribute/donate</url>
     <url type="bugtracker">https://github.com/xbmc/xbmc/issues</url>
@@ -78,6 +78,12 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release date="2024-03-07" version="21.0~rc1-Omega" type="development"><url>https://kodi.tv/article/kodi-omega-rc-1/</url></release>
+        <release date="2024-02-15" version="21.0~b3-Omega" type="development"><url>https://kodi.tv/article/kodi-omega-beta-3/</url></release>
+        <release date="2023-12-09" version="21.0~b2-Omega" type="development"><url>https://kodi.tv/article/kodi-omega-beta-2/</url></release>
+        <release date="2023-10-17" version="21.0~b1-Omega" type="development"><url>https://kodi.tv/article/kodi-omega-beta-1/</url></release>
+        <release date="2023-09-07" version="21.0~a3-Omega" type="development"><url>https://kodi.tv/article/kodi-omega-alpha-3/</url></release>
+        <release date="2023-06-17" version="21.0~a2-Omega" type="development"><url>https://kodi.tv/article/kodi-omega-alpha-2/</url></release>
         <release date="2023-04-16" version="21.0~a1-Omega" type="development"><url>https://kodi.tv/article/kodi-omega-alpha-1/</url></release>
         <release date="2023-01-15" version="20.0-Nexus" type="stable"><url>https://kodi.tv/article/kodi-20-0-nexus-release/</url></release>
         <release date="2022-12-21" version="20.0~rc2-Nexus" type="development"><url>https://kodi.tv/article/kodi-nexus-rc-2/</url></release>
@@ -131,4 +137,8 @@
         <control>gamepad</control>
         <control>tablet</control>
     </recommends>
+    <branding>
+        <color type="primary" scheme_preference="light">#E8F8FF</color>
+        <color type="primary" scheme_preference="dark">#082838</color>
+    </branding>
 </component>

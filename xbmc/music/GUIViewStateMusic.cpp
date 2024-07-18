@@ -9,12 +9,14 @@
 #include "GUIViewStateMusic.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "filesystem/Directory.h"
 #include "filesystem/MusicDatabaseDirectory.h"
 #include "filesystem/VideoDatabaseDirectory.h"
 #include "guilib/LocalizeStrings.h"
 #include "guilib/WindowIDs.h"
+#include "playlists/PlayListFileItemClassify.h"
 #include "playlists/PlayListTypes.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/MediaSourceSettings.h"
@@ -23,14 +25,16 @@
 #include "utils/FileExtensionProvider.h"
 #include "utils/SortUtils.h"
 #include "utils/log.h"
+#include "video/VideoFileItemClassify.h"
 #include "view/ViewStateSettings.h"
 
+using namespace KODI;
 using namespace XFILE;
 using namespace MUSICDATABASEDIRECTORY;
 
 PLAYLIST::Id CGUIViewStateWindowMusic::GetPlaylist() const
 {
-  return PLAYLIST::TYPE_MUSIC;
+  return PLAYLIST::Id::TYPE_MUSIC;
 }
 
 bool CGUIViewStateWindowMusic::AutoPlayNextItem()
@@ -377,7 +381,7 @@ CGUIViewStateMusicSmartPlaylist::CGUIViewStateMusicSmartPlaylist(const CFileItem
     AddSortMethod(SortByBPM, 38080,
                   LABEL_MASKS("%T - %A", "%f")); // Title - Artist, bpm, empty, empty
 
-    if (items.IsSmartPlayList() || items.IsLibraryFolder())
+    if (PLAYLIST::IsSmartPlayList(items) || items.IsLibraryFolder())
       AddPlaylistOrder(items, LABEL_MASKS(strTrack, "%D"));
     else
     {
@@ -421,7 +425,7 @@ CGUIViewStateMusicSmartPlaylist::CGUIViewStateMusicSmartPlaylist(const CFileItem
     // userrating
     AddSortMethod(SortByUserRating, 38018, LABEL_MASKS("%F", "", strAlbum, "%r"));  // Filename, empty | Userdefined, UserRating
 
-    if (items.IsSmartPlayList() || items.IsLibraryFolder())
+    if (PLAYLIST::IsSmartPlayList(items) || items.IsLibraryFolder())
       AddPlaylistOrder(items, LABEL_MASKS("%F", "", strAlbum, "%D"));
     else
     {
@@ -503,7 +507,8 @@ CGUIViewStateWindowMusicNav::CGUIViewStateWindowMusicNav(const CFileItemList& it
   }
   else
   {
-    if (items.IsVideoDb() && items.Size() > (settings->GetBool(CSettings::SETTING_FILELISTS_SHOWPARENTDIRITEMS)?1:0))
+    if (VIDEO::IsVideoDb(items) &&
+        items.Size() > (settings->GetBool(CSettings::SETTING_FILELISTS_SHOWPARENTDIRITEMS) ? 1 : 0))
     {
       XFILE::VIDEODATABASEDIRECTORY::CQueryParams params;
       XFILE::CVideoDatabaseDirectory::GetQueryParams(items[settings->GetBool(CSettings::SETTING_FILELISTS_SHOWPARENTDIRITEMS) ? 1 : 0]->GetPath(), params);
@@ -621,7 +626,7 @@ void CGUIViewStateWindowMusicPlaylist::SaveViewState()
 
 PLAYLIST::Id CGUIViewStateWindowMusicPlaylist::GetPlaylist() const
 {
-  return PLAYLIST::TYPE_MUSIC;
+  return PLAYLIST::Id::TYPE_MUSIC;
 }
 
 bool CGUIViewStateWindowMusicPlaylist::AutoPlayNextItem()

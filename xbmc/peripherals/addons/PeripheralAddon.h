@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2014-2018 Team Kodi
+ *  Copyright (C) 2014-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -39,6 +39,9 @@ class CPeripherals;
 typedef std::vector<kodi::addon::DriverPrimitive> PrimitiveVector;
 typedef std::map<KODI::JOYSTICK::FeatureName, kodi::addon::JoystickFeature> FeatureMap;
 
+/*!
+* \ingroup peripherals
+*/
 class CPeripheralAddon : public ADDON::IAddonInstanceHandler
 {
 public:
@@ -161,8 +164,8 @@ private:
 
   /* @brief Add-on properties */
   bool m_bProvidesJoysticks;
-  bool m_bSupportsJoystickRumble;
-  bool m_bSupportsJoystickPowerOff;
+  bool m_bSupportsJoystickRumble = false;
+  bool m_bSupportsJoystickPowerOff = false;
   bool m_bProvidesButtonMaps;
 
   /* @brief Map of peripherals belonging to the add-on */

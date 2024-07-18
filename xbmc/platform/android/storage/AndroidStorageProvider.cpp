@@ -27,6 +27,8 @@
 
 #include <androidjni/Context.h>
 #include <androidjni/Environment.h>
+#include <androidjni/File.h>
+#include <androidjni/StatFs.h>
 #include <androidjni/StorageManager.h>
 #include <androidjni/StorageVolume.h>
 
@@ -143,13 +145,21 @@ void CAndroidStorageProvider::GetLocalDrives(VECSOURCES &localDrives)
   localDrives.push_back(share);
 }
 
-void CAndroidStorageProvider::GetRemovableDrives(VECSOURCES &removableDrives)
+void CAndroidStorageProvider::GetRemovableDrives(VECSOURCES& removableDrives)
 {
-  if (CJNIBase::GetSDKVersion() >= 24)
-  {
-    bool inError = false;
+  bool inError = false;
 
-    CJNIStorageManager manager(CJNIContext::getSystemService("storage"));
+  CJNIStorageManager manager(CJNIContext::getSystemService(CJNIContext::STORAGE_SERVICE));
+  if (xbmc_jnienv()->ExceptionCheck())
+  {
+    xbmc_jnienv()->ExceptionDescribe();
+    xbmc_jnienv()->ExceptionClear();
+    inError = true;
+  }
+
+  if (!inError)
+  {
+    CJNIStorageVolumes vols = manager.getStorageVolumes();
     if (xbmc_jnienv()->ExceptionCheck())
     {
       xbmc_jnienv()->ExceptionDescribe();
@@ -159,78 +169,67 @@ void CAndroidStorageProvider::GetRemovableDrives(VECSOURCES &removableDrives)
 
     if (!inError)
     {
-      CJNIStorageVolumes vols = manager.getStorageVolumes();
-      if (xbmc_jnienv()->ExceptionCheck())
+      VECSOURCES droidDrives;
+
+      for (int i = 0; i < vols.size(); ++i)
       {
-        xbmc_jnienv()->ExceptionDescribe();
-        xbmc_jnienv()->ExceptionClear();
-        inError = true;
+        CJNIStorageVolume vol = vols.get(i);
+        // CLog::Log(LOGDEBUG, "-- Volume: {}({}) -- {}", vol.getPath(), vol.getUserLabel(), vol.getState());
+
+        bool removable = vol.isRemovable();
+        if (xbmc_jnienv()->ExceptionCheck())
+        {
+          xbmc_jnienv()->ExceptionDescribe();
+          xbmc_jnienv()->ExceptionClear();
+          inError = true;
+          break;
+        }
+
+        std::string state = vol.getState();
+        if (xbmc_jnienv()->ExceptionCheck())
+        {
+          xbmc_jnienv()->ExceptionDescribe();
+          xbmc_jnienv()->ExceptionClear();
+          inError = true;
+          break;
+        }
+
+        if (removable && state == CJNIEnvironment::MEDIA_MOUNTED)
+        {
+          CMediaSource share;
+
+          share.strPath = vol.getPath();
+          if (xbmc_jnienv()->ExceptionCheck())
+          {
+            xbmc_jnienv()->ExceptionDescribe();
+            xbmc_jnienv()->ExceptionClear();
+            inError = true;
+            break;
+          }
+
+          share.strName = vol.getUserLabel();
+          if (xbmc_jnienv()->ExceptionCheck())
+          {
+            xbmc_jnienv()->ExceptionDescribe();
+            xbmc_jnienv()->ExceptionClear();
+            inError = true;
+            break;
+          }
+
+          StringUtils::Trim(share.strName);
+          if (share.strName.empty() || share.strName == "?" ||
+              StringUtils::EqualsNoCase(share.strName, "null"))
+            share.strName = URIUtils::GetFileName(share.strPath);
+
+          share.m_ignore = true;
+          droidDrives.emplace_back(share);
+        }
       }
 
       if (!inError)
       {
-        VECSOURCES droidDrives;
-
-        for (int i = 0; i < vols.size(); ++i)
-        {
-          CJNIStorageVolume vol = vols.get(i);
-          // CLog::Log(LOGDEBUG, "-- Volume: {}({}) -- {}", vol.getPath(), vol.getUserLabel(), vol.getState());
-
-          bool removable = vol.isRemovable();
-          if (xbmc_jnienv()->ExceptionCheck())
-          {
-            xbmc_jnienv()->ExceptionDescribe();
-            xbmc_jnienv()->ExceptionClear();
-            inError = true;
-            break;
-          }
-
-          std::string state = vol.getState();
-          if (xbmc_jnienv()->ExceptionCheck())
-          {
-            xbmc_jnienv()->ExceptionDescribe();
-            xbmc_jnienv()->ExceptionClear();
-            inError = true;
-            break;
-          }
-
-          if (removable && state == CJNIEnvironment::MEDIA_MOUNTED)
-          {
-            CMediaSource share;
-
-            share.strPath = vol.getPath();
-            if (xbmc_jnienv()->ExceptionCheck())
-            {
-              xbmc_jnienv()->ExceptionDescribe();
-              xbmc_jnienv()->ExceptionClear();
-              inError = true;
-              break;
-            }
-
-            share.strName = vol.getUserLabel();
-            if (xbmc_jnienv()->ExceptionCheck())
-            {
-              xbmc_jnienv()->ExceptionDescribe();
-              xbmc_jnienv()->ExceptionClear();
-              inError = true;
-              break;
-            }
-
-            StringUtils::Trim(share.strName);
-            if (share.strName.empty() || share.strName == "?" ||
-                StringUtils::EqualsNoCase(share.strName, "null"))
-              share.strName = URIUtils::GetFileName(share.strPath);
-
-            share.m_ignore = true;
-            droidDrives.emplace_back(share);
-          }
-        }
-
-        if (!inError)
-        {
-          removableDrives.insert(removableDrives.end(), droidDrives.begin(), droidDrives.end());
-          return;
-        }
+        removableDrives.insert(removableDrives.end(), droidDrives.begin(), droidDrives.end());
+        return;
       }
     }
   }
@@ -381,19 +380,19 @@ std::vector<std::string> CAndroidStorageProvider::GetDiskUsage()
 
   std::string usage;
   // add header
-  CXBMCApp::GetStorageUsage("", usage);
+  GetStorageUsage("", usage);
   result.push_back(usage);
 
   usage.clear();
   // add rootfs
-  if (CXBMCApp::GetStorageUsage("/", usage) && !usage.empty())
+  if (GetStorageUsage("/", usage) && !usage.empty())
     result.push_back(usage);
 
   usage.clear();
   // add external storage if available
   std::string path;
-  if (CXBMCApp::GetExternalStorage(path) && !path.empty() &&
-      CXBMCApp::GetStorageUsage(path, usage) && !usage.empty())
+  if (CXBMCApp::GetExternalStorage(path) && !path.empty() && GetStorageUsage(path, usage) &&
+      !usage.empty())
     result.push_back(usage);
 
   // add removable storage
@@ -402,7 +401,7 @@ std::vector<std::string> CAndroidStorageProvider::GetDiskUsage()
   for (unsigned int i = 0; i < drives.size(); i++)
   {
     usage.clear();
-    if (CXBMCApp::GetStorageUsage(drives[i].strPath, usage) && !usage.empty())
+    if (GetStorageUsage(drives[i].strPath, usage) && !usage.empty())
       result.push_back(usage);
   }
 
@@ -416,4 +415,39 @@ bool CAndroidStorageProvider::PumpDriveChangeEvents(IStorageEventsCallback *call
   bool changed = m_removableDrives != drives;
   m_removableDrives = std::move(drives);
   return changed;
+}
+
+namespace
+{
+constexpr float GIGABYTES = 1073741824;
+constexpr int PATH_MAXLEN = 38;
+} // namespace
+
+bool CAndroidStorageProvider::GetStorageUsage(const std::string& path, std::string& usage)
+{
+  if (path.empty())
+  {
+    usage = StringUtils::Format("{:<{}}{:>12}{:>12}{:>12}{:>12}", "Filesystem", PATH_MAXLEN, "Size",
+                                "Used", "Avail", "Use %");
+    return false;
+  }
+
+  CJNIStatFs fileStat(path);
+  const int blockSize = fileStat.getBlockSize();
+  const int blockCount = fileStat.getBlockCount();
+  const int freeBlocks = fileStat.getFreeBlocks();
+
+  if (blockSize <= 0 || blockCount <= 0 || freeBlocks < 0)
+    return false;
+
+  const float totalSize = static_cast<float>(blockSize) * blockCount / GIGABYTES;
+  const float freeSize = static_cast<float>(blockSize) * freeBlocks / GIGABYTES;
+  const float usedSize = totalSize - freeSize;
+  const float usedPercentage = usedSize / totalSize * 100;
+
+  usage = StringUtils::Format(
+      "{:<{}}{:>11.1f}{}{:>11.1f}{}{:>11.1f}{}{:>11.0f}{}",
+      path.size() < PATH_MAXLEN - 1 ? path : StringUtils::Left(path, PATH_MAXLEN - 4) + "...",
+      PATH_MAXLEN, totalSize, "G", usedSize, "G", freeSize, "G", usedPercentage, "%");
+  return true;
 }

@@ -13,8 +13,6 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.res.Resources;
-import android.content.res.Resources.NotFoundException;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -30,22 +28,16 @@ import android.view.View;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
-import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.lang.System;
-import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
-import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -73,8 +65,6 @@ public class Splash extends Activity
   private static final int RECORDAUDIO_RESULT_CODE = 8946;
   private static final int PERMISSION_RESULT_CODE = 8947;
 
-  private String mCpuinfo = "";
-  private ArrayList<String> mMounts = new ArrayList<String>();
   private String mErrorMsg = "";
 
   private ProgressBar mProgress = null;
@@ -85,29 +75,23 @@ public class Splash extends Activity
 
   private String sPackagePath = "";
   private String sXbmcHome = "";
-  private String sXbmcdata = "";
   private File fPackagePath = null;
   private File fXbmcHome = null;
-  private String sXbmcTemp = "";
-  private File fXbmcTemp = null;
 
   private BroadcastReceiver mExternalStorageReceiver = null;
   private boolean mExternalStorageChecked = false;
   private boolean mCachingDone = false;
-  private boolean mInstallLibs = false;
   private boolean mPermissionOK = false;
 
   private class StateMachine extends Handler
   {
-
-    private Splash mSplash = null;
+    private final Splash mSplash;
 
     StateMachine(Splash a)
     {
       super(Looper.myLooper());
       this.mSplash = a;
     }
-
 
     @Override
     public void handleMessage(Message msg)
@@ -123,14 +107,8 @@ public class Splash extends Activity
           dialog.setCancelable(false);
           dialog.setTitle("Info");
           dialog.setMessage("@APP_NAME@ requires access to your device media and files to function. Please allow this via the following dialogue box or @APP_NAME@ will exit.");
-          dialog.setButton(DialogInterface.BUTTON_NEUTRAL, "continue", new DialogInterface.OnClickListener()
-          {
-            @Override
-            public void onClick(DialogInterface dialog, int which)
-            {
-              mStateMachine.sendEmptyMessage(RecordAudioPermission);
-            }
-          });
+          dialog.setButton(DialogInterface.BUTTON_NEUTRAL, "continue",
+                  (dialog1, which) -> mStateMachine.sendEmptyMessage(RecordAudioPermission));
           dialog.show();
           break;
         case RecordAudioPermission:
@@ -217,7 +195,7 @@ public class Splash extends Activity
             {
               sendEmptyMessage(InError);
             }
-            if (fXbmcHome.exists() && fXbmcHome.lastModified() >= fPackagePath.lastModified() && !mInstallLibs)
+            if (fXbmcHome.exists() && fXbmcHome.lastModified() >= fPackagePath.lastModified())
             {
               mState = CachingDone;
               mCachingDone = true;
@@ -242,14 +220,14 @@ public class Splash extends Activity
     }
   }
 
-  private StateMachine mStateMachine = new StateMachine(this);
+  private final StateMachine mStateMachine = new StateMachine(this);
 
   private class FillCache
   {
-    private Splash mSplash = null;
+    private final Splash mSplash;
     private int mProgressStatus = 0;
-    private ExecutorService executor;
-    private Handler handler;
+    private final ExecutorService executor;
+    private final Handler handler;
 
     public FillCache(Splash splash)
     {
@@ -273,9 +251,12 @@ public class Splash extends Activity
 
     void DeleteRecursive(File fileOrDirectory)
     {
-      if (fileOrDirectory.isDirectory())
-        for (File child : fileOrDirectory.listFiles())
-          DeleteRecursive(child);
+      if (fileOrDirectory.isDirectory()) {
+        File[] files = fileOrDirectory.listFiles();
+        if (files != null)
+          for (File child : files)
+            DeleteRecursive(child);
+      }
 
       fileOrDirectory.delete();
     }
@@ -291,8 +272,8 @@ public class Splash extends Activity
       }
       fXbmcHome.mkdirs();
 
-      // Log.d(TAG, "apk: " + sPackagePath);
-      // Log.d(TAG, "output: " + sXbmcHome);
+      Log.d(TAG, "apk: " + sPackagePath);
+      Log.d(TAG, "output: " + sXbmcHome);
 
       ZipFile zip;
       byte[] buf = new byte[4096];
@@ -306,42 +287,45 @@ public class Splash extends Activity
 
         mState = Caching;
         publishProgress(mProgressStatus);
+
+        String cXbmcHome = fXbmcHome.getCanonicalPath();
+        Log.d(TAG, "output: " + cXbmcHome);
+
         while (entries.hasMoreElements())
         {
           // Update the progress bar
           publishProgress(++mProgressStatus);
 
-          ZipEntry e = (ZipEntry) entries.nextElement();
+          ZipEntry e = entries.nextElement();
           String sName = e.getName();
 
-          if (!(sName.startsWith("assets/") || (mInstallLibs && sName.startsWith("lib/"))))
+          if (!sName.startsWith("assets/"))
             continue;
 
-          String sFullPath = null;
-          if (sName.startsWith("lib/"))
-          {
-            if (e.isDirectory())
-              continue;
-            sFullPath = getApplicationInfo().nativeLibraryDir + "/" + new File(sName).getName();
+          String sFullPath = sXbmcHome + "/" + sName;
+          File fFullPath = new File(sFullPath);
+
+          // Zip Path Traversal vulnerability
+          String cFullPath = fFullPath.getCanonicalPath();
+          if (!cFullPath.startsWith(cXbmcHome)) {
+            Log.w(TAG, "Unsafe unzipping pattern: " + cFullPath);
+            continue;
           }
-          else
+
+          if (e.isDirectory())
           {
-            sFullPath = sXbmcHome + "/" + sName;
-            File fFullPath = new File(sFullPath);
-            if (e.isDirectory())
-            {
-              fFullPath.mkdirs();
-              continue;
-            }
-            fFullPath.getParentFile().mkdirs();
+            fFullPath.mkdirs();
+            continue;
           }
+          File parent = fFullPath.getParentFile();
+          if (parent != null && !parent.exists())
+            parent.mkdirs();
 
           try
           {
             InputStream in = zip.getInputStream(e);
-            BufferedOutputStream out = new BufferedOutputStream(
-                    new FileOutputStream(sFullPath));
-            while ((n = in.read(buf, 0, 4096)) > -1)
+            FileOutputStream out = new FileOutputStream(sFullPath);
+            while ((n = in.read(buf)) > 0)
               out.write(buf, 0, n);
 
             in.close();
@@ -349,7 +333,7 @@ public class Splash extends Activity
           }
           catch (IOException e1)
           {
-            e1.printStackTrace();
+            Log.e(TAG, "Exception: " + e1.getMessage());
           }
         }
 
@@ -360,13 +344,13 @@ public class Splash extends Activity
       }
       catch (FileNotFoundException e1)
       {
-        e1.printStackTrace();
+        Log.e(TAG, "Exception: " + e1.getMessage());
         mErrorMsg = "Cannot find package.";
         return -1;
       }
       catch (IOException e)
       {
-        e.printStackTrace();
+        Log.e(TAG, "Exception: " + e.getMessage());
         mErrorMsg = "Cannot read package.";
         File obb = new File(sPackagePath);
         obb.delete();
@@ -413,20 +397,11 @@ public class Splash extends Activity
     AlertDialog.Builder builder = new AlertDialog.Builder(act);
     builder.setTitle(title);
     builder.setIcon(android.R.drawable.ic_dialog_alert);
-    if (Build.VERSION.SDK_INT >= 24) {
-      builder.setMessage(Html.fromHtml(message, Html.FROM_HTML_MODE_LEGACY));
-    } else {
-      builder.setMessage(Html.fromHtml(message));
-    }
-    builder.setPositiveButton("Exit",
-            new DialogInterface.OnClickListener()
-            {
-              public void onClick(DialogInterface dialog, int arg1)
-              {
-                dialog.dismiss();
-                act.finish();
-              }
-            });
+    builder.setMessage(Html.fromHtml(message, Html.FROM_HTML_MODE_LEGACY));
+    builder.setPositiveButton("Exit", (dialog, arg1) -> {
+      dialog.dismiss();
+      act.finish();
+    });
     builder.setCancelable(false);
     myAlertDialog = builder.create();
     myAlertDialog.show();
@@ -471,7 +446,7 @@ public class Splash extends Activity
     File fLibCache = new File(fCacheDir.getAbsolutePath() + "/lib");
     fLibCache.mkdirs();
 
-    sXbmcdata = XBMCProperties.getStringProperty("xbmc.data", "");
+    final String sXbmcdata = XBMCProperties.getStringProperty("xbmc.data", "");
     if (!sXbmcdata.isEmpty())
     {
       File fXbmcData = new File(sXbmcdata);
@@ -492,12 +467,11 @@ public class Splash extends Activity
 
       if (!fXbmcData.exists())
       {
-        sXbmcdata = "";
         System.setProperty("xbmc.data", "");
       }
     }
 
-    sXbmcTemp = XBMCProperties.getStringProperty("xbmc.temp", "");
+    final String sXbmcTemp = XBMCProperties.getStringProperty("xbmc.temp", "");
     if (!sXbmcTemp.isEmpty())
     {
       File fXbmcTemp = new File(sXbmcTemp);
@@ -518,96 +492,12 @@ public class Splash extends Activity
 
       if (!fXbmcTemp.exists())
       {
-        sXbmcTemp = "";
         System.setProperty("xbmc.temp", "");
       }
     }
 
     sPackagePath = getPackageResourcePath();
     fPackagePath = new File(sPackagePath);
-  }
-
-  private boolean ParseCpuFeature()
-  {
-    ProcessBuilder cmd;
-
-    try
-    {
-      String[] args = {"/system/bin/cat", "/proc/cpuinfo"};
-      cmd = new ProcessBuilder(args);
-
-      Process process = cmd.start();
-      InputStream in = process.getInputStream();
-      byte[] re = new byte[1024];
-      while (in.read(re) != -1)
-      {
-        mCpuinfo = mCpuinfo + new String(re);
-      }
-      in.close();
-    }
-    catch (IOException ex)
-    {
-      ex.printStackTrace();
-      return false;
-    }
-    return true;
-  }
-
-  // We can't find a way to properly detect and monitor status of
-  //  a physical sdcard currently.
-  // "External storage" points to internal flash storage on modern
-  //  devices and nothing else seems available.
-  //
-  // ParseMounts() was part of the attempts to solve the issue and is not in use currently,
-  //   but kept for possible future use.
-  private boolean ParseMounts()
-  {
-    ProcessBuilder cmd;
-    final Pattern reMount = Pattern.compile("^(.+?)\\s+(.+?)\\s+(.+?)\\s");
-    String strMounts = "";
-
-    try
-    {
-      String[] args = {"/system/bin/cat", "/proc/mounts"};
-      cmd = new ProcessBuilder(args);
-
-      Process process = cmd.start();
-      InputStream in = process.getInputStream();
-      byte[] re = new byte[1024];
-      while (in.read(re) != -1)
-      {
-        strMounts = strMounts + new String(re);
-      }
-      in.close();
-    }
-    catch (IOException ex)
-    {
-      ex.printStackTrace();
-      return false;
-    }
-
-    String[] Mounts = strMounts.split("\n");
-    for (int i = 0; i < Mounts.length; ++i)
-    {
-      Log.d(TAG, "mount: " + Mounts[i]);
-      Matcher m = reMount.matcher(Mounts[i]);
-      if (m.find())
-      {
-        if (m.group(1).startsWith("/dev/block/vold") && !m.group(2).startsWith("/mnt/secure/asec"))
-        {
-          Log.d(TAG, "adding mount: " + m.group(2));
-          mMounts.add(m.group(2));
-        }
-      }
-    }
-    return true;
-  }
-
-  private boolean CheckCpuFeature(String feat)
-  {
-    final Pattern FeaturePattern = Pattern.compile("(?i):.*?\\s" + feat + "(?:\\s|$)");
-    Matcher m = FeaturePattern.matcher(mCpuinfo);
-    return m.find();
   }
 
   private boolean CheckPermissions()
@@ -620,21 +510,18 @@ public class Splash extends Activity
         retVal = true;
       }
     }
-    else if (Build.VERSION.SDK_INT > 22)
+    else
     {
       int permissionCheck;
       permissionCheck = checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE);
       if (permissionCheck == PERMISSION_GRANTED)
         retVal = true;
     }
-    else
-      retVal=  true;
-
     return retVal;
   }
 
   @Override
-  public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults)
+  public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults)
   {
     switch (requestCode)
     {
@@ -735,7 +622,7 @@ public class Splash extends Activity
     List<RunningTaskInfo> tasks = activityManager
             .getRunningTasks(Integer.MAX_VALUE);
     for (RunningTaskInfo task : tasks)
-      if (task.topActivity.toString().equalsIgnoreCase(
+      if (task.topActivity != null && task.topActivity.toString().equalsIgnoreCase(
               "ComponentInfo{@APP_PACKAGE@/@APP_PACKAGE@.Main}"))
       {
         // @APP_NAME@ already running; just activate it
@@ -744,74 +631,6 @@ public class Splash extends Activity
       }
 
     mStateMachine.sendEmptyMessage(Checking);
-
-    String pkg_arch = "";
-    // Read the properties
-    try
-    {
-      Resources resources = this.getResources();
-      InputStream xbmcprop = resources.openRawResource(R.raw.xbmc);
-      Properties properties = new Properties();
-      properties.load(xbmcprop);
-      pkg_arch = properties.getProperty("native_arch");
-    }
-    catch (NotFoundException e)
-    {
-      mErrorMsg = "Cannot find properties file";
-      Log.e(TAG, mErrorMsg);
-      mState = InError;
-    }
-    catch (IOException e)
-    {
-      mErrorMsg = "Failed to open properties file";
-      Log.e(TAG, mErrorMsg);
-      mState = InError;
-    }
-
-    boolean arch_ok = false;
-    String[] abis = Build.SUPPORTED_ABIS;
-    for (int i = 0; i < abis.length; ++i)
-    {
-      Log.i(TAG, "ABI: " + abis[i]);
-      if (abis[i].equalsIgnoreCase(pkg_arch))
-      {
-        arch_ok = true;
-        //break;
-      }
-    }
-
-    if (!arch_ok)
-    {
-      mErrorMsg = "This package is not compatible with your device (" + pkg_arch + ").\nPlease check the <a href=\"http://wiki.@APP_NAME_LC@.tv/index.php?title=XBMC_for_Android_specific_FAQ\">@APP_NAME@ Android wiki</a> for more information.";
-      Log.e(TAG, mErrorMsg);
-      mState = InError;
-    }
-
-    if (mState != InError)
-    {
-      if (pkg_arch.equalsIgnoreCase("armeabi-v7a"))
-      {
-        // arm arch: check if the cpu supports neon
-        boolean ret = ParseCpuFeature();
-        //Log.d(TAG, "/proc/cpuinfo = " + mCpuinfo);
-        if (!ret)
-        {
-          mErrorMsg = "Error! Cannot parse CPU features.";
-          Log.e(TAG, mErrorMsg);
-          mState = InError;
-        }
-        else
-        {
-          ret = CheckCpuFeature("neon") || CheckCpuFeature("aarch64") || CheckCpuFeature("asimd");  // aarch64 is always neon; asimd feature also represents neon
-          if (!ret)
-          {
-            mErrorMsg = "This @APP_NAME@ package is not compatible with your device (NEON).\nPlease check the <a href=\"http://wiki.@APP_NAME_LC@.tv/index.php?title=XBMC_for_Android_specific_FAQ\">@APP_NAME@ Android wiki</a> for more information.";
-            Log.e(TAG, mErrorMsg);
-            mState = InError;
-          }
-        }
-      }
-    }
 
     Log.d(TAG, "External storage = " + Environment.getExternalStorageDirectory().getAbsolutePath() + "; state = " + Environment.getExternalStorageState());
     if (Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState()))
@@ -830,7 +649,7 @@ public class Splash extends Activity
 
         SetupEnvironment();
 
-        if (mState != InError && fXbmcHome.exists() && fXbmcHome.lastModified() >= fPackagePath.lastModified() && !mInstallLibs)
+        if (mState != InError && fXbmcHome.exists() && fXbmcHome.lastModified() >= fPackagePath.lastModified())
         {
           mState = CachingDone;
           mCachingDone = true;
@@ -845,8 +664,8 @@ public class Splash extends Activity
     }
 
     setContentView(R.layout.activity_splash);
-    mProgress = (ProgressBar) findViewById(R.id.progressBar1);
-    mTextView = (TextView) findViewById(R.id.textView1);
+    mProgress = findViewById(R.id.progressBar1);
+    mTextView = findViewById(R.id.textView1);
 
     if (mState == InError || mState == CheckingPermissionsInfo)
     {

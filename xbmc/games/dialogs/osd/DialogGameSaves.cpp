@@ -9,6 +9,7 @@
 #include "DialogGameSaves.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "addons/Addon.h"
 #include "addons/AddonManager.h"
@@ -26,7 +27,7 @@
 #include "guilib/GUIWindowManager.h"
 #include "guilib/LocalizeStrings.h"
 #include "guilib/WindowIDs.h"
-#include "input/Key.h"
+#include "input/actions/ActionIDs.h"
 #include "utils/FileUtils.h"
 #include "utils/Variant.h"
 #include "view/GUIViewControl.h"
@@ -385,8 +386,6 @@ void CDialogGameSaves::OnContextMenu(CFileItem& item)
     OnRename(item);
   else if (index == 1)
     OnDelete(item);
-
-  m_viewControl->SetItems(*m_vecList);
 }
 
 void CDialogGameSaves::OnRename(CFileItem& item)
@@ -410,8 +409,7 @@ void CDialogGameSaves::OnRename(CFileItem& item)
       RETRO::CSavestateDatabase::GetSavestateItem(*newSavestate, savestatePath, item);
 
       // Refresh thumbnails
-      CGUIMessage message(GUI_MSG_REFRESH_LIST, GetID(), CONTROL_SAVES_DETAILED_LIST);
-      OnMessage(message);
+      m_viewControl->SetItems(*m_vecList);
     }
     else
     {
@@ -436,8 +434,7 @@ void CDialogGameSaves::OnDelete(CFileItem& item)
       m_vecList->Remove(&item);
 
       // Refresh thumbnails
-      CGUIMessage message(GUI_MSG_REFRESH_LIST, GetID(), CONTROL_SAVES_DETAILED_LIST);
-      OnMessage(message);
+      m_viewControl->SetItems(*m_vecList);
     }
     else
     {

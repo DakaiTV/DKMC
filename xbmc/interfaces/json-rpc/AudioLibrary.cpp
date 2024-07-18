@@ -9,10 +9,11 @@
 #include "AudioLibrary.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
-#include "TextureDatabase.h"
 #include "Util.h"
 #include "filesystem/Directory.h"
+#include "imagefiles/ImageFileURL.h"
 #include "messaging/ApplicationMessenger.h"
 #include "music/Album.h"
 #include "music/Artist.h"
@@ -28,6 +29,8 @@
 #include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
 #include "utils/Variant.h"
+
+#include <memory>
 
 using namespace MUSIC_INFO;
 using namespace JSONRPC;
@@ -289,7 +292,7 @@ JSONRPC_STATUS CAudioLibrary::GetAlbums(const std::string &method, ITransportLay
         if (bFetchFanart)
         {
           if (item.HasArt("fanart"))
-            result["albums"][index]["fanart"] = CTextureUtils::GetWrappedImageURL(item.GetArt("fanart"));
+            result["albums"][index]["fanart"] = IMAGE_FILES::URLFromFile(item.GetArt("fanart"));
           else
             result["albums"][index]["fanart"] = "";
         }
@@ -300,7 +303,7 @@ JSONRPC_STATUS CAudioLibrary::GetAlbums(const std::string &method, ITransportLay
           for (const auto& artIt : artMap)
           {
             if (!artIt.second.empty())
-              artObj[artIt.first] = CTextureUtils::GetWrappedImageURL(artIt.second);
+              artObj[artIt.first] = IMAGE_FILES::URLFromFile(artIt.second);
           }
           result["albums"][index]["art"] = artObj;
         }
@@ -448,14 +451,14 @@ JSONRPC_STATUS CAudioLibrary::GetSongs(const std::string &method, ITransportLaye
         if (bFetchThumb)
         {
           if (item.HasArt("thumb"))
-            result["songs"][index]["thumbnail"] = CTextureUtils::GetWrappedImageURL(item.GetArt("thumb"));
+            result["songs"][index]["thumbnail"] = IMAGE_FILES::URLFromFile(item.GetArt("thumb"));
           else
             result["songs"][index]["thumbnail"] = "";
         }
         if (bFetchFanart)
         {
           if (item.HasArt("fanart"))
-            result["songs"][index]["fanart"] = CTextureUtils::GetWrappedImageURL(item.GetArt("fanart"));
+            result["songs"][index]["fanart"] = IMAGE_FILES::URLFromFile(item.GetArt("fanart"));
           else
             result["songs"][index]["fanart"] = "";
         }
@@ -466,7 +469,7 @@ JSONRPC_STATUS CAudioLibrary::GetSongs(const std::string &method, ITransportLaye
           for (const auto& artIt : artMap)
           {
             if (!artIt.second.empty())
-              artObj[artIt.first] = CTextureUtils::GetWrappedImageURL(artIt.second);
+              artObj[artIt.first] = IMAGE_FILES::URLFromFile(artIt.second);
           }
           result["songs"][index]["art"] = artObj;
         }
@@ -495,7 +498,7 @@ JSONRPC_STATUS CAudioLibrary::GetSongDetails(const std::string &method, ITranspo
     return InvalidParams;
 
   CFileItemList items;
-  CFileItemPtr item = CFileItemPtr(new CFileItem(song));
+  CFileItemPtr item = std::make_shared<CFileItem>(song);
   FillItemArtistIDs(song.GetArtistIDArray(), item);
   items.Add(item);
 
@@ -726,10 +729,10 @@ JSONRPC_STATUS CAudioLibrary::GetAvailableArt(const std::string& method, ITransp
   for (const auto& artentry : musicdatabase.GetAvailableArtForItem(mediaID, mediaType, artType))
   {
     CVariant item = CVariant(CVariant::VariantTypeObject);
-    item["url"] = CTextureUtils::GetWrappedImageURL(artentry.m_url);
+    item["url"] = IMAGE_FILES::URLFromFile(artentry.m_url);
     item["arttype"] = artentry.m_aspect;
     if (!artentry.m_preview.empty())
-      item["previewurl"] = CTextureUtils::GetWrappedImageURL(artentry.m_preview);
+      item["previewurl"] = IMAGE_FILES::URLFromFile(artentry.m_preview);
     availableart.append(item);
   }
   result = CVariant(CVariant::VariantTypeObject);
@@ -795,7 +798,7 @@ JSONRPC_STATUS CAudioLibrary::SetArtistDetails(const std::string &method, ITrans
     for (CVariant::const_iterator_map artIt = art.begin_map(); artIt != art.end_map(); ++artIt)
     {
       if (artIt->second.isString() && !artIt->second.asString().empty())
-        artist.art[artIt->first] = CTextureUtils::UnwrapImageURL(artIt->second.asString());
+        artist.art[artIt->first] = IMAGE_FILES::ToCacheKey(artIt->second.asString());
       else if (artIt->second.isNull())
       {
         artist.art.erase(artIt->first);
@@ -901,7 +904,7 @@ JSONRPC_STATUS CAudioLibrary::SetAlbumDetails(const std::string &method, ITransp
     for (CVariant::const_iterator_map artIt = art.begin_map(); artIt != art.end_map(); ++artIt)
     {
       if (artIt->second.isString() && !artIt->second.asString().empty())
-        album.art[artIt->first] = CTextureUtils::UnwrapImageURL(artIt->second.asString());
+        album.art[artIt->first] = IMAGE_FILES::ToCacheKey(artIt->second.asString());
       else if (artIt->second.isNull())
       {
         album.art.erase(artIt->first);
@@ -991,6 +994,8 @@ JSONRPC_STATUS CAudioLibrary::SetSongDetails(const std::string &method, ITranspo
     song.strOrigReleaseDate = parameterObject["originaldate"].asString();
   if (ParameterNotNull(parameterObject, "albumreleasedate"))
     song.strReleaseDate = parameterObject["albumreleasedate"].asString();
+  if (ParameterNotNull(parameterObject, "songvideourl"))
+    song.songVideoURL = parameterObject["songvideourl"].asString();
 
   // Update existing art. Any existing artwork that isn't specified in this request stays as is.
   // If the value is null then the existing art with that type is removed.
@@ -1005,7 +1010,7 @@ JSONRPC_STATUS CAudioLibrary::SetSongDetails(const std::string &method, ITranspo
     for (CVariant::const_iterator_map artIt = art.begin_map(); artIt != art.end_map(); ++artIt)
     {
       if (artIt->second.isString() && !artIt->second.asString().empty())
-        artwork[artIt->first] = CTextureUtils::UnwrapImageURL(artIt->second.asString());
+        artwork[artIt->first] = IMAGE_FILES::ToCacheKey(artIt->second.asString());
       else if (artIt->second.isNull())
       {
         artwork.erase(artIt->first);
@@ -1022,7 +1027,8 @@ JSONRPC_STATUS CAudioLibrary::SetSongDetails(const std::string &method, ITranspo
   if (!musicdatabase.UpdateSong(song, updateartists))
     return InternalError;
 
-  CJSONRPCUtils::NotifyItemUpdated();
+  const auto item = std::make_shared<CFileItem>(song);
+  CJSONRPCUtils::NotifyItemUpdated(item);
   return ACK;
 }
 
@@ -1148,7 +1154,7 @@ bool CAudioLibrary::FillFileItemList(const CVariant &parameterObject, CFileItemL
     CSong song;
     if (musicdatabase.GetSong(songID, song))
     {
-      list.Add(CFileItemPtr(new CFileItem(song)));
+      list.Add(std::make_shared<CFileItem>(song));
       success = true;
     }
   }
@@ -1187,7 +1193,7 @@ void CAudioLibrary::FillAlbumItem(const CAlbum& album,
                                   const std::string& path,
                                   std::shared_ptr<CFileItem>& item)
 {
-  item = CFileItemPtr(new CFileItem(path, album));
+  item = std::make_shared<CFileItem>(path, album);
   // Add album artistIds as separate property as not part of CMusicInfoTag
   std::vector<int> artistids = album.GetArtistIDArray();
   FillItemArtistIDs(artistids, item);

@@ -22,7 +22,6 @@
 #include "application/ApplicationComponents.h"
 #include "application/ApplicationPlayer.h"
 #include "events/windows/GUIWindowEventLog.h"
-#include "favourites/GUIDialogFavourites.h"
 #include "favourites/GUIWindowFavourites.h"
 #include "input/actions/Action.h"
 #include "input/actions/ActionIDs.h"
@@ -49,6 +48,8 @@
 #include "utils/Variant.h"
 #include "utils/log.h"
 #include "video/dialogs/GUIDialogVideoInfo.h"
+#include "video/dialogs/GUIDialogVideoManagerExtras.h"
+#include "video/dialogs/GUIDialogVideoManagerVersions.h"
 #include "video/dialogs/GUIDialogVideoOSD.h"
 #include "video/windows/GUIWindowFullScreen.h"
 #include "video/windows/GUIWindowVideoNav.h"
@@ -133,7 +134,7 @@
 
 #include "video/dialogs/GUIDialogTeletext.h"
 #include "dialogs/GUIDialogSlider.h"
-#ifdef HAS_DVD_DRIVE
+#ifdef HAS_OPTICAL_DRIVE
 #include "dialogs/GUIDialogPlayEject.h"
 #endif
 #include "dialogs/GUIDialogMediaFilter.h"
@@ -144,6 +145,7 @@
 
 /* Game related include files */
 #include "cores/RetroPlayer/guiwindows/GameWindowFullScreen.h"
+#include "games/agents/windows/GUIAgentWindow.h"
 #include "games/controllers/windows/GUIControllerWindow.h"
 #include "games/dialogs/osd/DialogGameAdvancedSettings.h"
 #include "games/dialogs/osd/DialogGameOSD.h"
@@ -228,7 +230,6 @@ void CGUIWindowManager::CreateWindows()
   Add(new CGUIDialogNetworkSetup);
   Add(new CGUIDialogMediaSource);
   Add(new CGUIDialogProfileSettings);
-  Add(new CGUIDialogFavourites);
   Add(new CGUIDialogSongInfo);
   Add(new CGUIDialogSmartPlaylistEditor);
   Add(new CGUIDialogSmartPlaylistRule);
@@ -246,7 +247,7 @@ void CGUIWindowManager::CreateWindows()
 
   Add(new CGUIDialogInfoProviderSettings);
 
-#ifdef HAS_DVD_DRIVE
+#ifdef HAS_OPTICAL_DRIVE
   Add(new CGUIDialogPlayEject);
 #endif
 
@@ -292,6 +293,11 @@ void CGUIWindowManager::CreateWindows()
   Add(new CGUIDialogMusicInfo);
   Add(new CGUIDialogOK);
   Add(new CGUIDialogVideoInfo);
+  Add(new CGUIDialogVideoManagerVersions);
+  Add(new CGUIDialogVideoManagerExtras);
+  Add(new CGUIDialogSelect(WINDOW_DIALOG_SELECT_VIDEO_VERSION));
+  Add(new CGUIDialogSelect(WINDOW_DIALOG_SELECT_VIDEO_EXTRA));
+
   Add(new CGUIDialogTextViewer);
   Add(new CGUIWindowFullScreen);
   Add(new CGUIWindowVisualisation);
@@ -318,6 +324,7 @@ void CGUIWindowManager::CreateWindows()
   Add(new GAME::CDialogGameAdvancedSettings);
   Add(new GAME::CDialogGameVideoRotation);
   Add(new GAME::CDialogInGameSaves);
+  Add(new GAME::CGUIAgentWindow);
   Add(new RETRO::CGameWindowFullScreen);
 }
 
@@ -331,6 +338,10 @@ bool CGUIWindowManager::DestroyWindows()
     DestroyWindow(WINDOW_MUSIC_NAV);
     DestroyWindow(WINDOW_DIALOG_MUSIC_INFO);
     DestroyWindow(WINDOW_DIALOG_VIDEO_INFO);
+    DestroyWindow(WINDOW_DIALOG_SELECT_VIDEO_EXTRA);
+    DestroyWindow(WINDOW_DIALOG_SELECT_VIDEO_VERSION);
+    DestroyWindow(WINDOW_DIALOG_MANAGE_VIDEO_EXTRAS);
+    DestroyWindow(WINDOW_DIALOG_MANAGE_VIDEO_VERSIONS);
     DestroyWindow(WINDOW_VIDEO_PLAYLIST);
     DestroyWindow(WINDOW_VIDEO_NAV);
     DestroyWindow(WINDOW_FILES);
@@ -362,7 +373,6 @@ bool CGUIWindowManager::DestroyWindows()
     DestroyWindow(WINDOW_DIALOG_CONTENT_SETTINGS);
     DestroyWindow(WINDOW_DIALOG_INFOPROVIDER_SETTINGS);
     DestroyWindow(WINDOW_DIALOG_LIBEXPORT_SETTINGS);
-    DestroyWindow(WINDOW_DIALOG_FAVOURITES);
     DestroyWindow(WINDOW_DIALOG_SONG_INFO);
     DestroyWindow(WINDOW_DIALOG_SMART_PLAYLIST_EDITOR);
     DestroyWindow(WINDOW_DIALOG_SMART_PLAYLIST_RULE);
@@ -406,7 +416,7 @@ bool CGUIWindowManager::DestroyWindows()
     DestroyWindow(WINDOW_DIALOG_PVR_GUIDE_CONTROLS);
 
     DestroyWindow(WINDOW_DIALOG_TEXT_VIEWER);
-#ifdef HAS_DVD_DRIVE
+#ifdef HAS_OPTICAL_DRIVE
     DestroyWindow(WINDOW_DIALOG_PLAY_EJECT);
 #endif
     DestroyWindow(WINDOW_STARTUP_ANIM);
@@ -437,6 +447,7 @@ bool CGUIWindowManager::DestroyWindows()
     DestroyWindow(WINDOW_DIALOG_GAME_ADVANCED_SETTINGS);
     DestroyWindow(WINDOW_DIALOG_GAME_VIDEO_ROTATION);
     DestroyWindow(WINDOW_DIALOG_IN_GAME_SAVES);
+    DestroyWindow(WINDOW_DIALOG_GAME_AGENTS);
     DestroyWindow(WINDOW_FULLSCREEN_GAME);
 
     Remove(WINDOW_SETTINGS_SERVICE);
@@ -1213,6 +1224,19 @@ void CGUIWindowManager::Process(unsigned int currentTime)
       pWindow->DoProcess(currentTime, m_dirtyregions);
   }
 
+  // assign depth values to all active controls
+  if (pWindow)
+    pWindow->AssignDepth();
+
+  std::vector<CGUIWindow*> activeDialogs = m_activeDialogs;
+  stable_sort(activeDialogs.begin(), activeDialogs.end(), RenderOrderSortFunction);
+
+  for (const auto& window : activeDialogs)
+  {
+    if (window->IsDialogRunning())
+      window->AssignDepth();
+  }
+
   for (auto& itr : m_dirtyregions)
     m_tracker.MarkDirtyRegion(itr);
 }
@@ -1239,6 +1263,14 @@ void CGUIWindowManager::MarkDirty(const CRect& rect)
 
 void CGUIWindowManager::RenderPass() const
 {
+  if (CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_guiFrontToBackRendering)
+    RenderPassDual();
+  else
+    RenderPassSingle();
+}
+
+void CGUIWindowManager::RenderPassSingle() const
+{
   CGUIWindow* pWindow = GetWindow(GetActiveWindow());
   if (pWindow)
   {
@@ -1249,6 +1281,40 @@ void CGUIWindowManager::RenderPass() const
   // we render the dialogs based on their render order.
   auto renderList = m_activeDialogs;
   stable_sort(renderList.begin(), renderList.end(), RenderOrderSortFunction);
+
+  for (const auto& window : renderList)
+  {
+    if (window->IsDialogRunning())
+      window->DoRender();
+  }
+}
+
+void CGUIWindowManager::RenderPassDual() const
+{
+  CGUIWindow* pWindow = GetWindow(GetActiveWindow());
+  if (pWindow)
+    pWindow->ClearBackground();
+
+  std::vector<CGUIWindow*> renderList = m_activeDialogs;
+  stable_sort(renderList.begin(), renderList.end(), RenderOrderSortFunction);
+
+  // first the opaque pass, rendering from front to back
+  CServiceBroker::GetWinSystem()->GetGfxContext().SetRenderOrder(RENDER_ORDER_FRONT_TO_BACK);
+  for (auto it = renderList.rbegin(); it != renderList.rend(); ++it)
+  {
+    if ((*it)->IsDialogRunning())
+      (*it)->DoRender();
+  }
+
+  if (pWindow)
+    pWindow->DoRender();
+
+  // now we render all elements with transparency back to front
+  CServiceBroker::GetWinSystem()->GetGfxContext().SetRenderOrder(RENDER_ORDER_BACK_TO_FRONT);
+  if (pWindow)
+  {
+    pWindow->DoRender();
+  }
 
   for (const auto& window : renderList)
   {
@@ -1326,6 +1392,7 @@ bool CGUIWindowManager::Render()
 
 void CGUIWindowManager::AfterRender()
 {
+  CServiceBroker::GetWinSystem()->GetGfxContext().ResetDepth();
   m_tracker.CleanMarkedRegions();
 
   CGUIWindow* pWindow = GetWindow(GetActiveWindow());
@@ -1408,7 +1475,10 @@ bool CGUIWindowManager::ProcessRenderLoop(bool renderOnly)
     m_iNested++;
     if (!renderOnly)
       m_pCallback->Process();
-    m_pCallback->FrameMove(!renderOnly);
+    {
+      CSingleExit leaveIt(CServiceBroker::GetWinSystem()->GetGfxContext());
+      m_pCallback->FrameMove(!renderOnly);
+    }
     m_pCallback->Render();
     m_iNested--;
   }
@@ -1518,7 +1588,7 @@ void CGUIWindowManager::SendThreadMessage(CGUIMessage& message, int window /*= 0
   std::unique_lock<CCriticalSection> lock(m_critSection);
 
   CGUIMessage* msg = new CGUIMessage(message);
-  m_vecThreadMessages.emplace_back(std::pair<CGUIMessage*, int>(msg,window));
+  m_vecThreadMessages.emplace_back(msg, window);
 }
 
 void CGUIWindowManager::DispatchThreadMessages()

@@ -9,6 +9,7 @@
 #include "GUIWindowPVRSearch.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "dialogs/GUIDialogBusy.h"
 #include "dialogs/GUIDialogYesNo.h"
@@ -98,7 +99,7 @@ void AsyncSearchAction::Run()
 } // unnamed namespace
 
 CGUIWindowPVRSearchBase::CGUIWindowPVRSearchBase(bool bRadio, int id, const std::string& xmlFile)
-  : CGUIWindowPVRBase(bRadio, id, xmlFile), m_bSearchConfirmed(false)
+  : CGUIWindowPVRBase(bRadio, id, xmlFile)
 {
 }
 
@@ -144,7 +145,7 @@ void CGUIWindowPVRSearchBase::SetItemToSearch(const CFileItem& item)
   {
     SetSearchFilter(std::make_shared<CPVREpgSearchFilter>(m_bRadio));
 
-    const std::shared_ptr<CPVREpgInfoTag> epgTag(CPVRItem(item).GetEpgInfoTag());
+    const std::shared_ptr<const CPVREpgInfoTag> epgTag(CPVRItem(item).GetEpgInfoTag());
     if (epgTag && !CServiceBroker::GetPVRManager().IsParentalLocked(epgTag))
       m_searchfilter->SetSearchPhrase(epgTag->Title());
   }

@@ -26,6 +26,7 @@ class CFileItem;
 class CFileItemList;
 class CGUIListItem;
 class CGUIListItemLayout;
+class TiXmlElement;
 
 namespace PVR
 {
@@ -63,12 +64,12 @@ namespace PVR
     bool OnMessage(CGUIMessage& message) override;
     void SetFocus(bool focus) override;
     std::string GetDescription() const override;
-    EVENT_RESULT OnMouseEvent(const CPoint& point, const CMouseEvent& event) override;
+    EVENT_RESULT OnMouseEvent(const CPoint& point, const KODI::MOUSE::CMouseEvent& event) override;
 
     void Process(unsigned int currentTime, CDirtyRegionList& dirtyregions) override;
     void Render() override;
 
-    CGUIListItemPtr GetListItem(int offset, unsigned int flag = 0) const override;
+    std::shared_ptr<CGUIListItem> GetListItem(int offset, unsigned int flag = 0) const override;
     std::string GetLabel(int info) const override;
 
     std::shared_ptr<CFileItem> GetSelectedGridItem(int offset = 0) const;
@@ -128,6 +129,10 @@ namespace PVR
      */
     bool SetChannel(const CPVRChannelNumber& channelNumber);
 
+    virtual void AssignDepth() override;
+
+    void AssignItemDepth(CGUIListItem* item, bool focused);
+
   private:
     bool OnClick(int actionID);
     bool SelectItemFromPoint(const CPoint& point, bool justGrid = true);
@@ -184,14 +189,14 @@ namespace PVR
     std::vector<CGUIListItemLayout> m_rulerLayouts;
     std::vector<CGUIListItemLayout> m_rulerDateLayouts;
 
-    CGUIListItemLayout* m_channelLayout;
-    CGUIListItemLayout* m_focusedChannelLayout;
-    CGUIListItemLayout* m_programmeLayout;
-    CGUIListItemLayout* m_focusedProgrammeLayout;
-    CGUIListItemLayout* m_rulerLayout;
-    CGUIListItemLayout* m_rulerDateLayout;
+    CGUIListItemLayout* m_channelLayout = nullptr;
+    CGUIListItemLayout* m_focusedChannelLayout = nullptr;
+    CGUIListItemLayout* m_programmeLayout = nullptr;
+    CGUIListItemLayout* m_focusedProgrammeLayout = nullptr;
+    CGUIListItemLayout* m_rulerLayout = nullptr;
+    CGUIListItemLayout* m_rulerDateLayout = nullptr;
 
-    int m_pageControl;
+    int m_pageControl = 0;
 
     void GetChannelCacheOffsets(int& cacheBefore, int& cacheAfter);
     void GetProgrammeCacheOffsets(int& cacheBefore, int& cacheAfter);
@@ -201,10 +206,22 @@ namespace PVR
     bool OnMouseDoubleClick(int dwButton, const CPoint& point);
     bool OnMouseWheel(char wheel, const CPoint& point);
 
-    void HandleChannels(bool bRender, unsigned int currentTime, CDirtyRegionList& dirtyregions);
-    void HandleRuler(bool bRender, unsigned int currentTime, CDirtyRegionList& dirtyregions);
-    void HandleRulerDate(bool bRender, unsigned int currentTime, CDirtyRegionList& dirtyregions);
-    void HandleProgrammeGrid(bool bRender, unsigned int currentTime, CDirtyRegionList& dirtyregions);
+    void HandleChannels(bool bRender,
+                        unsigned int currentTime,
+                        CDirtyRegionList& dirtyregions,
+                        bool bAssignDepth = false);
+    void HandleRuler(bool bRender,
+                     unsigned int currentTime,
+                     CDirtyRegionList& dirtyregions,
+                     bool bAssignDepth = false);
+    void HandleRulerDate(bool bRender,
+                         unsigned int currentTime,
+                         CDirtyRegionList& dirtyregions,
+                         bool bAssignDepth = false);
+    void HandleProgrammeGrid(bool bRender,
+                             unsigned int currentTime,
+                             CDirtyRegionList& dirtyregions,
+                             bool bAssignDepth = false);
 
     float GetCurrentTimePositionOnPage() const;
     float GetProgressIndicatorWidth() const;
@@ -218,36 +235,37 @@ namespace PVR
     int GetProgrammeScrollOffset() const;
 
     int m_rulerUnit; //! number of blocks that makes up one element of the ruler
-    int m_channelsPerPage;
-    int m_programmesPerPage;
-    int m_channelCursor;
-    int m_channelOffset;
+    int m_channelsPerPage = 0;
+    int m_programmesPerPage = 0;
+    int m_channelCursor = 0;
+    int m_channelOffset = 0;
     int m_blocksPerPage;
-    int m_blockCursor;
-    int m_blockOffset;
-    int m_blockTravelAxis;
+    int m_blockCursor = 0;
+    int m_blockOffset = 0;
+    int m_blockTravelAxis = 0;
     int m_cacheChannelItems;
     int m_cacheProgrammeItems;
     int m_cacheRulerItems;
 
-    float m_rulerDateHeight; //! height of ruler date item
-    float m_rulerDateWidth; //! width of ruler date item
-    float m_rulerPosX; //! X position of first ruler item
-    float m_rulerPosY; //! Y position of first ruler item
-    float m_rulerHeight; //! height of the scrolling timeline above the ruler items
-    float m_rulerWidth; //! width of each element of the ruler
-    float m_channelPosX; //! X position of first channel row
-    float m_channelPosY; //! Y position of first channel row
-    float m_channelHeight; //! height of the channel item
-    float m_channelWidth; //! width of the channel item
-    float m_gridPosX; //! X position of first grid item
-    float m_gridPosY; //! Y position of first grid item
-    float m_gridWidth; //! width of the epg grid control
-    float m_gridHeight; //! height of the epg grid control
-    float m_blockSize; //! a block's width in pixels
-    float m_analogScrollCount;
+    float m_rulerDateHeight = 0; //! height of ruler date item
+    float m_rulerDateWidth = 0; //! width of ruler date item
+    float m_rulerPosX = 0; //! X position of first ruler item
+    float m_rulerPosY = 0; //! Y position of first ruler item
+    float m_rulerHeight = 0; //! height of the scrolling timeline above the ruler items
+    float m_rulerWidth = 0; //! width of each element of the ruler
+    float m_channelPosX = 0; //! X position of first channel row
+    float m_channelPosY = 0; //! Y position of first channel row
+    float m_channelHeight = 0; //! height of the channel item
+    float m_channelWidth = 0; //! width of the channel item
+    float m_gridPosX = 0; //! X position of first grid item
+    float m_gridPosY = 0; //! Y position of first grid item
+    float m_gridWidth = 0; //! width of the epg grid control
+    float m_gridHeight = 0; //! height of the epg grid control
+    float m_blockSize = 0; //! a block's width in pixels
+    float m_analogScrollCount = 0;
 
     std::unique_ptr<CGUITexture> m_guiProgressIndicatorTexture;
+    uint32_t m_guiProgressIndicatorTextureDepth{0};
 
     std::shared_ptr<CFileItem> m_lastItem;
     std::shared_ptr<CFileItem> m_lastChannel;
@@ -257,13 +275,13 @@ namespace PVR
 
     int m_scrollTime;
 
-    int m_programmeScrollLastTime;
-    float m_programmeScrollSpeed;
-    float m_programmeScrollOffset;
+    int m_programmeScrollLastTime = 0;
+    float m_programmeScrollSpeed = 0;
+    float m_programmeScrollOffset = 0;
 
-    int m_channelScrollLastTime;
-    float m_channelScrollSpeed;
-    float m_channelScrollOffset;
+    int m_channelScrollLastTime = 0;
+    float m_channelScrollSpeed = 0;
+    float m_channelScrollOffset = 0;
 
     mutable CCriticalSection m_critSection;
     std::unique_ptr<CGUIEPGGridContainerModel> m_gridModel;

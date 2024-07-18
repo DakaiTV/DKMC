@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2014-2018 Team Kodi
+ *  Copyright (C) 2014-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -9,6 +9,7 @@
 #include "PeripheralAddon.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "PeripheralAddonTranslator.h"
 #include "addons/addoninfo/AddonInfo.h"
 #include "addons/addoninfo/AddonType.h"
@@ -51,10 +52,7 @@ using namespace XFILE;
 #endif
 
 CPeripheralAddon::CPeripheralAddon(const ADDON::AddonInfoPtr& addonInfo, CPeripherals& manager)
-  : IAddonInstanceHandler(ADDON_INSTANCE_PERIPHERAL, addonInfo),
-    m_manager(manager),
-    m_bSupportsJoystickRumble(false),
-    m_bSupportsJoystickPowerOff(false)
+  : IAddonInstanceHandler(ADDON_INSTANCE_PERIPHERAL, addonInfo), m_manager(manager)
 {
   m_bProvidesJoysticks =
       addonInfo->Type(ADDON::AddonType::PERIPHERALDLL)->GetValue("@provides_joysticks").asBoolean();
@@ -863,9 +861,8 @@ void CPeripheralAddon::UnregisterButtonMap(CPeripheral* device)
 
   m_buttonMaps.erase(
       std::remove_if(m_buttonMaps.begin(), m_buttonMaps.end(),
-                     [device](const std::pair<CPeripheral*, JOYSTICK::IButtonMap*>& buttonMap) {
-                       return buttonMap.first == device;
-                     }),
+                     [device](const std::pair<CPeripheral*, JOYSTICK::IButtonMap*>& buttonMap)
+                     { return buttonMap.first == device; }),
       m_buttonMaps.end());
 }
 

@@ -8,12 +8,13 @@
 #include "AudioBookFileDirectory.h"
 
 #include "FileItem.h"
-#include "TextureDatabase.h"
+#include "FileItemList.h"
 #include "URL.h"
 #include "Util.h"
 #include "cores/FFmpeg.h"
 #include "filesystem/File.h"
 #include "guilib/LocalizeStrings.h"
+#include "imagefiles/ImageFileURL.h"
 #include "music/tags/MusicInfoTag.h"
 #include "utils/StringUtils.h"
 
@@ -68,7 +69,7 @@ bool CAudioBookFileDirectory::GetDirectory(const CURL& url,
 
   std::string thumb;
   if (m_fctx->nb_chapters > 1)
-    thumb = CTextureUtils::GetWrappedImageURL(url.Get(), "music");
+    thumb = IMAGE_FILES::URLFromFile(url.Get(), "music");
 
   for (size_t i=0;i<m_fctx->nb_chapters;++i)
   {
@@ -106,7 +107,7 @@ bool CAudioBookFileDirectory::GetDirectory(const CURL& url,
     item->SetStartOffset(CUtil::ConvertSecsToMilliSecs(m_fctx->chapters[i]->start *
                                                        av_q2d(m_fctx->chapters[i]->time_base)));
     item->SetEndOffset(m_fctx->chapters[i]->end * av_q2d(m_fctx->chapters[i]->time_base));
-    int compare = m_fctx->duration / (AV_TIME_BASE);
+    int compare = m_fctx->streams[0]->duration * av_q2d(m_fctx->streams[0]->time_base);
     if (item->GetEndOffset() < 0 || item->GetEndOffset() > compare)
     {
       if (i < m_fctx->nb_chapters-1)

@@ -10,6 +10,7 @@
 
 #include "AudioLibrary.h"
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "MediaSource.h"
 #include "ServiceBroker.h"
 #include "URL.h"
@@ -17,6 +18,7 @@
 #include "VideoLibrary.h"
 #include "filesystem/Directory.h"
 #include "media/MediaLockState.h"
+#include "playlists/PlayListFileItemClassify.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/MediaSourceSettings.h"
 #include "settings/SettingsComponent.h"
@@ -26,8 +28,11 @@
 #include "utils/Variant.h"
 #include "video/VideoDatabase.h"
 
-using namespace XFILE;
+#include <memory>
+
+using namespace KODI;
 using namespace JSONRPC;
+using namespace XFILE;
 
 JSONRPC_STATUS CFileOperations::GetRootDirectory(const std::string &method, ITransportLayer *transport, IClient *client, const CVariant &parameterObject, CVariant &result)
 {
@@ -44,7 +49,7 @@ JSONRPC_STATUS CFileOperations::GetRootDirectory(const std::string &method, ITra
       if (sources->at(i).m_iHasLock == LOCK_STATE_LOCKED)
         continue;
 
-      items.Add(CFileItemPtr(new CFileItem(sources->at(i))));
+      items.Add(std::make_shared<CFileItem>(sources->at(i)));
     }
 
     for (unsigned int i = 0; i < (unsigned int)items.Size(); i++)
@@ -184,7 +189,7 @@ JSONRPC_STATUS CFileOperations::GetFileDetails(const std::string &method, ITrans
   if (CDirectory::GetDirectory(path, items, "", DIR_FLAG_DEFAULTS) && items.Contains(file))
     item = items.Get(file);
   else
-    item = CFileItemPtr(new CFileItem(file, false));
+    item = std::make_shared<CFileItem>(file, false);
 
   if (!URIUtils::IsUPnP(file))
     FillFileItem(item, item, parameterObject["media"].asString(), parameterObject);
@@ -375,7 +380,8 @@ bool CFileOperations::FillFileItemList(const CVariant &parameterObject, CFileIte
       {
         // Sort folders and files by filename to avoid reverse item order bug on some platforms,
         // but leave items from a playlist, smartplaylist or upnp container in order supplied
-        if (!items.IsPlayList() && !items.IsSmartPlayList() && !URIUtils::IsUPnP(items.GetPath()))
+        if (!PLAYLIST::IsPlayList(items) && !PLAYLIST::IsSmartPlayList(items) &&
+            !URIUtils::IsUPnP(items.GetPath()))
           items.Sort(SortByFile, SortOrderAscending);
 
         CFileItemList filteredDirectories;

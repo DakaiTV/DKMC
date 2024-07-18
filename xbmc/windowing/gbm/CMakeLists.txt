@@ -14,11 +14,11 @@ set(HEADERS OptionalsReg.h
             WinSystemGbmEGLContext.h
             GBMDPMSSupport.h)
 
-if (OPENGL_FOUND)
+if(TARGET ${APP_NAME_LC}::OpenGl)
   list(APPEND SOURCES WinSystemGbmGLContext.cpp)
   list(APPEND HEADERS WinSystemGbmGLContext.h)
 endif()
-if(OPENGLES_FOUND)
+if(TARGET ${APP_NAME_LC}::OpenGLES)
   list(APPEND SOURCES WinSystemGbmGLESContext.cpp)
   list(APPEND HEADERS WinSystemGbmGLESContext.h)
 endif()

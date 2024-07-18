@@ -19,17 +19,14 @@
 
 using namespace PVR;
 
-CPVRChannelGroupsContainer::CPVRChannelGroupsContainer() :
-    m_groupsRadio(new CPVRChannelGroups(true)),
-    m_groupsTV(new CPVRChannelGroups(false))
+CPVRChannelGroupsContainer::CPVRChannelGroupsContainer()
+  : m_groupsRadio(new CPVRChannelGroups(true)), m_groupsTV(new CPVRChannelGroups(false))
 {
 }
 
 CPVRChannelGroupsContainer::~CPVRChannelGroupsContainer()
 {
   Unload();
-  delete m_groupsRadio;
-  delete m_groupsTV;
 }
 
 bool CPVRChannelGroupsContainer::Update(const std::vector<std::shared_ptr<CPVRClient>>& clients)
@@ -69,7 +66,7 @@ void CPVRChannelGroupsContainer::Unload()
   m_groupsTV->Unload();
 }
 
-CPVRChannelGroups* CPVRChannelGroupsContainer::Get(bool bRadio) const
+std::shared_ptr<CPVRChannelGroups> CPVRChannelGroupsContainer::Get(bool bRadio) const
 {
   return bRadio ? m_groupsRadio : m_groupsTV;
 }
@@ -77,6 +74,18 @@ CPVRChannelGroups* CPVRChannelGroupsContainer::Get(bool bRadio) const
 std::shared_ptr<CPVRChannelGroup> CPVRChannelGroupsContainer::GetGroupAll(bool bRadio) const
 {
   return Get(bRadio)->GetGroupAll();
+}
+
+std::shared_ptr<CPVRChannelGroup> CPVRChannelGroupsContainer::GetGroupByPath(
+    const std::string& path) const
+{
+  const CPVRChannelsPath channelsPath{path};
+  if (channelsPath.IsValid() && channelsPath.IsChannelGroup())
+    return Get(channelsPath.IsRadio())->GetGroupByPath(path);
+  else
+    CLog::LogFC(LOGERROR, LOGPVR, "Invalid path '{}'", path);
+
+  return {};
 }
 
 std::shared_ptr<CPVRChannelGroup> CPVRChannelGroupsContainer::GetByIdFromAll(int iGroupId) const
@@ -97,12 +106,15 @@ std::shared_ptr<CPVRChannel> CPVRChannelGroupsContainer::GetChannelById(int iCha
   return channel;
 }
 
-std::shared_ptr<CPVRChannel> CPVRChannelGroupsContainer::GetChannelForEpgTag(const std::shared_ptr<CPVREpgInfoTag>& epgTag) const
+std::shared_ptr<CPVRChannel> CPVRChannelGroupsContainer::GetChannelForEpgTag(
+    const std::shared_ptr<const CPVREpgInfoTag>& epgTag) const
 {
   if (!epgTag)
     return {};
 
-  return Get(epgTag->IsRadio())->GetGroupAll()->GetByUniqueID(epgTag->UniqueChannelID(), epgTag->ClientID());
+  return Get(epgTag->IsRadio())
+      ->GetGroupAll()
+      ->GetByUniqueID(epgTag->UniqueChannelID(), epgTag->ClientID());
 }
 
 std::shared_ptr<CPVRChannelGroupMember> CPVRChannelGroupsContainer::GetChannelGroupMemberByPath(
@@ -117,14 +129,16 @@ std::shared_ptr<CPVRChannelGroupMember> CPVRChannelGroupsContainer::GetChannelGr
 
 std::shared_ptr<CPVRChannel> CPVRChannelGroupsContainer::GetByPath(const std::string& strPath) const
 {
-  const std::shared_ptr<CPVRChannelGroupMember> groupMember = GetChannelGroupMemberByPath(strPath);
+  const std::shared_ptr<const CPVRChannelGroupMember> groupMember =
+      GetChannelGroupMemberByPath(strPath);
   if (groupMember)
     return groupMember->Channel();
 
   return {};
 }
 
-std::shared_ptr<CPVRChannel> CPVRChannelGroupsContainer::GetByUniqueID(int iUniqueChannelId, int iClientID) const
+std::shared_ptr<CPVRChannel> CPVRChannelGroupsContainer::GetByUniqueID(int iUniqueChannelId,
+                                                                       int iClientID) const
 {
   std::shared_ptr<CPVRChannel> channel;
   std::shared_ptr<CPVRChannelGroup> channelgroup = GetGroupAllTV();

@@ -32,7 +32,7 @@ public:
                     float height,
                     const CTextureInfo& textureFocus,
                     const CTextureInfo& textureNoFocus,
-                    UTILS::MOVING_SPEED::MapEventConfig& movingSpeedCfg);
+                    KODI::UTILS::MOVING_SPEED::MapEventConfig& movingSpeedCfg);
 
   ~CGUIResizeControl() override = default;
   CGUIResizeControl* Clone() const override { return new CGUIResizeControl(*this); }
@@ -53,14 +53,14 @@ public:
   bool CanFocus() const override { return true; }
 
 protected:
-  EVENT_RESULT OnMouseEvent(const CPoint &point, const CMouseEvent &event) override;
+  EVENT_RESULT OnMouseEvent(const CPoint& point, const KODI::MOUSE::CMouseEvent& event) override;
   bool UpdateColors(const CGUIListItem* item) override;
   bool SetAlpha(unsigned char alpha);
   void Resize(float x, float y);
   std::unique_ptr<CGUITexture> m_imgFocus;
   std::unique_ptr<CGUITexture> m_imgNoFocus;
   unsigned int m_frameCounter;
-  UTILS::MOVING_SPEED::CMovingSpeed m_movingSpeed;
+  KODI::UTILS::MOVING_SPEED::CMovingSpeed m_movingSpeed;
   float m_fAnalogSpeed;
   float m_x1, m_x2, m_y1, m_y2;
 

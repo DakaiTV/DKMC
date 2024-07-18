@@ -13,6 +13,7 @@
 #include "utils/StringUtils.h"
 #include "utils/Variant.h"
 
+using namespace KODI;
 using namespace XFILE;
 
 CVideoDbUrl::CVideoDbUrl()
@@ -131,6 +132,10 @@ bool CVideoDbUrl::parse()
       m_itemType = "tags";
       break;
 
+    case VIDEODATABASEDIRECTORY::NODE_TYPE_VIDEOVERSIONS:
+      m_itemType = "videoversions";
+      break;
+
     case VIDEODATABASEDIRECTORY::NODE_TYPE_ROOT:
     case VIDEODATABASEDIRECTORY::NODE_TYPE_OVERVIEW:
     default:
@@ -181,6 +186,8 @@ bool CVideoDbUrl::parse()
     AddOption("tvshowid", (int)queryParams.GetTvShowId());
   if (queryParams.GetYear() != -1)
     AddOption("year", (int)queryParams.GetYear());
+  if (queryParams.GetVideoVersionId() != -1)
+    AddOption("videoversionid", (int)queryParams.GetVideoVersionId());
 
   return true;
 }
@@ -198,7 +205,7 @@ bool CVideoDbUrl::validateOption(const std::string &key, const CVariant &value)
   if (!value.isString())
     return false;
 
-  CSmartPlaylist xspFilter;
+  PLAYLIST::CSmartPlaylist xspFilter;
   if (!xspFilter.LoadFromJson(value.asString()))
     return false;
 

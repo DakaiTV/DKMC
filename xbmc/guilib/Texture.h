@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "guilib/TextureBase.h"
 #include "guilib/TextureFormats.h"
 
 #include <cstddef>
@@ -21,26 +22,20 @@ class IImage;
 struct COLOR {unsigned char b,g,r,x;};	// Windows GDI expects 4bytes per color
 #pragma pack()
 
-enum class TEXTURE_SCALING
-{
-  LINEAR,
-  NEAREST,
-};
-
 /*!
 \ingroup textures
-\brief Base texture class, subclasses of which depend on the render spec (DX, GL etc.)
+\brief Texture loader class, subclasses of which depend on the render spec (DX, GL etc.)
 */
-class CTexture
+class CTexture : public CTextureBase
 {
 
 public:
-  CTexture(unsigned int width = 0, unsigned int height = 0, unsigned int format = XB_FMT_A8R8G8B8);
+  CTexture(unsigned int width = 0, unsigned int height = 0, XB_FMT format = XB_FMT_A8R8G8B8);
   virtual ~CTexture();
 
   static std::unique_ptr<CTexture> CreateTexture(unsigned int width = 0,
                                                  unsigned int height = 0,
-                                                 unsigned int format = XB_FMT_A8R8G8B8);
+                                                 XB_FMT format = XB_FMT_A8R8G8B8);
 
   /*! \brief Load a texture from a file
    Loads a texture from a file, restricting in size if needed based on maxHeight and maxWidth.
@@ -73,44 +68,39 @@ public:
                                                         unsigned int idealWidth = 0,
                                                         unsigned int idealHeight = 0);
 
-  bool LoadFromMemory(unsigned int width, unsigned int height, unsigned int pitch, unsigned int format, bool hasAlpha, const unsigned char* pixels);
-  bool LoadPaletted(unsigned int width, unsigned int height, unsigned int pitch, unsigned int format, const unsigned char *pixels, const COLOR *palette);
+  bool LoadFromMemory(unsigned int width,
+                      unsigned int height,
+                      unsigned int pitch,
+                      XB_FMT format,
+                      bool hasAlpha,
+                      const unsigned char* pixels);
+  bool LoadPaletted(unsigned int width,
+                    unsigned int height,
+                    unsigned int pitch,
+                    XB_FMT format,
+                    const unsigned char* pixels,
+                    const COLOR* palette);
 
-  bool HasAlpha() const;
+  void Update(unsigned int width,
+              unsigned int height,
+              unsigned int pitch,
+              XB_FMT format,
+              const unsigned char* pixels,
+              bool loadToGPU);
 
-  void SetMipmapping();
-  bool IsMipmapped() const;
-  void SetScalingMethod(TEXTURE_SCALING scalingMethod) { m_scalingMethod = scalingMethod; }
-  TEXTURE_SCALING GetScalingMethod() const { return m_scalingMethod; }
-  void SetCacheMemory(bool bCacheMemory) { m_bCacheMemory = bCacheMemory; }
-  bool GetCacheMemory() const { return m_bCacheMemory; }
+  /*! 
+   * \brief Uploads the texture to the GPU. 
+   */
+  void LoadToGPUAsync();
 
   virtual void CreateTextureObject() = 0;
   virtual void DestroyTextureObject() = 0;
   virtual void LoadToGPU() = 0;
+  /*! 
+   * \brief Blocks execution until the previous GFX commands have been processed.
+   */
+  virtual void SyncGPU(){};
   virtual void BindToUnit(unsigned int unit) = 0;
-
-  unsigned char* GetPixels() const { return m_pixels; }
-  unsigned int GetPitch() const { return GetPitch(m_textureWidth); }
-  unsigned int GetRows() const { return GetRows(m_textureHeight); }
-  unsigned int GetTextureWidth() const { return m_textureWidth; }
-  unsigned int GetTextureHeight() const { return m_textureHeight; }
-  unsigned int GetWidth() const { return m_imageWidth; }
-  unsigned int GetHeight() const { return m_imageHeight; }
-  /*! \brief return the original width of the image, before scaling/cropping */
-  unsigned int GetOriginalWidth() const { return m_originalWidth; }
-  /*! \brief return the original height of the image, before scaling/cropping */
-  unsigned int GetOriginalHeight() const { return m_originalHeight; }
-
-  int GetOrientation() const { return m_orientation; }
-  void SetOrientation(int orientation) { m_orientation = orientation; }
-
-  void Update(unsigned int width, unsigned int height, unsigned int pitch, unsigned int format, const unsigned char *pixels, bool loadToGPU);
-  void Allocate(unsigned int width, unsigned int height, unsigned int format);
-  void ClampToEdge();
-
-  static unsigned int PadPow2(unsigned int x);
-  static bool SwapBlueRed(unsigned char *pixels, unsigned int height, unsigned int pitch, unsigned int elements = 4, unsigned int offset=0);
 
 private:
   // no copy constructor
@@ -120,25 +110,9 @@ protected:
   bool LoadFromFileInMem(unsigned char* buffer, size_t size, const std::string& mimeType,
                          unsigned int maxWidth, unsigned int maxHeight);
   bool LoadFromFileInternal(const std::string& texturePath, unsigned int maxWidth, unsigned int maxHeight, bool requirePixels, const std::string& strMimeType = "");
-  bool LoadIImage(IImage* pImage, unsigned char* buffer, unsigned int bufSize, unsigned int width, unsigned int height);
-  // helpers for computation of texture parameters for compressed textures
-  unsigned int GetPitch(unsigned int width) const;
-  unsigned int GetRows(unsigned int height) const;
-  unsigned int GetBlockSize() const;
-
-  unsigned int m_imageWidth;
-  unsigned int m_imageHeight;
-  unsigned int m_textureWidth;
-  unsigned int m_textureHeight;
-  unsigned int m_originalWidth;   ///< original image width before scaling or cropping
-  unsigned int m_originalHeight;  ///< original image height before scaling or cropping
-
-  unsigned char* m_pixels;
-  bool m_loadedToGPU;
-  unsigned int m_format;
-  int m_orientation;
-  bool m_hasAlpha =  true ;
-  bool m_mipmapping =  false ;
-  TEXTURE_SCALING m_scalingMethod = TEXTURE_SCALING::LINEAR;
-  bool m_bCacheMemory = false;
+  bool LoadIImage(IImage* pImage,
+                  unsigned char* buffer,
+                  unsigned int bufSize,
+                  unsigned int width,
+                  unsigned int height);
 };

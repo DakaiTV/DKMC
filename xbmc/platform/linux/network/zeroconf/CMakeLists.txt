@@ -1,4 +1,4 @@
-if(AVAHI_FOUND)
+if(TARGET ${APP_NAME_LC}::Avahi)
   set(SOURCES ZeroconfAvahi.cpp
               ZeroconfBrowserAvahi.cpp)
   set(HEADERS ZeroconfAvahi.h

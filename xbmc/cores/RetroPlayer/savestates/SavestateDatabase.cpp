@@ -9,6 +9,7 @@
 #include "SavestateDatabase.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "SavestateFlatBuffer.h"
 #include "URL.h"
 #include "XBDateTime.h"
@@ -19,6 +20,8 @@
 #include "guilib/LocalizeStrings.h"
 #include "utils/URIUtils.h"
 #include "utils/log.h"
+
+#include <memory>
 
 namespace
 {
@@ -35,7 +38,7 @@ std::unique_ptr<ISavestate> CSavestateDatabase::AllocateSavestate()
 {
   std::unique_ptr<ISavestate> savestate;
 
-  savestate.reset(new CSavestateFlatBuffer);
+  savestate = std::make_unique<CSavestateFlatBuffer>();
 
   return savestate;
 }

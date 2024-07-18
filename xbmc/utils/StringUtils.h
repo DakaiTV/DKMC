@@ -55,15 +55,18 @@ DEF_TO_STR_VALUE(foo) // outputs "4"
 #define DEF_TO_STR_NAME(x) #x
 #define DEF_TO_STR_VALUE(x) DEF_TO_STR_NAME(x)
 
-template<typename T, std::enable_if_t<!std::is_enum<T>::value, int> = 0>
-constexpr auto&& EnumToInt(T&& arg) noexcept
+namespace KODI::UTILS
 {
-  return arg;
+
+template<typename T, std::enable_if_t<!std::is_enum_v<T>, int> = 0>
+constexpr decltype(auto) EnumToInt(T&& arg) noexcept
+{
+  return std::forward<T>(arg);
 }
-template<typename T, std::enable_if_t<std::is_enum<T>::value, int> = 0>
-constexpr auto EnumToInt(T&& arg) noexcept
+template<typename T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr decltype(auto) EnumToInt(T&& arg) noexcept
 {
-  return static_cast<int>(arg);
+  return fmt::underlying(std::forward<T>(arg));
 }
 
 class StringUtils
@@ -76,16 +79,16 @@ public:
   \return Formatted string
   */
   template<typename... Args>
-  static std::string Format(const std::string& fmt, Args&&... args)
+  static constexpr std::string Format(std::string_view format, Args&&... args)
   {
     // coverity[fun_call_w_exception : FALSE]
-    return ::fmt::format(fmt, EnumToInt(std::forward<Args>(args))...);
+    return fmt::format(fmt::runtime(format), EnumToInt(std::forward<Args>(args))...);
   }
   template<typename... Args>
-  static std::wstring Format(const std::wstring& fmt, Args&&... args)
+  static constexpr std::wstring Format(std::wstring_view format, Args&&... args)
   {
     // coverity[fun_call_w_exception : FALSE]
-    return ::fmt::format(fmt, EnumToInt(std::forward<Args>(args))...);
+    return fmt::format(fmt::runtime(format), EnumToInt(std::forward<Args>(args))...);
   }
 
   static std::string FormatV(PRINTF_FORMAT_STRING const char *fmt, va_list args);
@@ -116,6 +119,16 @@ public:
   static std::string& TrimRight(std::string &str);
   static std::string& TrimRight(std::string &str, const char* const chars);
   static std::string& RemoveDuplicatedSpacesAndTabs(std::string& str);
+
+  /*! \brief Check if the character is a special character.
+
+   A special character is not an alphanumeric character, and is not useful to provide information
+
+   \param c Input character to be checked
+   */
+  static bool IsSpecialCharacter(char c);
+
+  static std::string ReplaceSpecialCharactersWithSpace(const std::string& str);
   static int Replace(std::string &str, char oldChar, char newChar);
   static int Replace(std::string &str, const std::string &oldStr, const std::string &newStr);
   static int Replace(std::wstring &str, const std::wstring &oldStr, const std::wstring &newStr);
@@ -417,6 +430,16 @@ public:
    */
   static std::string CreateFromCString(const char* cstr);
 
+  /*!
+   * \brief Check if a keyword string is contained on another string.
+   * \param str The string in which to search for the keyword
+   * \param keyword The string to search for
+   * \return True if the keyword if found.
+   */
+  static bool Contains(std::string_view str,
+                       std::string_view keyword,
+                       bool isCaseInsensitive = true);
+
 private:
   /*!
    * Wrapper for CLangInfo::GetOriginalLocale() which allows us to
@@ -432,3 +455,18 @@ struct sortstringbyname
     return StringUtils::CompareNoCase(strItem1, strItem2) < 0;
   }
 };
+
+} // namespace KODI::UTILS
+
+// We make these utilities globally available by default, as it would be a massive
+// change to the codebase to refer to them by their fully qualified names or import
+// them everywhere. However, it is important that the symbols are declared inside the
+// KODI::UTILS namespace in order to avoid a name clash with p8platform. p8platform
+// declares StringUtils in the global namespace. If we declare StringUtils without a
+// namespace as well, this is a violation of the One Definition Rule and therefore
+// undefined behavior. With the switch to C++20 in Kodi and recent versions of the clang compiler,
+// this can cause crashes due to the `Empty` static constant being present in different ELF
+// sections depending on the compiler mode.
+// See also: https://github.com/llvm/llvm-project/issues/72361
+using KODI::UTILS::sortstringbyname;
+using KODI::UTILS::StringUtils;

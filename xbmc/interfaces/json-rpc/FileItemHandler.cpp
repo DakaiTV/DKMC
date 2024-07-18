@@ -9,13 +9,14 @@
 #include "FileItemHandler.h"
 
 #include "AudioLibrary.h"
+#include "FileItemList.h"
 #include "FileOperations.h"
 #include "ServiceBroker.h"
-#include "TextureDatabase.h"
 #include "Util.h"
 #include "VideoLibrary.h"
 #include "addons/kodi-dev-kit/include/kodi/c-api/addon-instance/pvr/pvr_epg.h" // EPG_TAG_INVALID_UID
 #include "filesystem/Directory.h"
+#include "imagefiles/ImageFileURL.h"
 #include "music/MusicThumbLoader.h"
 #include "music/tags/MusicInfoTag.h"
 #include "pictures/PictureInfoTag.h"
@@ -37,6 +38,7 @@
 #include "video/VideoThumbLoader.h"
 
 #include <map>
+#include <memory>
 #include <string.h>
 
 using namespace MUSIC_INFO;
@@ -192,7 +194,7 @@ bool CFileItemHandler::GetField(const std::string& field,
       for (const auto& artIt : artMap)
       {
         if (!artIt.second.empty())
-          artObj[artIt.first] = CTextureUtils::GetWrappedImageURL(artIt.second);
+          artObj[artIt.first] = IMAGE_FILES::URLFromFile(artIt.second);
       }
 
       result["art"] = artObj;
@@ -208,10 +210,10 @@ bool CFileItemHandler::GetField(const std::string& field,
         fetchedArt = true;
       }
       else if (item->HasPictureInfoTag() && !item->HasArt("thumb"))
-        item->SetArt("thumb", CTextureUtils::GetWrappedThumbURL(item->GetPath()));
+        item->SetArt("thumb", IMAGE_FILES::URLFromFile(item->GetPath()));
 
       if (item->HasArt("thumb"))
-        result["thumbnail"] = CTextureUtils::GetWrappedImageURL(item->GetArt("thumb"));
+        result["thumbnail"] = IMAGE_FILES::URLFromFile(item->GetArt("thumb"));
       else
         result["thumbnail"] = "";
 
@@ -228,7 +230,7 @@ bool CFileItemHandler::GetField(const std::string& field,
       }
 
       if (item->HasArt("fanart"))
-        result["fanart"] = CTextureUtils::GetWrappedImageURL(item->GetArt("fanart"));
+        result["fanart"] = IMAGE_FILES::URLFromFile(item->GetArt("fanart"));
       else
         result["fanart"] = "";
 
@@ -524,7 +526,7 @@ bool CFileItemHandler::FillFileItemList(const CVariant &parameterObject, CFileIt
 
     if (!added)
     {
-      CFileItemPtr item = CFileItemPtr(new CFileItem(file, false));
+      CFileItemPtr item = std::make_shared<CFileItem>(file, false);
       if (item->IsPicture())
       {
         CPictureInfoTag picture;

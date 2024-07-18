@@ -16,7 +16,6 @@
 
 #include "ServiceBroker.h"
 #include "Util.h"
-#include "cores/DllLoader/DllLoaderContainer.h"
 #include "filesystem/SpecialProtocol.h"
 #include "interfaces/AnnouncementManager.h"
 #include "interfaces/legacy/AddonUtils.h"
@@ -25,10 +24,10 @@
 #include "interfaces/python/PythonInvoker.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/SettingsComponent.h"
+#include "utils/CharsetConverter.h"
 #include "utils/JSONVariantWriter.h"
 #include "utils/Variant.h"
 #include "utils/log.h"
-#include "utils/CharsetConverter.h"
 
 #ifdef TARGET_WINDOWS
 #include "platform/Environment.h"
@@ -58,7 +57,13 @@ XBPython::~XBPython()
 #if PY_VERSION_HEX >= 0x03070000
   if (Py_IsInitialized())
   {
+    // Switch to the main interpreter thread before finalizing
     PyThreadState_Swap(PyInterpreterState_ThreadHead(PyInterpreterState_Main()));
+
+    // Clear all loaded modules to prevent circular references
+    PyObject* modules = PyImport_GetModuleDict();
+    PyDict_Clear(modules);
+
     Py_Finalize();
   }
 #endif

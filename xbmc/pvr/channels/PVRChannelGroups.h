@@ -23,6 +23,7 @@ namespace PVR
 enum class PVREvent;
 
 class CPVRChannel;
+class CPVRChannelGroupFactory;
 class CPVRClient;
 
 /** A container class for channel groups */
@@ -53,12 +54,10 @@ public:
   bool LoadFromDatabase(const std::vector<std::shared_ptr<CPVRClient>>& clients);
 
   /*!
-   * @brief Create a channel group matching the given type.
-   * @param iType The type for the group.
-   * @param path The path of the group.
-   * @return The new group.
+   * @brief Get the channel group factory
+   * @return The factory.
    */
-  std::shared_ptr<CPVRChannelGroup> CreateChannelGroup(int iType, const CPVRChannelsPath& path);
+  std::shared_ptr<CPVRChannelGroupFactory> GetGroupFactory() const { return m_channelGroupFactory; }
 
   /*!
    * @return Amount of groups in this container
@@ -91,6 +90,14 @@ public:
    */
   std::shared_ptr<CPVRChannelGroupMember> GetChannelGroupMemberByPath(
       const CPVRChannelsPath& path) const;
+
+  /*!
+   * @brief Get all channel group members that could be added to the given group
+   * @param group The group
+   * @return The channel group members that could be added to the group
+   */
+  std::vector<std::shared_ptr<CPVRChannelGroupMember>> GetMembersAvailableForGroup(
+      const std::shared_ptr<const CPVRChannelGroup>& group) const;
 
   /*!
    * @brief Get a pointer to a channel group given its ID.
@@ -185,6 +192,42 @@ public:
   bool HideGroup(const std::shared_ptr<CPVRChannelGroup>& group, bool bHide);
 
   /*!
+   * @brief Change the name of the given group.
+   * @param group The group.
+   * @param newGroupName The new group name.
+   * @param isUserSetName Whether the name was set by the user.
+   * @return True if the group name was changed, false otherwise.
+   */
+  bool SetGroupName(const std::shared_ptr<CPVRChannelGroup>& group,
+                    const std::string& newGroupName,
+                    bool isUserSetName);
+
+  /*!
+   * @brief Append a channel group member to the given group.
+   * @param group The group.
+   * @param groupMember The channel group member to append.
+   * @return True if the channel group member was appended, false otherwise.
+   */
+  bool AppendToGroup(const std::shared_ptr<CPVRChannelGroup>& group,
+                     const std::shared_ptr<const CPVRChannelGroupMember>& groupMember);
+
+  /*!
+   * @brief Remove a channel group member from the given group.
+   * @param group The group.
+   * @param groupMember The channel group member to remove.
+   * @return @return True if the channel group member was removed, false otherwise.
+   */
+  bool RemoveFromGroup(const std::shared_ptr<CPVRChannelGroup>& group,
+                       const std::shared_ptr<CPVRChannelGroupMember>& groupMember);
+
+  /*!
+   * @brief Reset the position of the given groups, then resort groups.
+   * @param sortedGroupPaths The paths of the groups to re-position.
+   * @return True if any group position was changed, false otherwise.
+   */
+  bool ResetGroupPositions(const std::vector<std::string>& sortedGroupPaths);
+
+  /*!
    * @brief Persist all changes in channel groups.
    * @return True if everything was persisted, false otherwise.
    */
@@ -216,12 +259,8 @@ public:
    */
   int CleanupCachedImages();
 
-  /*!
-   * @brief Sort the groups.
-   */
-  void SortGroups();
-
 private:
+  void SortGroups();
   void SortGroupsByBackendOrder();
   void SortGroupsByLocalOrder();
 
@@ -235,6 +274,28 @@ private:
 
   void OnPVRManagerEvent(const PVR::PVREvent& event);
 
+  int GetGroupClientPriority(const std::shared_ptr<const CPVRChannelGroup>& group) const;
+
+  enum class Exclude
+  {
+    NONE,
+    IGNORED,
+  };
+  std::shared_ptr<CPVRChannelGroup> GetGroupByName(const std::string& name,
+                                                   int clientID,
+                                                   Exclude exclude) const;
+  std::shared_ptr<CPVRChannelGroup> GetGroupById(int groupId, Exclude exclude) const;
+
+  enum class GroupState
+  {
+    DELETED,
+    CHANGED,
+  };
+  void GroupStateChanged(const std::shared_ptr<CPVRChannelGroup>& group,
+                         GroupState state = GroupState::CHANGED);
+
+  void UpdateSystemChannelGroups();
+
   bool m_bRadio{false};
   std::vector<std::shared_ptr<CPVRChannelGroup>> m_groups;
   mutable CCriticalSection m_critSection;
@@ -242,5 +303,6 @@ private:
   bool m_isSubscribed{false};
   CPVRSettings m_settings;
   std::shared_ptr<CPVRChannelGroup> m_allChannelsGroup;
+  std::shared_ptr<CPVRChannelGroupFactory> m_channelGroupFactory;
 };
 } // namespace PVR

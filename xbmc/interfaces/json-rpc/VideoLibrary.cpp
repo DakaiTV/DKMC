@@ -9,10 +9,11 @@
 #include "VideoLibrary.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "PVROperations.h"
 #include "ServiceBroker.h"
-#include "TextureDatabase.h"
 #include "Util.h"
+#include "imagefiles/ImageFileURL.h"
 #include "messaging/ApplicationMessenger.h"
 #include "utils/SortUtils.h"
 #include "utils/StringUtils.h"
@@ -21,6 +22,8 @@
 #include "video/VideoDatabase.h"
 #include "video/VideoDbUrl.h"
 #include "video/VideoLibraryQueue.h"
+
+#include <memory>
 
 using namespace JSONRPC;
 
@@ -90,10 +93,13 @@ JSONRPC_STATUS CVideoLibrary::GetMovieDetails(const std::string &method, ITransp
     return InternalError;
 
   CVideoInfoTag infos;
-  if (!videodatabase.GetMovieInfo("", infos, id, RequiresAdditionalDetails(MediaTypeMovie, parameterObject)) || infos.m_iDbId <= 0)
+  if (!videodatabase.GetMovieInfo("", infos, id, -1, //! @todo API support for video version id
+                                  RequiresAdditionalDetails(MediaTypeMovie, parameterObject)) ||
+      infos.m_iDbId <= 0)
     return InvalidParams;
 
-  HandleFileItem("movieid", true, "moviedetails", CFileItemPtr(new CFileItem(infos)), parameterObject, parameterObject["properties"], result, false);
+  HandleFileItem("movieid", true, "moviedetails", std::make_shared<CFileItem>(infos),
+                 parameterObject, parameterObject["properties"], result, false);
   return OK;
 }
 
@@ -124,7 +130,8 @@ JSONRPC_STATUS CVideoLibrary::GetMovieSetDetails(const std::string &method, ITra
   if (!videodatabase.GetSetInfo(id, infos) || infos.m_iDbId <= 0)
     return InvalidParams;
 
-  HandleFileItem("setid", false, "setdetails", CFileItemPtr(new CFileItem(infos)), parameterObject, parameterObject["properties"], result, false);
+  HandleFileItem("setid", false, "setdetails", std::make_shared<CFileItem>(infos), parameterObject,
+                 parameterObject["properties"], result, false);
 
   // Get movies from the set
   CFileItemList items;
@@ -227,7 +234,7 @@ JSONRPC_STATUS CVideoLibrary::GetSeasonDetails(const std::string &method, ITrans
       infos.m_iDbId <= 0 || infos.m_iIdShow <= 0)
     return InvalidParams;
 
-  CFileItemPtr pItem = CFileItemPtr(new CFileItem(infos));
+  CFileItemPtr pItem = std::make_shared<CFileItem>(infos);
   HandleFileItem("seasonid", false, "seasondetails", pItem, parameterObject, parameterObject["properties"], result, false);
   return OK;
 }
@@ -301,7 +308,7 @@ JSONRPC_STATUS CVideoLibrary::GetEpisodeDetails(const std::string &method, ITran
   if (!videodatabase.GetEpisodeInfo("", infos, id, RequiresAdditionalDetails(MediaTypeEpisode, parameterObject)) || infos.m_iDbId <= 0)
     return InvalidParams;
 
-  CFileItemPtr pItem = CFileItemPtr(new CFileItem(infos));
+  CFileItemPtr pItem = std::make_shared<CFileItem>(infos);
   // We need to set the correct base path to get the valid fanart
   int tvshowid = infos.m_iIdShow;
   if (tvshowid <= 0)
@@ -374,7 +381,8 @@ JSONRPC_STATUS CVideoLibrary::GetMusicVideoDetails(const std::string &method, IT
   if (!videodatabase.GetMusicVideoInfo("", infos, id, RequiresAdditionalDetails(MediaTypeMusicVideo, parameterObject)) || infos.m_iDbId <= 0)
     return InvalidParams;
 
-  HandleFileItem("musicvideoid", true, "musicvideodetails", CFileItemPtr(new CFileItem(infos)), parameterObject, parameterObject["properties"], result, false);
+  HandleFileItem("musicvideoid", true, "musicvideodetails", std::make_shared<CFileItem>(infos),
+                 parameterObject, parameterObject["properties"], result, false);
   return OK;
 }
 
@@ -580,10 +588,10 @@ JSONRPC_STATUS CVideoLibrary::GetAvailableArt(const std::string& method, ITransp
   for (const auto& artentry : videodatabase.GetAvailableArtForItem(mediaID, mediaType, artType))
   {
     CVariant item = CVariant(CVariant::VariantTypeObject);
-    item["url"] = CTextureUtils::GetWrappedImageURL(artentry.m_url);
+    item["url"] = IMAGE_FILES::URLFromFile(artentry.m_url);
     item["arttype"] = artentry.m_aspect;
     if (!artentry.m_preview.empty())
-      item["previewurl"] = CTextureUtils::GetWrappedImageURL(artentry.m_preview);
+      item["previewurl"] = IMAGE_FILES::URLFromFile(artentry.m_preview);
     availableart.append(item);
   }
   result = CVariant(CVariant::VariantTypeObject);
@@ -601,7 +609,8 @@ JSONRPC_STATUS CVideoLibrary::SetMovieDetails(const std::string &method, ITransp
     return InternalError;
 
   CVideoInfoTag infos;
-  if (!videodatabase.GetMovieInfo("", infos, id) || infos.m_iDbId <= 0)
+  if (!videodatabase.GetMovieInfo("", infos, id, -1) || //! @todo API support for video version id)
+      infos.m_iDbId <= 0)
     return InvalidParams;
 
   // get artwork
@@ -856,12 +865,14 @@ JSONRPC_STATUS CVideoLibrary::RefreshMovie(const std::string &method, ITransport
     return InternalError;
 
   CVideoInfoTag infos;
-  if (!videodatabase.GetMovieInfo("", infos, id) || infos.m_iDbId <= 0)
+  if (!videodatabase.GetMovieInfo("", infos, id, -1) || //! @todo API support for video version id
+      infos.m_iDbId <= 0)
     return InvalidParams;
 
   bool ignoreNfo = parameterObject["ignorenfo"].asBoolean();
   std::string searchTitle = parameterObject["title"].asString();
-  CVideoLibraryQueue::GetInstance().RefreshItem(CFileItemPtr(new CFileItem(infos)), ignoreNfo, true, false, searchTitle);
+  CVideoLibraryQueue::GetInstance().RefreshItem(std::make_shared<CFileItem>(infos), ignoreNfo, true,
+                                                false, searchTitle);
 
   return ACK;
 }
@@ -901,7 +912,7 @@ JSONRPC_STATUS CVideoLibrary::RefreshEpisode(const std::string &method, ITranspo
   if (!videodatabase.GetEpisodeInfo("", infos, id) || infos.m_iDbId <= 0)
     return InvalidParams;
 
-  CFileItemPtr item = CFileItemPtr(new CFileItem(infos));
+  CFileItemPtr item = std::make_shared<CFileItem>(infos);
   // We need to set the correct base path to get the valid fanart
   int tvshowid = infos.m_iIdShow;
   if (tvshowid <= 0)
@@ -928,7 +939,8 @@ JSONRPC_STATUS CVideoLibrary::RefreshMusicVideo(const std::string &method, ITran
 
   bool ignoreNfo = parameterObject["ignorenfo"].asBoolean();
   std::string searchTitle = parameterObject["title"].asString();
-  CVideoLibraryQueue::GetInstance().RefreshItem(CFileItemPtr(new CFileItem(infos)), ignoreNfo, true, false, searchTitle);
+  CVideoLibraryQueue::GetInstance().RefreshItem(std::make_shared<CFileItem>(infos), ignoreNfo, true,
+                                                false, searchTitle);
 
   return ACK;
 }
@@ -1060,10 +1072,10 @@ bool CVideoLibrary::FillFileItemList(const CVariant &parameterObject, CFileItemL
   if (movieID > 0)
   {
     CVideoInfoTag details;
-    videodatabase.GetMovieInfo("", details, movieID);
+    videodatabase.GetMovieInfo("", details, movieID, -1); //! @todo API support for video version id
     if (!details.IsEmpty())
     {
-      list.Add(CFileItemPtr(new CFileItem(details)));
+      list.Add(std::make_shared<CFileItem>(details));
       success = true;
     }
   }
@@ -1072,7 +1084,7 @@ bool CVideoLibrary::FillFileItemList(const CVariant &parameterObject, CFileItemL
     CVideoInfoTag details;
     if (videodatabase.GetEpisodeInfo("", details, episodeID) && !details.IsEmpty())
     {
-      list.Add(CFileItemPtr(new CFileItem(details)));
+      list.Add(std::make_shared<CFileItem>(details));
       success = true;
     }
   }
@@ -1082,7 +1094,7 @@ bool CVideoLibrary::FillFileItemList(const CVariant &parameterObject, CFileItemL
     videodatabase.GetMusicVideoInfo("", details, musicVideoID);
     if (!details.IsEmpty())
     {
-      list.Add(CFileItemPtr(new CFileItem(details)));
+      list.Add(std::make_shared<CFileItem>(details));
       success = true;
     }
   }
@@ -1366,7 +1378,7 @@ void CVideoLibrary::UpdateVideoTag(const CVariant &parameterObject, CVideoInfoTa
     {
       if (artIt->second.isString() && !artIt->second.asString().empty())
       {
-        artwork[artIt->first] = CTextureUtils::UnwrapImageURL(artIt->second.asString());
+        artwork[artIt->first] = IMAGE_FILES::ToCacheKey(artIt->second.asString());
         updatedDetails.insert("art.altered");
       }
       else if (artIt->second.isNull())

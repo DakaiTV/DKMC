@@ -15,6 +15,7 @@
 #include "filesystem/File.h"
 #include "filesystem/IFileTypes.h"
 #include "guilib/Texture.h"
+#include "imagefiles/ImageFileURL.h"
 #include "profiles/ProfileManager.h"
 #include "settings/SettingsComponent.h"
 #include "utils/Crc32.h"
@@ -78,7 +79,7 @@ bool CTextureCache::HasCachedImage(const std::string &url)
 
 std::string CTextureCache::GetCachedImage(const std::string &image, CTextureDetails &details, bool trackUsage)
 {
-  std::string url = CTextureUtils::UnwrapImageURL(image);
+  std::string url = IMAGE_FILES::ToCacheKey(image);
   if (url.empty())
     return "";
   if (IsCachedImage(url))
@@ -87,19 +88,14 @@ std::string CTextureCache::GetCachedImage(const std::string &image, CTextureDeta
   // lookup the item in the database
   if (GetCachedTexture(url, details))
   {
+    if (details.file.empty())
+      return {};
+
     if (trackUsage)
       IncrementUseCount(details);
     return GetCachedPath(details.file);
   }
   return "";
-}
-
-bool CTextureCache::CanCacheImageURL(const CURL &url)
-{
-  return url.GetUserName().empty() || url.GetUserName() == "music" ||
-         StringUtils::StartsWith(url.GetUserName(), "video_") ||
-         StringUtils::StartsWith(url.GetUserName(), "pvr") ||
-         StringUtils::StartsWith(url.GetUserName(), "epg");
 }
 
 std::string CTextureCache::CheckCachedImage(const std::string &url, bool &needsRecaching)
@@ -122,7 +118,7 @@ void CTextureCache::BackgroundCacheImage(const std::string &url)
   if (!path.empty() && details.hash.empty())
     return; // image is already cached and doesn't need to be checked further
 
-  path = CTextureUtils::UnwrapImageURL(url);
+  path = IMAGE_FILES::ToCacheKey(url);
   if (path.empty())
     return;
 
@@ -146,7 +142,7 @@ std::string CTextureCache::CacheImage(const std::string& image,
                                       std::unique_ptr<CTexture>* texture /*= nullptr*/,
                                       CTextureDetails* details /*= nullptr*/)
 {
-  std::string url = CTextureUtils::UnwrapImageURL(image);
+  std::string url = IMAGE_FILES::ToCacheKey(image);
   if (url.empty())
     return "";
 
@@ -203,9 +199,10 @@ bool CTextureCache::CacheImage(const std::string &image, CTextureDetails &detail
   return !path.empty();
 }
 
-void CTextureCache::ClearCachedImage(const std::string &url, bool deleteSource /*= false */)
+void CTextureCache::ClearCachedImage(const std::string& image, bool deleteSource /*= false */)
 {
   //! @todo This can be removed when the texture cache covers everything.
+  const std::string url = IMAGE_FILES::ToCacheKey(image);
   std::string path = deleteSource ? url : "";
   std::string cachedFile;
   if (ClearCachedTexture(url, cachedFile))
@@ -295,7 +292,7 @@ void CTextureCache::OnCachingComplete(bool success, CTextureCacheJob *job)
 {
   if (success)
   {
-    if (job->m_oldHash == job->m_details.hash)
+    if (job->m_details.hashRevalidated)
       SetCachedTextureValid(job->m_url, job->m_details.updateable);
     else
       AddCachedTexture(job->m_url, job->m_details);

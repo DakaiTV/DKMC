@@ -45,8 +45,8 @@ class CRegistry;
 class CWindowDecorator;
 
 class CWinSystemWayland : public CWinSystemBase,
-                          IInputHandler,
-                          IWindowDecorationHandler,
+                          public IInputHandler,
+                          public IWindowDecorationHandler,
                           public IShellSurfaceHandler
 {
 public:
@@ -84,7 +84,7 @@ public:
   float GetSyncOutputRefreshRate();
   float GetDisplayLatency() override;
   float GetFrameLatencyAdjustment() override;
-  std::unique_ptr<CVideoSync> GetVideoSync(void* clock) override;
+  std::unique_ptr<CVideoSync> GetVideoSync(CVideoReferenceClock* clock) override;
 
   void Register(IDispResource* resource) override;
   void Unregister(IDispResource* resource) override;
@@ -111,11 +111,18 @@ protected:
   {
     return m_surface;
   }
+  IShellSurface* GetShellSurface() { return m_shellSurface.get(); }
 
   void PrepareFramePresentation();
   void FinishFramePresentation();
   virtual void SetContextSize(CSizeInt size) = 0;
   virtual IShellSurface* CreateShellSurface(const std::string& name);
+
+  // IShellSurfaceHandler
+  void OnConfigure(std::uint32_t serial, CSizeInt size, IShellSurface::StateBitset state) override;
+  void OnClose() override;
+
+  virtual std::unique_ptr<CSeat> CreateSeat(std::uint32_t name, wayland::seat_t& seat);
 
 private:
   // IInputHandler
@@ -131,10 +138,6 @@ private:
   void OnWindowClose() override;
   void OnWindowMaximize() override;
   void OnWindowMinimize() override;
-
-  // IShellSurfaceHandler
-  void OnConfigure(std::uint32_t serial, CSizeInt size, IShellSurface::StateBitset state) override;
-  void OnClose() override;
 
   // Registry handlers
   void OnSeatAdded(std::uint32_t name, wayland::proxy_t&& seat);
@@ -207,7 +210,7 @@ private:
 
   // Seat handling
   // -------------
-  std::map<std::uint32_t, CSeat> m_seats;
+  std::map<std::uint32_t, std::unique_ptr<CSeat>> m_seats;
   CCriticalSection m_seatsMutex;
   std::unique_ptr<CSeatInputProcessing> m_seatInputProcessing;
   std::map<std::uint32_t, std::shared_ptr<COutput>> m_outputs;

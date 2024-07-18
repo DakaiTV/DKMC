@@ -18,12 +18,6 @@
 #include <utility>
 #include <vector>
 
-#define CACHE_BUFFER_MODE_INTERNET 0
-#define CACHE_BUFFER_MODE_ALL 1
-#define CACHE_BUFFER_MODE_TRUE_INTERNET 2
-#define CACHE_BUFFER_MODE_NONE 3
-#define CACHE_BUFFER_MODE_NETWORK 4
-
 class CProfileManager;
 class CSettingsManager;
 class CVariant;
@@ -100,6 +94,7 @@ struct RefreshVideoLatency
   float refreshmax;
 
   float delay;
+  float hdrextradelay;
 };
 
 typedef std::vector<TVShowRegexp> SETTINGS_TVSHOWLIST;
@@ -159,7 +154,9 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     int m_videoIgnoreSecondsAtStart;
     float m_videoIgnorePercentAtEnd;
     float m_audioApplyDrc;
-    unsigned int m_maxPassthroughOffSyncDuration = 10; // when 10 ms off adjust
+    unsigned int m_maxPassthroughOffSyncDuration = 50; // when 50 ms off adjust
+    bool m_AllowMultiChannelFloat = false; // Android only switch to be removed in v22
+    bool m_superviseAudioDelay = false; // Android only to correct broken audio firmwares
 
     int   m_videoVDPAUScaling;
     float m_videoNonLinStretchRatio;
@@ -167,6 +164,7 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     std::vector<RefreshOverride> m_videoAdjustRefreshOverrides;
     std::vector<RefreshVideoLatency> m_videoRefreshLatency;
     float m_videoDefaultLatency;
+    float m_videoDefaultHdrExtraLatency;
     int  m_videoCaptureUseOcclusionQuery;
     bool m_DXVACheckCompatibility;
     bool m_DXVACheckCompatibilityPresent;
@@ -205,6 +203,7 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     bool m_fullScreenOnMovieStart;
     std::string m_cachePath;
     std::string m_videoCleanDateTimeRegExp;
+    std::string m_videoFilenameIdentifierRegExp;
     std::vector<std::string> m_videoCleanStringRegExps;
     std::vector<std::string> m_videoExcludeFromListingRegExps;
     std::vector<std::string> m_allExcludeFromScanRegExps;
@@ -249,6 +248,7 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     bool m_bMusicLibraryCleanOnUpdate;
     bool m_bMusicLibraryArtistSortOnUpdate;
     bool m_bMusicLibraryUseISODates;
+    bool m_bMusicLibraryArtistNavigatesToSongs;
     std::string m_strMusicLibraryAlbumFormat;
     bool m_prioritiseAPEv2tags;
     std::string m_musicItemSeparator;
@@ -333,12 +333,13 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     bool m_guiVisualizeDirtyRegions;
     int  m_guiAlgorithmDirtyRegions;
     bool m_guiSmartRedraw;
-    unsigned int m_addonPackageFolderSize;
+    int32_t m_guiAnisotropicFiltering{0};
+    bool m_guiFrontToBackRendering{false};
+    bool m_guiGeometryClear{true};
+    bool m_guiAsyncTextureUpload{false};
+    bool m_guiVideoLayoutTransparent{false};
 
-    unsigned int m_cacheMemSize;
-    unsigned int m_cacheBufferMode;
-    unsigned int m_cacheChunkSize;
-    float m_cacheReadFactor;
+    unsigned int m_addonPackageFolderSize;
 
     bool m_jsonOutputCompact;
     unsigned int m_jsonTcpPort;
@@ -347,7 +348,7 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     std::vector<std::string> m_settingsFiles;
     void ParseSettingsFile(const std::string &file);
 
-    float GetLatencyTweak(float refreshrate);
+    float GetLatencyTweak(float refreshrate, bool isHDREnabled);
     bool m_initialized;
 
     void SetDebugMode(bool debug);

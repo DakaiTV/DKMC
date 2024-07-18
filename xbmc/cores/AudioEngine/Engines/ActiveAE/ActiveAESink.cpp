@@ -73,15 +73,14 @@ void CActiveAESink::Dispose()
 
 AEDeviceType CActiveAESink::GetDeviceType(const std::string &device)
 {
-  std::string dev = device;
-  std::string dri;
-  CAESinkFactory::ParseDevice(dev, dri);
+  const AESinkDevice dev = CAESinkFactory::ParseDevice(device);
+
   for (auto itt = m_sinkInfoList.begin(); itt != m_sinkInfoList.end(); ++itt)
   {
     for (AEDeviceInfoList::iterator itt2 = itt->m_deviceInfoList.begin(); itt2 != itt->m_deviceInfoList.end(); ++itt2)
     {
       CAEDeviceInfo& info = *itt2;
-      if (info.m_deviceName == dev)
+      if (info.m_deviceName == dev.name)
         return info.m_deviceType;
     }
   }
@@ -104,18 +103,16 @@ bool CActiveAESink::HasPassthroughDevice()
 
 bool CActiveAESink::SupportsFormat(const std::string &device, AEAudioFormat &format)
 {
-  std::string dev = device;
-  std::string dri;
+  const AESinkDevice dev = CAESinkFactory::ParseDevice(device);
 
-  CAESinkFactory::ParseDevice(dev, dri);
   for (auto itt = m_sinkInfoList.begin(); itt != m_sinkInfoList.end(); ++itt)
   {
-    if (dri == itt->m_sinkName)
+    if (dev.driver == itt->m_sinkName)
     {
       for (auto itt2 = itt->m_deviceInfoList.begin(); itt2 != itt->m_deviceInfoList.end(); ++itt2)
       {
         CAEDeviceInfo& info = *itt2;
-        if (info.m_deviceName == dev)
+        if (info.m_deviceName == dev.name)
         {
           bool isRaw = format.m_dataFormat == AE_FMT_RAW;
           bool formatExists = false;
@@ -184,18 +181,16 @@ bool CActiveAESink::SupportsFormat(const std::string &device, AEAudioFormat &for
 
 bool CActiveAESink::NeedIECPacking()
 {
-  std::string dev = m_device;
-  std::string dri;
+  const AESinkDevice dev = CAESinkFactory::ParseDevice(m_device);
 
-  CAESinkFactory::ParseDevice(dev, dri);
   for (auto itt = m_sinkInfoList.begin(); itt != m_sinkInfoList.end(); ++itt)
   {
-    if (dri == itt->m_sinkName)
+    if (dev.driver == itt->m_sinkName)
     {
       for (auto itt2 = itt->m_deviceInfoList.begin(); itt2 != itt->m_deviceInfoList.end(); ++itt2)
       {
         CAEDeviceInfo& info = *itt2;
-        if (info.m_deviceName == dev)
+        if (info.m_deviceName == dev.name)
         {
           return info.m_wantsIECPassthrough;
         }
@@ -733,6 +728,116 @@ void CActiveAESink::PrintSinks(std::string& driver)
   }
 }
 
+std::string CActiveAESink::ValidateOuputDevice(const std::string& device, bool passthrough) const
+{
+  if (m_sinkInfoList.empty())
+    return {};
+
+  const AESinkDevice dev = CAESinkFactory::ParseDevice(device);
+
+  // find exact match of deviceName in same driver
+  if (!dev.driver.empty() && !dev.name.empty())
+  {
+    for (const auto& sink : m_sinkInfoList)
+    {
+      if (sink.m_sinkName != dev.driver)
+        continue;
+
+      for (const auto& d : sink.m_deviceInfoList)
+      {
+        if (passthrough && (d.m_deviceType == AE_DEVTYPE_PCM || d.m_onlyPCM))
+          continue;
+
+        if (!passthrough && d.m_onlyPassthrough)
+          continue;
+
+        if (d.m_deviceName == dev.name)
+          return d.ToDeviceString(sink.m_sinkName);
+      }
+    }
+  }
+
+  // find same friendly name on other device in same driver
+  if (!dev.driver.empty() && !dev.friendlyName.empty())
+  {
+    for (const auto& sink : m_sinkInfoList)
+    {
+      if (sink.m_sinkName != dev.driver)
+        continue;
+
+      for (const auto& d : sink.m_deviceInfoList)
+      {
+        if (passthrough && (d.m_deviceType == AE_DEVTYPE_PCM || d.m_onlyPCM))
+          continue;
+
+        if (!passthrough && d.m_onlyPassthrough)
+          continue;
+
+        if (d.GetFriendlyName() == dev.friendlyName)
+          return d.ToDeviceString(sink.m_sinkName);
+      }
+    }
+  }
+
+  std::string firstDevice;
+
+  // find default device of same driver or first device of same driver
+  if (!dev.driver.empty())
+  {
+    for (const auto& sink : m_sinkInfoList)
+    {
+      if (sink.m_sinkName != dev.driver)
+        continue;
+
+      for (const auto& d : sink.m_deviceInfoList)
+      {
+        if (passthrough && (d.m_deviceType == AE_DEVTYPE_PCM || d.m_onlyPCM))
+          continue;
+
+        if (!passthrough && d.m_onlyPassthrough)
+          continue;
+
+        if (firstDevice.empty())
+          firstDevice = d.ToDeviceString(sink.m_sinkName);
+
+        if (d.m_deviceName.find("default") != std::string::npos)
+          return d.ToDeviceString(sink.m_sinkName);
+      }
+
+      if (!firstDevice.empty())
+        break;
+    }
+  }
+
+  // return first device of same driver
+  if (!firstDevice.empty())
+    return firstDevice;
+
+  firstDevice.clear();
+
+  // find the default of any driver or first of any driver
+  for (const auto& sink : m_sinkInfoList)
+  {
+    for (const auto& d : sink.m_deviceInfoList)
+    {
+      if (passthrough && (d.m_deviceType == AE_DEVTYPE_PCM || d.m_onlyPCM))
+        continue;
+
+      if (!passthrough && d.m_onlyPassthrough)
+        continue;
+
+      if (firstDevice.empty())
+        firstDevice = d.ToDeviceString(sink.m_sinkName);
+
+      if (d.m_deviceName.find("default") != std::string::npos)
+        return d.ToDeviceString(sink.m_sinkName);
+    }
+  }
+
+  // return first device of any driver or empty
+  return firstDevice;
+}
+
 void CActiveAESink::EnumerateOutputDevices(AEDeviceList &devices, bool passthrough)
 {
   EnumerateSinkList(false, "");
@@ -755,7 +860,7 @@ void CActiveAESink::EnumerateOutputDevices(AEDeviceList &devices, bool passthrou
       if (devInfo.m_onlyPCM && passthrough)
         continue;
 
-      std::string device = sinkInfo.m_sinkName + ":" + devInfo.m_deviceName;
+      const std::string device = devInfo.ToDeviceString(sinkInfo.m_sinkName);
 
       std::stringstream ss;
 
@@ -767,7 +872,7 @@ void CActiveAESink::EnumerateOutputDevices(AEDeviceList &devices, bool passthrou
       if (!devInfo.m_displayNameExtra.empty())
         ss << ", " << devInfo.m_displayNameExtra;
 
-      devices.push_back(AEDevice(ss.str(), device));
+      devices.emplace_back(ss.str(), device);
     }
   }
 }
@@ -793,15 +898,12 @@ void CActiveAESink::GetDeviceFriendlyName(const std::string& device)
 
 void CActiveAESink::OpenSink()
 {
-  // we need a copy of m_device here because ParseDevice and CreateDevice write back
-  // into this variable
-  std::string device = m_device;
-  std::string driver;
   bool passthrough = (m_requestedFormat.m_dataFormat == AE_FMT_RAW);
 
-  CAESinkFactory::ParseDevice(device, driver);
-  if (driver.empty() && m_sink)
-    driver = m_sink->GetName();
+  AESinkDevice dev = CAESinkFactory::ParseDevice(m_device);
+
+  if (dev.driver.empty() && m_sink)
+    dev.driver = m_sink->GetName();
 
   // iec packing or raw
   if (passthrough)
@@ -825,11 +927,10 @@ void CActiveAESink::OpenSink()
   }
 
   // get the display name of the device
-  GetDeviceFriendlyName(device);
+  GetDeviceFriendlyName(dev.name);
 
   // if we already have a driver, prepend it to the device string
-  if (!driver.empty())
-    device = driver + ":" + device;
+  std::string device = dev.driver.empty() ? dev.name : dev.driver + ":" + dev.name;
 
   // WARNING: this changes format and does not use passthrough
   m_sinkFormat = m_requestedFormat;
@@ -839,11 +940,10 @@ void CActiveAESink::OpenSink()
   // try first device in out list
   if (!m_sink && !m_sinkInfoList.empty())
   {
-    driver = m_sinkInfoList.front().m_sinkName;
-    device = m_sinkInfoList.front().m_deviceInfoList.front().m_deviceName;
-    GetDeviceFriendlyName(device);
-    if (!driver.empty())
-      device = driver + ":" + device;
+    dev.driver = m_sinkInfoList.front().m_sinkName;
+    dev.name = m_sinkInfoList.front().m_deviceInfoList.front().m_deviceName;
+    GetDeviceFriendlyName(dev.name);
+    device = dev.driver.empty() ? dev.name : dev.driver + ":" + dev.name;
     m_sinkFormat = m_requestedFormat;
     CLog::Log(LOGDEBUG, "CActiveAESink::OpenSink - trying to open device {}", device);
     m_sink = CAESinkFactory::Create(device, m_sinkFormat);
@@ -926,7 +1026,6 @@ unsigned int CActiveAESink::OutputSamples(CSampleBuffer* samples)
   unsigned int maxFrames;
   int retry = 0;
   unsigned int written = 0;
-  uint8_t* p_mergeBuffer = nullptr;
   AEDelayStatus status;
 
   if (m_requestedFormat.m_dataFormat == AE_FMT_RAW)
@@ -937,28 +1036,7 @@ unsigned int CActiveAESink::OutputSamples(CSampleBuffer* samples)
       if (frames > 0)
       {
         m_packer->Reset();
-        if (m_sinkFormat.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD)
-        {
-          if (frames == 61440)
-          {
-            for (int i = 0, of = 0; i < 12; i++)
-            {
-              // calculates length of each audio unit using raw data of stream
-              const uint16_t len = ((*(buffer[0] + of) & 0x0F) << 8 | *(buffer[0] + of + 1)) << 1;
-
-              m_packer->Pack(m_sinkFormat.m_streamInfo, buffer[0] + of, len);
-              of += len;
-            }
-          }
-          else
-          {
-            m_extError = true;
-            CLog::Log(LOGERROR, "CActiveAESink::OutputSamples - incomplete TrueHD buffer");
-            return 0;
-          }
-        }
-        else
-          m_packer->Pack(m_sinkFormat.m_streamInfo, buffer[0], frames);
+        m_packer->Pack(m_sinkFormat.m_streamInfo, buffer[0], frames);
       }
       else if (samples->pkt->pause_burst_ms > 0)
       {
@@ -995,28 +1073,6 @@ unsigned int CActiveAESink::OutputSamples(CSampleBuffer* samples)
     }
     else // Android IEC packer (RAW)
     {
-      if (m_sinkFormat.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD && frames == 61440)
-      {
-        if (m_mergeBuffer.empty())
-          m_mergeBuffer.resize(MAX_IEC61937_PACKET);
-
-        p_mergeBuffer = m_mergeBuffer.data();
-        unsigned int size = 0;
-
-        for (int i = 0, of = 0; i < 24; i++)
-        {
-          // calculates length of each audio unit using raw data of stream
-          const uint16_t len = ((*(buffer[0] + of) & 0x0F) << 8 | *(buffer[0] + of + 1)) << 1;
-
-          memcpy(m_mergeBuffer.data() + of, buffer[0] + of, len);
-          size += len;
-          of += len;
-        }
-
-        buffer = &p_mergeBuffer;
-        totalFrames = size / m_sinkFormat.m_frameSize; // m_frameSize = 1
-        frames = totalFrames;
-      }
       if (samples->pkt->pause_burst_ms > 0)
       {
         m_sink->AddPause(samples->pkt->pause_burst_ms);
@@ -1151,11 +1207,10 @@ void CActiveAESink::SetSilenceTimer()
     m_extSilenceTimeout = XbmcThreads::EndTime<decltype(m_extSilenceTimeout)>::Max();
   else if (m_extAppFocused) // handles no playback/GUI and playback in pause and seek
   {
-    // only true with AudioTrack RAW + passthrough + TrueHD or EAC3 (DD+)
+    // only true with AudioTrack RAW + passthrough + TrueHD
     const bool noSilenceOnPause =
         !m_needIecPack && m_requestedFormat.m_dataFormat == AE_FMT_RAW &&
-        (m_sinkFormat.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD ||
-         m_sinkFormat.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_EAC3);
+        m_sinkFormat.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD;
 
     m_extSilenceTimeout = (noSilenceOnPause) ? 0ms : m_silenceTimeOut;
   }

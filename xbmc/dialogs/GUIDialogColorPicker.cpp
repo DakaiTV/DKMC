@@ -9,16 +9,18 @@
 #include "GUIDialogColorPicker.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "filesystem/SpecialProtocol.h"
 #include "guilib/GUIColorManager.h"
 #include "guilib/GUIMessage.h"
 #include "guilib/LocalizeStrings.h"
-#include "input/Key.h"
+#include "input/actions/ActionIDs.h"
 #include "utils/ColorUtils.h"
 #include "utils/StringUtils.h"
 #include "utils/log.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -29,8 +31,7 @@
 
 CGUIDialogColorPicker::CGUIDialogColorPicker()
   : CGUIDialogBoxBase(WINDOW_DIALOG_COLOR_PICKER, "DialogColorPicker.xml"),
-    m_vecList(new CFileItemList()),
-    m_focusToButton(false)
+    m_vecList(new CFileItemList())
 {
   m_bConfirmed = false;
   m_loadType = KEEP_IN_MEMORY;
@@ -144,7 +145,7 @@ void CGUIDialogColorPicker::Reset()
 
 void CGUIDialogColorPicker::AddItem(const CFileItem& item)
 {
-  m_vecList->Add(CFileItemPtr(new CFileItem(item)));
+  m_vecList->Add(std::make_shared<CFileItem>(item));
 }
 
 void CGUIDialogColorPicker::SetItems(const CFileItemList& pList)
@@ -162,7 +163,7 @@ void CGUIDialogColorPicker::LoadColors()
 void CGUIDialogColorPicker::LoadColors(const std::string& filePath)
 {
   CGUIColorManager colorManager;
-  std::vector<std::pair<std::string, UTILS::COLOR::ColorInfo>> colors;
+  std::vector<std::pair<std::string, KODI::UTILS::COLOR::ColorInfo>> colors;
   if (colorManager.LoadColorsListFromXML(filePath, colors, true))
   {
     for (auto& color : colors)

@@ -111,6 +111,7 @@ void CPVRChannel::Serialize(CVariant& value) const
   value["uniqueid"] = m_iUniqueId;
   CDateTime lastPlayed(m_iLastWatched);
   value["lastplayed"] = lastPlayed.IsValid() ? lastPlayed.GetAsDBDate() : "";
+  value["dateadded"] = m_dateTimeAdded.IsValid() ? m_dateTimeAdded.GetAsDBDate() : "";
 
   std::shared_ptr<CPVREpgInfoTag> epg = GetEPGNow();
   if (epg)
@@ -136,7 +137,7 @@ bool CPVRChannel::QueueDelete()
   if (!database)
     return bReturn;
 
-  const std::shared_ptr<CPVREpg> epg = GetEPG();
+  const std::shared_ptr<const CPVREpg> epg = GetEPG();
   if (epg)
     ResetEPG();
 
@@ -205,7 +206,7 @@ void CPVRChannel::ResetEPG()
     epgToUnsubscribe->Events().Unsubscribe(this);
 }
 
-bool CPVRChannel::UpdateFromClient(const std::shared_ptr<CPVRChannel>& channel)
+bool CPVRChannel::UpdateFromClient(const std::shared_ptr<const CPVRChannel>& channel)
 {
   std::unique_lock<CCriticalSection> lock(m_critSection);
 
@@ -262,7 +263,7 @@ bool CPVRChannel::SetChannelID(int iChannelId)
   {
     m_iChannelId = iChannelId;
 
-    const std::shared_ptr<CPVREpg> epg = GetEPG();
+    const std::shared_ptr<const CPVREpg> epg = GetEPG();
     if (epg)
       epg->GetChannelData()->SetChannelId(m_iChannelId);
 
@@ -300,7 +301,7 @@ bool CPVRChannel::SetLocked(bool bIsLocked)
   {
     m_bIsLocked = bIsLocked;
 
-    const std::shared_ptr<CPVREpg> epg = GetEPG();
+    const std::shared_ptr<const CPVREpg> epg = GetEPG();
     if (epg)
       epg->GetChannelData()->SetLocked(m_bIsLocked);
 
@@ -357,7 +358,7 @@ bool CPVRChannel::SetIconPath(const std::string& strIconPath, bool bIsUserSetIco
 
   m_iconPath.SetClientImage(strIconPath);
 
-  const std::shared_ptr<CPVREpg> epg = GetEPG();
+  const std::shared_ptr<const CPVREpg> epg = GetEPG();
   if (epg)
     epg->GetChannelData()->SetChannelIconPath(strIconPath);
 
@@ -380,7 +381,7 @@ bool CPVRChannel::SetChannelName(const std::string& strChannelName, bool bIsUser
     m_strChannelName = strName;
     m_bIsUserSetName = bIsUserSetName;
 
-    const std::shared_ptr<CPVREpg> epg = GetEPG();
+    const std::shared_ptr<const CPVREpg> epg = GetEPG();
     if (epg)
       epg->GetChannelData()->SetChannelName(m_strChannelName);
 
@@ -391,16 +392,31 @@ bool CPVRChannel::SetChannelName(const std::string& strChannelName, bool bIsUser
   return false;
 }
 
-bool CPVRChannel::SetLastWatched(time_t iLastWatched)
+bool CPVRChannel::SetLastWatched(time_t lastWatched, int groupId)
 {
   {
     std::unique_lock<CCriticalSection> lock(m_critSection);
-    m_iLastWatched = iLastWatched;
+    m_iLastWatched = lastWatched;
+    m_lastWatchedGroupId = groupId;
   }
 
   const std::shared_ptr<CPVRDatabase> database = CServiceBroker::GetPVRManager().GetTVDatabase();
   if (database)
-    return database->UpdateLastWatched(*this);
+    return database->UpdateLastWatched(*this, groupId);
+
+  return false;
+}
+
+bool CPVRChannel::SetDateTimeAdded(const CDateTime& dateTimeAdded)
+{
+  std::unique_lock<CCriticalSection> lock(m_critSection);
+
+  if (m_dateTimeAdded != dateTimeAdded)
+  {
+    m_dateTimeAdded = dateTimeAdded;
+    m_bChanged = true;
+    return true;
+  }
 
   return false;
 }
@@ -534,7 +550,7 @@ bool CPVRChannel::SetClientProviderUid(int iClientProviderUid)
 
 std::vector<std::shared_ptr<CPVREpgInfoTag>> CPVRChannel::GetEpgTags() const
 {
-  const std::shared_ptr<CPVREpg> epg = GetEPG();
+  const std::shared_ptr<const CPVREpg> epg = GetEPG();
   if (!epg)
   {
     CLog::LogFC(LOGDEBUG, LOGPVR, "Cannot get EPG for channel '{}'", m_strChannelName);
@@ -550,7 +566,7 @@ std::vector<std::shared_ptr<CPVREpgInfoTag>> CPVRChannel::GetEPGTimeline(
     const CDateTime& minEventEnd,
     const CDateTime& maxEventStart) const
 {
-  const std::shared_ptr<CPVREpg> epg = GetEPG();
+  const std::shared_ptr<const CPVREpg> epg = GetEPG();
   if (epg)
   {
     return epg->GetTimeline(timelineStart, timelineEnd, minEventEnd, maxEventStart);
@@ -566,7 +582,7 @@ std::vector<std::shared_ptr<CPVREpgInfoTag>> CPVRChannel::GetEPGTimeline(
 std::shared_ptr<CPVREpgInfoTag> CPVRChannel::CreateEPGGapTag(const CDateTime& start,
                                                              const CDateTime& end) const
 {
-  const std::shared_ptr<CPVREpg> epg = GetEPG();
+  const std::shared_ptr<const CPVREpg> epg = GetEPG();
   if (epg)
     return std::make_shared<CPVREpgInfoTag>(epg->GetChannelData(), epg->EpgID(), start, end, true);
   else
@@ -577,7 +593,7 @@ std::shared_ptr<CPVREpgInfoTag> CPVRChannel::CreateEPGGapTag(const CDateTime& st
 std::shared_ptr<CPVREpgInfoTag> CPVRChannel::GetEPGNow() const
 {
   std::shared_ptr<CPVREpgInfoTag> tag;
-  const std::shared_ptr<CPVREpg> epg = GetEPG();
+  const std::shared_ptr<const CPVREpg> epg = GetEPG();
   if (epg)
     tag = epg->GetTagNow();
 
@@ -587,7 +603,7 @@ std::shared_ptr<CPVREpgInfoTag> CPVRChannel::GetEPGNow() const
 std::shared_ptr<CPVREpgInfoTag> CPVRChannel::GetEPGNext() const
 {
   std::shared_ptr<CPVREpgInfoTag> tag;
-  const std::shared_ptr<CPVREpg> epg = GetEPG();
+  const std::shared_ptr<const CPVREpg> epg = GetEPG();
   if (epg)
     tag = epg->GetTagNext();
 
@@ -597,7 +613,7 @@ std::shared_ptr<CPVREpgInfoTag> CPVRChannel::GetEPGNext() const
 std::shared_ptr<CPVREpgInfoTag> CPVRChannel::GetEPGPrevious() const
 {
   std::shared_ptr<CPVREpgInfoTag> tag;
-  const std::shared_ptr<CPVREpg> epg = GetEPG();
+  const std::shared_ptr<const CPVREpg> epg = GetEPG();
   if (epg)
     tag = epg->GetTagPrevious();
 
@@ -660,6 +676,8 @@ void CPVRChannel::ToSortable(SortItem& sortable, Field field) const
     sortable[FieldLastPlayed] =
         lastWatched.IsValid() ? lastWatched.GetAsDBDateTime() : StringUtils::Empty;
   }
+  else if (field == FieldDateAdded)
+    sortable[FieldDateAdded] = m_dateTimeAdded.GetAsDBDateTime();
   else if (field == FieldProvider)
     sortable[FieldProvider] = StringUtils::Format("{} {}", m_iClientId, m_iClientProviderUid);
 }
@@ -718,6 +736,12 @@ bool CPVRChannel::IsUserSetHidden() const
   return m_bIsUserSetHidden;
 }
 
+int CPVRChannel::LastWatchedGroupId() const
+{
+  std::unique_lock<CCriticalSection> lock(m_critSection);
+  return m_lastWatchedGroupId;
+}
+
 std::string CPVRChannel::ChannelName() const
 {
   std::unique_lock<CCriticalSection> lock(m_critSection);
@@ -728,6 +752,12 @@ time_t CPVRChannel::LastWatched() const
 {
   std::unique_lock<CCriticalSection> lock(m_critSection);
   return m_iLastWatched;
+}
+
+CDateTime CPVRChannel::DateTimeAdded() const
+{
+  std::unique_lock<CCriticalSection> lock(m_critSection);
+  return m_dateTimeAdded;
 }
 
 bool CPVRChannel::IsChanged() const
@@ -809,7 +839,8 @@ std::string CPVRChannel::EPGScraper() const
 
 bool CPVRChannel::CanRecord() const
 {
-  const std::shared_ptr<CPVRClient> client = CServiceBroker::GetPVRManager().GetClient(m_iClientId);
+  const std::shared_ptr<const CPVRClient> client =
+      CServiceBroker::GetPVRManager().GetClient(m_iClientId);
   return client && client->GetClientCapabilities().SupportsRecordings() &&
          client->GetClientCapabilities().SupportsTimers();
 }

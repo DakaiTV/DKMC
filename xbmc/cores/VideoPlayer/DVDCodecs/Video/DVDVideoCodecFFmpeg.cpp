@@ -55,7 +55,7 @@ enum DecoderState
 
 enum EFilterFlags {
   FILTER_NONE                =  0x0,
-  FILTER_DEINTERLACE_YADIF   =  0x1,  //< use first deinterlace mode
+  FILTER_DEINTERLACE_BWDIF   =  0x1,  //< use first deinterlace mode
   FILTER_DEINTERLACE_ANY     =  0xf,  //< use any deinterlace mode
   FILTER_DEINTERLACE_FLAGGED = 0x10,  //< only deinterlace flagged frames
   FILTER_DEINTERLACE_HALFED  = 0x20,  //< do half rate deinterlacing
@@ -400,11 +400,15 @@ bool CDVDVideoCodecFFmpeg::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options
   m_pCodecContext->bits_per_coded_sample = hints.bitsperpixel;
   m_pCodecContext->bits_per_raw_sample = hints.bitdepth;
 
-  if( hints.extradata && hints.extrasize > 0 )
+  if (hints.extradata)
   {
-    m_pCodecContext->extradata_size = hints.extrasize;
-    m_pCodecContext->extradata = (uint8_t*)av_mallocz(hints.extrasize + AV_INPUT_BUFFER_PADDING_SIZE);
-    memcpy(m_pCodecContext->extradata, hints.extradata, hints.extrasize);
+    m_pCodecContext->extradata =
+        (uint8_t*)av_mallocz(hints.extradata.GetSize() + AV_INPUT_BUFFER_PADDING_SIZE);
+    if (m_pCodecContext->extradata)
+    {
+      m_pCodecContext->extradata_size = hints.extradata.GetSize();
+      memcpy(m_pCodecContext->extradata, hints.extradata.GetData(), hints.extradata.GetSize());
+    }
   }
 
   // advanced setting override for skip loop filter (see avcodec.h for valid options)
@@ -522,12 +526,12 @@ void CDVDVideoCodecFFmpeg::SetFilters()
       }
   }
 
-  if (filters & FILTER_DEINTERLACE_YADIF)
+  if (filters & FILTER_DEINTERLACE_BWDIF)
   {
     if (filters & FILTER_DEINTERLACE_HALFED)
-      m_filters_next = "yadif=0:-1";
+      m_filters_next = "bwdif=0:-1";
     else
-      m_filters_next = "yadif=1:-1";
+      m_filters_next = "bwdif=1:-1";
 
     if (filters & FILTER_DEINTERLACE_FLAGGED)
       m_filters_next += ":1";
@@ -1021,6 +1025,7 @@ bool CDVDVideoCodecFFmpeg::GetPictureCommon(VideoPicture* pVideoPicture)
 
   pVideoPicture->chroma_position = m_pCodecContext->chroma_sample_location;
   pVideoPicture->color_primaries = m_pCodecContext->color_primaries == AVCOL_PRI_UNSPECIFIED ? m_hints.colorPrimaries : m_pCodecContext->color_primaries;
+  pVideoPicture->m_originalColorPrimaries = pVideoPicture->color_primaries;
   pVideoPicture->color_transfer = m_pCodecContext->color_trc == AVCOL_TRC_UNSPECIFIED ? m_hints.colorTransferCharacteristic : m_pCodecContext->color_trc;
   pVideoPicture->color_space = m_pCodecContext->colorspace == AVCOL_SPC_UNSPECIFIED ? m_hints.colorSpace : m_pCodecContext->colorspace;
   pVideoPicture->colorBits = 8;
@@ -1057,6 +1062,8 @@ bool CDVDVideoCodecFFmpeg::GetPictureCommon(VideoPicture* pVideoPicture)
   pVideoPicture->qp_table = nullptr;
   pVideoPicture->qstride = 0;
   pVideoPicture->qscale_type = 0;
+
+  pVideoPicture->hdrType = m_hints.hdrType;
 
   AVFrameSideData* sd;
 
@@ -1144,6 +1151,14 @@ bool CDVDVideoCodecFFmpeg::GetPictureCommon(VideoPicture* pVideoPicture)
   m_requestSkipDeint = false;
   pVideoPicture->iFlags |= m_codecControlFlags;
 
+  if (pVideoPicture->color_primaries == AVCOL_PRI_UNSPECIFIED)
+  {
+    if (pVideoPicture->iDisplayWidth > 1024 || pVideoPicture->iDisplayHeight >= 600)
+      pVideoPicture->color_primaries = AVCOL_PRI_BT709;
+    else
+      pVideoPicture->color_primaries = AVCOL_PRI_BT470BG;
+  }
+
   return true;
 }
 
@@ -1222,7 +1237,7 @@ int CDVDVideoCodecFFmpeg::FilterOpen(const std::string& filters, bool scale)
       return result;
     }
 
-    if (filters.compare(0,5,"yadif") == 0)
+    if (filters.compare(0,5,"bwdif") == 0)
     {
       m_processInfo.SetVideoDeintMethod(filters);
     }

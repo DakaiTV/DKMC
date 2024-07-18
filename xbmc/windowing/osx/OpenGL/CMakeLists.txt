@@ -1,13 +1,10 @@
-if(OPENGL_FOUND)
-  set(SOURCES WinSystemOSXGL.mm)
-  set(HEADERS WinSystemOSXGL.h)
-
-  if(NOT SDL_FOUND)
-    list(APPEND SOURCES OSXGLView.mm
-                        WindowControllerMacOS.mm)
-    list(APPEND HEADERS OSXGLView.h
-                        WindowControllerMacOS.h)
-  endif()
+if(TARGET ${APP_NAME_LC}::OpenGl)
+  list(APPEND SOURCES OSXGLView.mm
+                      WindowControllerMacOS.mm
+                      WinSystemOSXGL.mm)
+  list(APPEND HEADERS OSXGLView.h
+                      WindowControllerMacOS.h
+                      WinSystemOSXGL.h)
 
   core_add_library(windowing_osx_opengl)
 

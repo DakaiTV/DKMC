@@ -9,6 +9,7 @@
 #include "DVDSubtitlesLibass.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "cores/VideoPlayer/Interface/TimingConstants.h"
 #include "filesystem/Directory.h"
@@ -27,7 +28,7 @@
 #include <mutex>
 
 using namespace KODI::SUBTITLES::STYLE;
-using namespace UTILS;
+using namespace KODI::UTILS;
 
 namespace
 {
@@ -95,24 +96,22 @@ void CDVDSubtitlesLibass::Configure()
   // platforms (e.g. linux/windows), on some other systems like android the
   // font provider is currenlty not supported, then an user can add his
   // additionals fonts only by using the user fonts folder.
-  ass_set_fonts_dir(m_library,
-                    CSpecialProtocol::TranslatePath(UTILS::FONT::FONTPATH::USER).c_str());
+  ass_set_fonts_dir(m_library, CSpecialProtocol::TranslatePath(FONT::FONTPATH::USER).c_str());
 
   // Load additional fonts into Libass memory
   CFileItemList items;
   // Get fonts from system directory
-  if (XFILE::CDirectory::Exists(UTILS::FONT::FONTPATH::SYSTEM))
+  if (XFILE::CDirectory::Exists(FONT::FONTPATH::SYSTEM))
   {
-    XFILE::CDirectory::GetDirectory(UTILS::FONT::FONTPATH::SYSTEM, items,
-                                    UTILS::FONT::SUPPORTED_EXTENSIONS_MASK,
+    XFILE::CDirectory::GetDirectory(FONT::FONTPATH::SYSTEM, items, FONT::SUPPORTED_EXTENSIONS_MASK,
                                     XFILE::DIR_FLAG_NO_FILE_DIRS | XFILE::DIR_FLAG_NO_FILE_INFO);
   }
   // Get temporary fonts
-  if (XFILE::CDirectory::Exists(UTILS::FONT::FONTPATH::TEMP, false))
+  if (XFILE::CDirectory::Exists(FONT::FONTPATH::TEMP, false))
   {
-    XFILE::CDirectory::GetDirectory(
-        UTILS::FONT::FONTPATH::TEMP, items, UTILS::FONT::SUPPORTED_EXTENSIONS_MASK,
-        XFILE::DIR_FLAG_BYPASS_CACHE | XFILE::DIR_FLAG_NO_FILE_DIRS | XFILE::DIR_FLAG_NO_FILE_INFO);
+    XFILE::CDirectory::GetDirectory(FONT::FONTPATH::TEMP, items, FONT::SUPPORTED_EXTENSIONS_MASK,
+                                    XFILE::DIR_FLAG_BYPASS_CACHE | XFILE::DIR_FLAG_NO_FILE_DIRS |
+                                        XFILE::DIR_FLAG_NO_FILE_INFO);
   }
   for (const auto& item : items)
   {
@@ -145,8 +144,7 @@ void CDVDSubtitlesLibass::Configure()
                FONT::FONT_DEFAULT_FILENAME);
   }
 
-  ass_set_fonts(m_renderer,
-                UTILS::FONT::FONTPATH::GetSystemFontPath(FONT::FONT_DEFAULT_FILENAME).c_str(),
+  ass_set_fonts(m_renderer, FONT::FONTPATH::GetSystemFontPath(FONT::FONT_DEFAULT_FILENAME).c_str(),
                 m_defaultFontFamilyName.c_str(), ASS_FONTPROVIDER_AUTODETECT, nullptr, 1);
 
   // Extract font must be set before loading ASS/SSA data,
@@ -208,6 +206,9 @@ bool CDVDSubtitlesLibass::CreateTrack()
   m_track->PlayResY = static_cast<int>(VIEWPORT_HEIGHT);
   m_track->Kerning = true; // Font kerning improves the letterspacing
   m_track->WrapStyle = 1; // The line feed \n doesn't break but wraps (instead \N breaks)
+
+  if (ass_track_set_feature(m_track, ASS_FEATURE_BIDI_BRACKETS, 1) != 0)
+    CLog::LogF(LOGWARNING, "ASS track ASS_FEATURE_BIDI_BRACKETS feature cannot be set");
 
   return true;
 }

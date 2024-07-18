@@ -9,6 +9,7 @@
 #include "Control.h"
 
 #include "AddonUtils.h"
+#include "FileItemList.h"
 #include "LanguageHook.h"
 #include "ServiceBroker.h"
 #include "WindowException.h"
@@ -27,7 +28,7 @@
 #include "guilib/GUISliderControl.h"
 #include "guilib/GUITextBox.h"
 #include "guilib/GUIWindowManager.h"
-#include "listproviders/StaticProvider.h"
+#include "guilib/listproviders/StaticProvider.h"
 #include "utils/StringUtils.h"
 #include "utils/XBMCTinyXML.h"
 
@@ -447,10 +448,16 @@ namespace XBMCAddon
 
     // ============================================================
     // ============================================================
-    ControlSlider::ControlSlider(long x, long y, long width, long height,
+    ControlSlider::ControlSlider(long x,
+                                 long y,
+                                 long width,
+                                 long height,
                                  const char* textureback,
                                  const char* texture,
-                                 const char* texturefocus, int orientation)
+                                 const char* texturefocus,
+                                 int orientation,
+                                 const char* texturebackdisabled,
+                                 const char* texturedisabled)
     {
       dwPosX = x;
       dwPosY = y;
@@ -461,10 +468,12 @@ namespace XBMCAddon
       // if texture is supplied use it, else get default ones
       strTextureBack = textureback ? textureback :
         XBMCAddonUtils::getDefaultImage("slider", "texturesliderbar");
+      strTextureBackDisabled = texturebackdisabled ? texturebackdisabled : strTextureBack;
       strTexture = texture ? texture :
         XBMCAddonUtils::getDefaultImage("slider", "textureslidernib");
       strTextureFoc = texturefocus ? texturefocus :
         XBMCAddonUtils::getDefaultImage("slider", "textureslidernibfocus");
+      strTextureDisabled = texturedisabled ? texturedisabled : strTexture;
     }
 
     float ControlSlider::getPercent()
@@ -510,12 +519,13 @@ namespace XBMCAddon
       }
     }
 
-    CGUIControl* ControlSlider::Create ()
+    CGUIControl* ControlSlider::Create()
     {
-      pGUIControl = new CGUISliderControl(iParentId, iControlId,(float)dwPosX, (float)dwPosY,
-                                          (float)dwWidth,(float)dwHeight,
-                                          CTextureInfo(strTextureBack),CTextureInfo(strTexture),
-                                          CTextureInfo(strTextureFoc), 0, ORIENTATION(iOrientation));
+      pGUIControl = new CGUISliderControl(
+          iParentId, iControlId, (float)dwPosX, (float)dwPosY, (float)dwWidth, (float)dwHeight,
+          CTextureInfo(strTextureBack), CTextureInfo(strTextureBackDisabled),
+          CTextureInfo(strTexture), CTextureInfo(strTextureFoc), CTextureInfo(strTextureDisabled),
+          0, ORIENTATION(iOrientation));
 
       return pGUIControl;
     }
@@ -1257,7 +1267,7 @@ namespace XBMCAddon
     void ControlList::sendLabelBind(int tail)
     {
       // construct a CFileItemList to pass 'em on to the list
-      CGUIListItemPtr items(new CFileItemList());
+      std::shared_ptr<CGUIListItem> items(new CFileItemList());
       for (unsigned int i = vecItems.size() - tail; i < vecItems.size(); i++)
         static_cast<CFileItemList*>(items.get())->Add(vecItems[i]->item);
 

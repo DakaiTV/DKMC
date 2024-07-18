@@ -9,6 +9,7 @@
 #include "GUIDialogPVRChannelGuide.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "pvr/PVRManager.h"
 #include "pvr/PVRPlaybackState.h"
@@ -25,7 +26,7 @@ CGUIDialogPVRChannelGuide::CGUIDialogPVRChannelGuide()
 {
 }
 
-void CGUIDialogPVRChannelGuide::Open(const std::shared_ptr<CPVRChannel>& channel)
+void CGUIDialogPVRChannelGuide::Open(const std::shared_ptr<const CPVRChannel>& channel)
 {
   m_channel = channel;
   CGUIDialogPVRItemsViewBase::Open();

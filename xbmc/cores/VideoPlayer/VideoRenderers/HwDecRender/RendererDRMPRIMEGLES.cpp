@@ -22,6 +22,8 @@
 #include "windowing/WinSystem.h"
 #include "windowing/linux/WinSystemEGL.h"
 
+#include <memory>
+
 using namespace KODI::UTILS::EGL;
 
 CRendererDRMPRIMEGLES::~CRendererDRMPRIMEGLES()
@@ -110,7 +112,7 @@ bool CRendererDRMPRIMEGLES::Configure(const VideoPicture& picture,
     if (!buf.fence)
     {
       buf.texture.Init(eglDisplay);
-      buf.fence.reset(new CEGLFence(eglDisplay));
+      buf.fence = std::make_unique<CEGLFence>(eglDisplay);
     }
   }
 
@@ -222,8 +224,10 @@ void CRendererDRMPRIMEGLES::DrawBlackBars()
   renderSystem->EnableGUIShader(ShaderMethodGLES::SM_DEFAULT);
   GLint posLoc = renderSystem->GUIShaderGetPos();
   GLint uniCol = renderSystem->GUIShaderGetUniCol();
+  GLint depthLoc = renderSystem->GUIShaderGetDepth();
 
   glUniform4f(uniCol, m_clearColour / 255.0f, m_clearColour / 255.0f, m_clearColour / 255.0f, 1.0f);
+  glUniform1f(depthLoc, -1.0f);
 
   GLuint vertexVBO;
   glGenBuffers(1, &vertexVBO);
@@ -278,7 +282,7 @@ void CRendererDRMPRIMEGLES::RenderUpdate(
   glEnable(GL_BLEND);
 }
 
-bool CRendererDRMPRIMEGLES::RenderCapture(CRenderCapture* capture)
+bool CRendererDRMPRIMEGLES::RenderCapture(int index, CRenderCapture* capture)
 {
   capture->BeginRender();
   capture->EndRender();
@@ -326,6 +330,7 @@ void CRendererDRMPRIMEGLES::Render(unsigned int flags, int index)
 
   GLint vertLoc = renderSystem->GUIShaderGetPos();
   GLint loc = renderSystem->GUIShaderGetCoord0();
+  GLint depthLoc = renderSystem->GUIShaderGetDepth();
 
   // top left
   vertex[0].x = m_rotatedDestCoords[0].x;
@@ -372,6 +377,8 @@ void CRendererDRMPRIMEGLES::Render(unsigned int flags, int index)
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexVBO);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLubyte) * 4, idx, GL_STATIC_DRAW);
 
+  glUniform1f(depthLoc, -1.0f);
+
   glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, 0);
 
   glDisableVertexAttribArray(vertLoc);
@@ -386,6 +393,7 @@ void CRendererDRMPRIMEGLES::Render(unsigned int flags, int index)
 
   glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0);
 
+  buf.fence->DestroyFence();
   buf.fence->CreateFence();
 }
 
