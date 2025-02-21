@@ -69,6 +69,7 @@ public:
   int GUIShaderGetPos();
   int GUIShaderGetCoord0();
   int GUIShaderGetUniCol();
+  int GUIShaderGetDepth();
 
   // DirectX rendering functions
   CGUIShaderDX* GetGUIShader();
@@ -105,8 +106,8 @@ public:
   ::CGameSettings& GetDefaultGameSettings();
 
   // Agent functions
-  void StartAgentManager(GAME::GameClientPtr gameClient);
-  void StopAgentManager();
+  void StartAgentInput(GAME::GameClientPtr gameClient);
+  void StopAgentInput();
 
 private:
   // Construction parameters

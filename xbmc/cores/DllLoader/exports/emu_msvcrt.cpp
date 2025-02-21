@@ -44,6 +44,7 @@
 #endif
 #include "CompileInfo.h"
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "URL.h"
 #include "Util.h"
@@ -1056,8 +1057,8 @@ extern "C"
     {
       if (pFile->GetPosition() < pFile->GetLength())
       {
-        bool bRead = pFile->ReadString(pszString, num);
-        if (bRead)
+        auto result = pFile->ReadLine(pszString, num);
+        if (result.code != CFile::ReadLineResult::FAILURE)
         {
           return pszString;
         }
@@ -1818,7 +1819,11 @@ extern "C"
 
       if (value_start != NULL)
       {
-        char var[64];
+        const size_t varSize = value_start - envstring;
+        char* var = static_cast<char*>(std::malloc(varSize + 1));
+        if (!var)
+          return -1;
+
         int size = strlen(envstring) + 1;
         char *value = (char*)malloc(size);
 
@@ -1827,7 +1832,7 @@ extern "C"
         value[0] = 0;
 
         memcpy(var, envstring, value_start - envstring);
-        var[value_start - envstring] = 0;
+        var[varSize] = 0;
         char* temp = var;
         while (*temp)
         {
@@ -1880,6 +1885,7 @@ extern "C"
         }
 
         free(value);
+        std::free(var);
       }
     }
 
@@ -2003,7 +2009,7 @@ extern "C"
       SNativeIoControl d;
       d.request = request;
       d.param   = p1;
-      ret = pFile->IoControl(IOCTRL_NATIVE, &d);
+      ret = pFile->IoControl(IOControl::NATIVE, &d);
       if(ret<0)
         CLog::Log(LOGWARNING, "{} - {} request failed with error [{}] {}", __FUNCTION__, request,
                   errno, strerror(errno));

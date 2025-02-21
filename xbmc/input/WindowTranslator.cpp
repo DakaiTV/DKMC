@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2017-2018 Team Kodi
+ *  Copyright (C) 2017-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -36,11 +36,13 @@ const CWindowTranslator::WindowMapByName CWindowTranslator::WindowMappingByName 
     {"tvguide", WINDOW_TV_GUIDE},
     {"tvtimers", WINDOW_TV_TIMERS},
     {"tvsearch", WINDOW_TV_SEARCH},
+    {"tvproviders", WINDOW_TV_PROVIDERS},
     {"radiochannels", WINDOW_RADIO_CHANNELS},
     {"radiorecordings", WINDOW_RADIO_RECORDINGS},
     {"radioguide", WINDOW_RADIO_GUIDE},
     {"radiotimers", WINDOW_RADIO_TIMERS},
     {"radiosearch", WINDOW_RADIO_SEARCH},
+    {"radioproviders", WINDOW_RADIO_PROVIDERS},
     {"gamecontrollers", WINDOW_DIALOG_GAME_CONTROLLERS},
     {"gameports", WINDOW_DIALOG_GAME_PORTS},
     {"games", WINDOW_GAMES},
@@ -119,8 +121,10 @@ const CWindowTranslator::WindowMapByName CWindowTranslator::WindowMappingByName 
     {"musicinformation", WINDOW_DIALOG_MUSIC_INFO},
     {"okdialog", WINDOW_DIALOG_OK},
     {"movieinformation", WINDOW_DIALOG_VIDEO_INFO},
-    {"videoversion", WINDOW_DIALOG_VIDEO_VERSION},
-    {"videoversionselect", WINDOW_DIALOG_VIDEO_VERSION_SELECT},
+    {"managevideoversions", WINDOW_DIALOG_MANAGE_VIDEO_VERSIONS},
+    {"managevideoextras", WINDOW_DIALOG_MANAGE_VIDEO_EXTRAS},
+    {"selectvideoversion", WINDOW_DIALOG_SELECT_VIDEO_VERSION},
+    {"selectvideoextra", WINDOW_DIALOG_SELECT_VIDEO_EXTRA},
     {"textviewer", WINDOW_DIALOG_TEXT_VIEWER},
     {"fullscreenvideo", WINDOW_FULLSCREEN_VIDEO},
     {"dialogcolorpicker", WINDOW_DIALOG_COLOR_PICKER},
@@ -173,6 +177,9 @@ const CWindowTranslator::WindowMapByName CWindowTranslator::WindowMappingByName 
     {"ingamesaves", WINDOW_DIALOG_IN_GAME_SAVES},
     {"gamesaves", WINDOW_DIALOG_GAME_SAVES},
     {"gameagents", WINDOW_DIALOG_GAME_AGENTS},
+    {"dialogselectvideo", WINDOW_DIALOG_SELECT_VIDEO_STREAM},
+    {"dialogselectaudio", WINDOW_DIALOG_SELECT_AUDIO_STREAM},
+    {"dialogselectsubtitle", WINDOW_DIALOG_SELECT_SUBTITLE_STREAM},
 };
 
 namespace
@@ -268,9 +275,9 @@ std::string CWindowTranslator::TranslateWindow(int windowId)
 
 int CWindowTranslator::GetFallbackWindow(int windowId)
 {
-  auto it = std::find_if(
-      FallbackWindows.begin(), FallbackWindows.end(),
-      [windowId](const FallbackWindowMapping& mapping) { return mapping.origin == windowId; });
+  auto it = std::find_if(FallbackWindows.begin(), FallbackWindows.end(),
+                         [windowId](const FallbackWindowMapping& mapping)
+                         { return mapping.origin == windowId; });
 
   if (it != FallbackWindows.end())
     return it->target;

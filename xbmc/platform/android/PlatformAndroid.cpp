@@ -8,12 +8,16 @@
 
 #include "PlatformAndroid.h"
 
+#include "ServiceBroker.h"
 #include "filesystem/SpecialProtocol.h"
+#include "settings/AdvancedSettings.h"
+#include "settings/SettingsComponent.h"
 #include "utils/log.h"
 #include "windowing/android/WinSystemAndroidGLESContext.h"
 
 #include "platform/android/activity/XBMCApp.h"
 #include "platform/android/powermanagement/AndroidPowerSyscall.h"
+#include "platform/android/storage/AndroidStorageProvider.h"
 
 #include <stdlib.h>
 
@@ -40,6 +44,20 @@ bool CPlatformAndroid::InitStageOne()
   return true;
 }
 
+bool CPlatformAndroid::InitStageThree()
+{
+  if (!CPlatformPosix::InitStageThree())
+    return false;
+
+  if (CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_guiVideoLayoutTransparent)
+  {
+    CLog::Log(LOGINFO, "XBMCApp: VideoLayout view was set to transparent.");
+    CXBMCApp::Get().SetVideoLayoutBackgroundColor(0);
+  }
+
+  return true;
+}
+
 void CPlatformAndroid::PlatformSyslog()
 {
   CLog::Log(
@@ -49,7 +67,7 @@ void CPlatformAndroid::PlatformSyslog()
       CJNIBuild::BRAND, CJNIBuild::MODEL, CJNIBuild::HARDWARE);
 
   std::string extstorage;
-  bool extready = CXBMCApp::GetExternalStorage(extstorage);
+  const bool extready = CAndroidStorageProvider::GetExternalStorage(extstorage);
   CLog::Log(
       LOGINFO, "External storage path = {}; status = {}; Permissions = {}{}", extstorage,
       extready ? "ok" : "nok",

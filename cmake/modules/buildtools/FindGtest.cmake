@@ -16,14 +16,14 @@
 if(ENABLE_INTERNAL_GTEST)
   include(cmake/scripts/common/ModuleHelpers.cmake)
 
-  set(MODULE_LC gtest)
+  set(${CMAKE_FIND_PACKAGE_NAME}_MODULE_LC gtest)
 
   SETUP_BUILD_VARS()
 
-  set(GTEST_VERSION ${${MODULE}_VER})
+  set(GTEST_VERSION ${${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_VER})
 
   # Override build type detection and always build as release
-  set(GTEST_BUILD_TYPE Release)
+  set(${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_BUILD_TYPE Release)
 
   set(CMAKE_ARGS -DBUILD_GMOCK=OFF
                  -DINSTALL_GTEST=ON
@@ -32,20 +32,30 @@ if(ENABLE_INTERNAL_GTEST)
 
   BUILD_DEP_TARGET()
 else()
+
+  if(Gtest_FIND_VERSION)
+    if(Gtest_FIND_VERSION_EXACT)
+      set(Gtest_FIND_SPEC "=${Gtest_FIND_VERSION_COMPLETE}")
+    else()
+      set(Gtest_FIND_SPEC ">=${Gtest_FIND_VERSION_COMPLETE}")
+    endif()
+  endif()
+
+  find_package(PkgConfig QUIET)
   if(PKG_CONFIG_FOUND)
-    pkg_check_modules(PC_GTEST gtest>=1.10.0 QUIET)
+    pkg_check_modules(PC_GTEST gtest${Gtest_FIND_SPEC} QUIET)
     set(GTEST_VERSION ${PC_GTEST_VERSION})
   elseif(WIN32)
-    set(GTEST_VERSION 1.10.0)
+    set(GTEST_VERSION ${Gtest_FIND_VERSION_COMPLETE})
   endif()
 
   find_path(GTEST_INCLUDE_DIR NAMES gtest/gtest.h
-                              PATHS ${PC_GTEST_INCLUDEDIR})
+                              HINTS ${PC_GTEST_INCLUDEDIR})
 
   find_library(GTEST_LIBRARY_RELEASE NAMES gtest
-                                     PATHS ${PC_GTEST_LIBDIR})
+                                     HINTS ${PC_GTEST_LIBDIR})
   find_library(GTEST_LIBRARY_DEBUG NAMES gtestd
-                                   PATHS ${PC_GTEST_LIBDIR})
+                                   HINTS ${PC_GTEST_LIBDIR})
 
   include(SelectLibraryConfigurations)
   select_library_configurations(GTEST)

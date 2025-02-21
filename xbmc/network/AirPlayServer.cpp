@@ -12,6 +12,7 @@
 #include "AirPlayServer.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "URL.h"
 #include "application/ApplicationComponents.h"
@@ -44,6 +45,7 @@
 
 #include <plist/plist.h>
 
+using namespace KODI;
 using KODI::UTILITY::CDigest;
 using namespace std::chrono_literals;
 
@@ -165,10 +167,6 @@ void CAirPlayServer::Announce(ANNOUNCEMENT::AnnouncementFlag flag,
                               const std::string& message,
                               const CVariant& data)
 {
-  // We are only interested in player changes
-  if ((flag & ANNOUNCEMENT::Player) == 0)
-    return;
-
   std::unique_lock<CCriticalSection> lock(ServerInstanceLock);
 
   if (sender == ANNOUNCEMENT::CAnnouncementManager::ANNOUNCEMENT_SENDER && ServerInstance)
@@ -177,7 +175,8 @@ void CAirPlayServer::Announce(ANNOUNCEMENT::AnnouncementFlag flag,
     {
       bool shouldRestoreVolume = true;
       if (data.isMember("player") && data["player"].isMember("playerid"))
-        shouldRestoreVolume = (data["player"]["playerid"] != PLAYLIST::TYPE_PICTURE);
+        shouldRestoreVolume =
+            (data["player"]["playerid"] != static_cast<int>(PLAYLIST::Id::TYPE_PICTURE));
 
       if (shouldRestoreVolume)
         restoreVolume();
@@ -320,7 +319,7 @@ CAirPlayServer::CAirPlayServer(int port, bool nonlocal) : CThread("AirPlayServer
   m_nonlocal = nonlocal;
   m_usePassword = false;
   m_origVolume = -1;
-  CServiceBroker::GetAnnouncementManager()->AddAnnouncer(this);
+  CServiceBroker::GetAnnouncementManager()->AddAnnouncer(this, ANNOUNCEMENT::Player);
 }
 
 CAirPlayServer::~CAirPlayServer()

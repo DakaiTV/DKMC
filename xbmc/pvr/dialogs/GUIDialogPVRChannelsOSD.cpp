@@ -9,6 +9,7 @@
 #include "GUIDialogPVRChannelsOSD.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "GUIInfoManager.h"
 #include "ServiceBroker.h"
 #include "guilib/GUIComponent.h"
@@ -132,8 +133,8 @@ bool CGUIDialogPVRChannelsOSD::OnAction(const CAction& action)
       SaveControlStates();
 
       // switch to next or previous group
-      const CPVRChannelGroups* groups =
-          CServiceBroker::GetPVRManager().ChannelGroups()->Get(m_group->IsRadio());
+      const std::shared_ptr<const CPVRChannelGroups> groups{
+          CServiceBroker::GetPVRManager().ChannelGroups()->Get(m_group->IsRadio())};
       const std::shared_ptr<CPVRChannelGroup> nextGroup = action.GetID() == ACTION_NEXT_CHANNELGROUP
                                                               ? groups->GetNextGroup(*m_group)
                                                               : groups->GetPreviousGroup(*m_group);
@@ -250,8 +251,7 @@ void CGUIDialogPVRChannelsOSD::GotoChannel(int iItem)
           CSettings::SETTING_PVRMENU_CLOSECHANNELOSDONSWITCH))
     Close();
 
-  CServiceBroker::GetPVRManager().Get<PVR::GUI::Playback>().SwitchToChannel(
-      *item, true /* bCheckResume */);
+  CServiceBroker::GetPVRManager().Get<PVR::GUI::Playback>().SwitchToChannel(*item);
 }
 
 void CGUIDialogPVRChannelsOSD::Notify(const PVREvent& event)

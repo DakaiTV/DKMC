@@ -63,9 +63,11 @@ void CContextMenuManager::Init()
   m_items = {
       std::make_shared<CONTEXTMENU::CVideoBrowse>(),
       std::make_shared<CONTEXTMENU::CVideoChooseVersion>(),
+      std::make_shared<CONTEXTMENU::CVideoPlayVersionUsing>(),
       std::make_shared<CONTEXTMENU::CVideoResume>(),
       std::make_shared<CONTEXTMENU::CVideoPlay>(),
       std::make_shared<CONTEXTMENU::CVideoPlayUsing>(),
+      std::make_shared<CONTEXTMENU::CVideoPlayStackPart>(),
       std::make_shared<CONTEXTMENU::CVideoPlayAndQueue>(),
       std::make_shared<CONTEXTMENU::CVideoPlayNext>(),
       std::make_shared<CONTEXTMENU::CVideoQueue>(),
@@ -79,11 +81,13 @@ void CContextMenuManager::Init()
       std::make_shared<CONTEXTMENU::CDisableAddon>(),
       std::make_shared<CONTEXTMENU::CAddonSettings>(),
       std::make_shared<CONTEXTMENU::CCheckForUpdates>(),
+      std::make_shared<CONTEXTMENU::CVideoInfo>(),
       std::make_shared<CONTEXTMENU::CEpisodeInfo>(),
       std::make_shared<CONTEXTMENU::CMovieInfo>(),
       std::make_shared<CONTEXTMENU::CMovieSetInfo>(),
       std::make_shared<CONTEXTMENU::CMusicVideoInfo>(),
       std::make_shared<CONTEXTMENU::CTVShowInfo>(),
+      std::make_shared<CONTEXTMENU::CMusicInfo>(),
       std::make_shared<CONTEXTMENU::CSeasonInfo>(),
       std::make_shared<CONTEXTMENU::CAlbumInfo>(),
       std::make_shared<CONTEXTMENU::CArtistInfo>(),
@@ -297,6 +301,8 @@ bool CONTEXTMENU::ShowFor(const std::shared_ptr<CFileItem>& fileItem, const CCon
 
   CContextButtons buttons;
   // compute fileitem property-based contextmenu items
+  // unless we're browsing a child menu item
+  if (!root.HasParent())
   {
     int i = 0;
     while (fileItem->HasProperty(StringUtils::Format("contextmenulabel({})", i)))

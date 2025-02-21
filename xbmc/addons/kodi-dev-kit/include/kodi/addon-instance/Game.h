@@ -573,6 +573,21 @@ public:
   ///
   ///@{
 
+  //==========================================================================
+  /// @brief **Callback to Kodi Function**\n
+  /// Enable hardware rendering functionality
+  ///
+  /// @return True if hardware rendering was enabled, false otherwise
+  ///
+  /// @remarks Only called from addon itself
+  ///
+  bool EnableHardwareRendering(const game_hw_rendering_properties& properties)
+  {
+    return m_instanceData->toKodi->EnableHardwareRendering(m_instanceData->toKodi->kodiInstance,
+                                                           &properties);
+  }
+  //----------------------------------------------------------------------------
+
   //============================================================================
   /// @brief Invalidates the current HW context and reinitializes GPU resources
   ///
@@ -737,12 +752,12 @@ public:
   /// To connect a multitap to the console's first port, the multitap's controller
   /// info is set using the port address:
   ///
-  ///     1
+  ///     /1
   ///
   /// To connect a SNES controller to the second port of the multitap, the
   /// controller info is next set using the address:
   ///
-  ///     1/game.controller.multitap/2
+  ///     /1/game.controller.multitap/2
   ///
   /// Any attempts to connect a controller to a port on a disconnected multitap
   /// will return false.
@@ -1005,7 +1020,7 @@ public:
   /// @brief Resets the runtime. Must be called each time a new rom is starting
   ///        and when the savestate is changed
   ///
-  /// @return the error, or GAME_ERROR_NO_ERROR if the runtim was reseted
+  /// @return the error, or GAME_ERROR_NO_ERROR if the runtime was reset
   ///         successfully
   ///
   virtual GAME_ERROR RCResetRuntime() { return GAME_ERROR_NOT_IMPLEMENTED; }

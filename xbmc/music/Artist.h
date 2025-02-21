@@ -17,6 +17,7 @@
 #include <utility>
 #include <vector>
 
+class TiXmlElement;
 class TiXmlNode;
 class CAlbum;
 class CMusicDatabase;
@@ -162,9 +163,9 @@ public:
     return false;
   }
 
-  std::string GetArtist() const                { return m_strArtist; }
-  std::string GetSortName() const              { return m_strSortName; }
-  std::string GetMusicBrainzArtistID() const   { return m_strMusicBrainzArtistID; }
+  const std::string& GetArtist() const { return m_strArtist; }
+  const std::string& GetSortName() const { return m_strSortName; }
+  const std::string& GetMusicBrainzArtistID() const { return m_strMusicBrainzArtistID; }
   int         GetArtistId() const              { return idArtist; }
   bool HasScrapedMBID() const { return m_bScrapedMBID; }
   void SetArtist(const std::string &strArtist) { m_strArtist = strArtist; }
@@ -184,10 +185,10 @@ private:
 typedef std::vector<CArtist> VECARTISTS;
 typedef std::vector<CArtistCredit> VECARTISTCREDITS;
 
-const std::string BLANKARTIST_FAKEMUSICBRAINZID = "Artist Tag Missing";
-const std::string BLANKARTIST_NAME = "[Missing Tag]";
+inline const std::string BLANKARTIST_FAKEMUSICBRAINZID = "Artist Tag Missing";
+inline const std::string BLANKARTIST_NAME = "[Missing Tag]";
 const int BLANKARTIST_ID = 1;
-const std::string VARIOUSARTISTS_MBID = "89ad4ac3-39f7-470e-963a-56509c546377";
+inline const std::string VARIOUSARTISTS_MBID = "89ad4ac3-39f7-470e-963a-56509c546377";
 
 #define ROLE_ARTIST 1  //Default role
 
@@ -206,8 +207,8 @@ public:
       idArtist(ArtistId)
   {
   }
-  std::string GetArtist() const { return m_strArtist; }
-  std::string GetRoleDesc() const { return m_strRole; }
+  const std::string& GetArtist() const { return m_strArtist; }
+  const std::string& GetRoleDesc() const { return m_strRole; }
   int GetRoleId() const { return idRole; }
   int GetArtistId() const { return idArtist; }
   void SetArtistId(int iArtistId) { idArtist = iArtistId;  }

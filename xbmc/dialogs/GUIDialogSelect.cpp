@@ -9,9 +9,10 @@
 #include "GUIDialogSelect.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "guilib/GUIMessage.h"
 #include "guilib/LocalizeStrings.h"
-#include "input/Key.h"
+#include "input/actions/ActionIDs.h"
 #include "utils/StringUtils.h"
 
 #include <memory>
@@ -203,9 +204,8 @@ int CGUIDialogSelect::Add(const CFileItem& item)
 
 void CGUIDialogSelect::SetItems(const CFileItemList& pList)
 {
-  // need to make internal copy of list to be sure dialog is owner of it
   m_vecList->Clear();
-  m_vecList->Copy(pList);
+  m_vecList->Append(pList);
 
   m_viewControl.SetItems(*m_vecList);
 }

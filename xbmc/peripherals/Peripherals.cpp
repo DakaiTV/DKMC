@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2018 Team Kodi
+ *  Copyright (C) 2005-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -9,7 +9,6 @@
 #include "Peripherals.h"
 
 #include "CompileInfo.h"
-#include "EventScanner.h"
 #include "addons/AddonButtonMap.h"
 #include "addons/AddonManager.h"
 #include "addons/addoninfo/AddonInfo.h"
@@ -46,12 +45,15 @@
 #include "guilib/GUIComponent.h"
 #include "guilib/GUIWindowManager.h"
 #include "guilib/WindowIDs.h"
-#include "input/Key.h"
+#include "input/actions/Action.h"
+#include "input/actions/ActionIDs.h"
 #include "input/joysticks/interfaces/IButtonMapper.h"
+#include "input/keyboard/Key.h"
 #include "interfaces/AnnouncementManager.h"
 #include "messaging/ApplicationMessenger.h"
 #include "messaging/ThreadMessage.h"
 #include "peripherals/dialogs/GUIDialogPeripherals.h"
+#include "peripherals/events/EventScanner.h"
 #include "settings/SettingAddon.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
@@ -77,7 +79,8 @@ CPeripherals::CPeripherals(CInputManager& inputManager,
                            GAME::CControllerManager& controllerProfiles)
   : m_inputManager(inputManager),
     m_controllerProfiles(controllerProfiles),
-    m_eventScanner(new CEventScanner(*this))
+    m_eventScanner(new CEventScanner(*this)),
+    m_guiReadyEvent(std::make_unique<CEvent>())
 {
   // Register settings
   std::set<std::string> settingSet;
@@ -91,6 +94,13 @@ CPeripherals::CPeripherals(CInputManager& inputManager,
 
 CPeripherals::~CPeripherals()
 {
+  // Unregister with GUI messenger
+  CGUIComponent* gui = CServiceBroker::GetGUI();
+  if (gui != nullptr)
+    gui->GetWindowManager().RemoveMsgTarget(this);
+
+  m_guiReadyEvent->Set();
+
   // Unregister settings
   CServiceBroker::GetSettingsComponent()->GetSettings()->UnregisterCallback(this);
 
@@ -134,7 +144,12 @@ void CPeripherals::Initialise()
   m_eventScanner->Start();
 
   CServiceBroker::GetAppMessenger()->RegisterReceiver(this);
-  CServiceBroker::GetAnnouncementManager()->AddAnnouncer(this);
+  CServiceBroker::GetAnnouncementManager()->AddAnnouncer(this, ANNOUNCEMENT::Player);
+
+  // Register for GUI messages
+  CGUIComponent* gui = CServiceBroker::GetGUI();
+  if (gui != nullptr)
+    gui->GetWindowManager().AddMsgTarget(this);
 }
 
 void CPeripherals::Clear()
@@ -240,10 +255,9 @@ PeripheralBusPtr CPeripherals::GetBusWithDevice(const std::string& strLocation) 
 {
   std::unique_lock<CCriticalSection> lock(m_critSectionBusses);
 
-  const auto& bus =
-      std::find_if(m_busses.cbegin(), m_busses.cend(), [&strLocation](const PeripheralBusPtr& bus) {
-        return bus->HasPeripheral(strLocation);
-      });
+  const auto& bus = std::find_if(m_busses.cbegin(), m_busses.cend(),
+                                 [&strLocation](const PeripheralBusPtr& bus)
+                                 { return bus->HasPeripheral(strLocation); });
   if (bus != m_busses.cend())
     return *bus;
 
@@ -736,6 +750,32 @@ bool CPeripherals::OnAction(const CAction& action)
   return false;
 }
 
+bool CPeripherals::OnMessage(CGUIMessage& message)
+{
+  switch (message.GetMessage())
+  {
+    case GUI_MSG_NOTIFY_ALL:
+    {
+      if (message.GetParam1() == GUI_MSG_UI_READY)
+      {
+        m_guiReady = true;
+        m_guiReadyEvent->Set();
+      }
+      break;
+    }
+    default:
+      break;
+  }
+
+  return false;
+}
+
+bool CPeripherals::WaitForGUI()
+{
+  m_guiReadyEvent->Wait();
+  return m_guiReady;
+}
+
 bool CPeripherals::IsMuted()
 {
   PeripheralVector peripherals;
@@ -916,7 +956,7 @@ void CPeripherals::ResetButtonMaps(const std::string& controllerId)
     PeripheralAddonPtr addon;
     if (addonBus->GetAddonWithButtonMap(peripheral.get(), addon))
     {
-      CAddonButtonMap buttonMap(peripheral.get(), addon, controllerId);
+      CAddonButtonMap buttonMap(peripheral.get(), addon, controllerId, *this);
       buttonMap.Reset();
     }
   }
@@ -1018,8 +1058,7 @@ void CPeripherals::Announce(ANNOUNCEMENT::AnnouncementFlag flag,
                             const std::string& message,
                             const CVariant& data)
 {
-  if (flag == ANNOUNCEMENT::Player &&
-      sender == ANNOUNCEMENT::CAnnouncementManager::ANNOUNCEMENT_SENDER)
+  if (sender == ANNOUNCEMENT::CAnnouncementManager::ANNOUNCEMENT_SENDER)
   {
     if (message == "OnQuit")
     {
@@ -1028,4 +1067,13 @@ void CPeripherals::Announce(ANNOUNCEMENT::AnnouncementFlag flag,
         PowerOffDevices();
     }
   }
+}
+
+float CPeripherals::GetPeripheralActivation(const std::string& peripheralPath) const
+{
+  PeripheralPtr periphreal = GetByPath(peripheralPath);
+  if (periphreal)
+    return periphreal->GetActivation();
+
+  return 0.0f;
 }

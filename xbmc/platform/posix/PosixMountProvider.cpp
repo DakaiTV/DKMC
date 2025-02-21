@@ -25,7 +25,7 @@ void CPosixMountProvider::Initialize()
   CLog::Log(LOGDEBUG, "Selected Posix mount as storage provider");
 }
 
-void CPosixMountProvider::GetDrives(VECSOURCES &drives)
+void CPosixMountProvider::GetDrives(std::vector<CMediaSource>& drives)
 {
   std::vector<std::string> result;
 
@@ -94,7 +94,7 @@ std::vector<std::string> CPosixMountProvider::GetDiskUsage()
   FILE* pipe = popen("df -h", "r");
 #endif
 
-  static const char* excludes[] = {"rootfs","devtmpfs","tmpfs","none","/dev/loop", "udev", NULL};
+  static const char* excludes[] = {"rootfs","devtmpfs","tmpfs","none","efivarfs","systemd-1","/dev/loop", "udev", NULL};
 
   if (pipe)
   {
@@ -136,7 +136,7 @@ bool CPosixMountProvider::Eject(const std::string& mountpath)
 
 bool CPosixMountProvider::PumpDriveChangeEvents(IStorageEventsCallback *callback)
 {
-  VECSOURCES drives;
+  std::vector<CMediaSource> drives;
   GetRemovableDrives(drives);
   bool changed = drives.size() != m_removableLength;
   m_removableLength = drives.size();

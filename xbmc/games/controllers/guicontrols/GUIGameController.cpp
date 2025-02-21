@@ -12,10 +12,13 @@
 #include "ServiceBroker.h"
 #include "games/GameServices.h"
 #include "games/addons/input/GameClientTopology.h"
-#include "games/agents/GameAgentManager.h"
+#include "games/agents/input/AgentInput.h"
 #include "games/controllers/Controller.h"
 #include "games/controllers/ControllerLayout.h"
 #include "guilib/GUIListItem.h"
+#include "guilib/GUITexture.h"
+#include "peripherals/Peripherals.h"
+#include "utils/StringUtils.h"
 #include "utils/log.h"
 
 #include <algorithm>
@@ -36,6 +39,9 @@ CGUIGameController::CGUIGameController(int parentID,
 {
   // Initialize CGUIControl
   ControlType = GUICONTROL_GAMECONTROLLER;
+
+  // Initialize CGUIImage
+  SetAspectRatio(CAspectRatio::KEEP);
 }
 
 CGUIGameController::CGUIGameController(const CGUIGameController& from)
@@ -51,6 +57,9 @@ CGUIGameController::CGUIGameController(const CGUIGameController& from)
 {
   // Initialize CGUIControl
   ControlType = GUICONTROL_GAMECONTROLLER;
+
+  // Initialize CGUIImage
+  SetAspectRatio(CAspectRatio::KEEP);
 }
 
 CGUIGameController* CGUIGameController::Clone(void) const
@@ -69,17 +78,20 @@ void CGUIGameController::DoProcess(unsigned int currentTime, CDirtyRegionList& d
     peripheralLocation = m_peripheralLocation;
   }
 
-  const GAME::CGameAgentManager& agentManager =
-      CServiceBroker::GetGameServices().GameAgentManager();
+  const GAME::CAgentInput& agentInput = CServiceBroker::GetGameServices().AgentInput();
+  const PERIPHERALS::CPeripherals& peripheralManager = CServiceBroker::GetPeripherals();
 
   // Highlight the controller if it is active
   float activation = 0.0f;
 
   if (!portAddress.empty())
-    activation = agentManager.GetPortActivation(portAddress);
+    activation = agentInput.GetGamePortActivation(portAddress);
 
-  if (!peripheralLocation.empty())
-    activation = std::max(agentManager.GetPeripheralActivation(peripheralLocation), activation);
+  if (StringUtils::StartsWith(peripheralLocation, "peripherals://"))
+  {
+    activation =
+        std::max(peripheralManager.GetPeripheralActivation(peripheralLocation), activation);
+  }
 
   SetActivation(activation);
 
@@ -89,6 +101,8 @@ void CGUIGameController::DoProcess(unsigned int currentTime, CDirtyRegionList& d
 void CGUIGameController::UpdateInfo(const CGUIListItem* item /* = nullptr */)
 {
   CGUIImage::UpdateInfo(item);
+
+  m_controllerDiffuse.Update(item);
 
   if (item != nullptr)
   {

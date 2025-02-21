@@ -550,6 +550,10 @@ KODI_HANDLE CInputStreamAddon::cb_get_stream_transfer(KODI_HANDLE handle,
     if ((stream->m_features & INPUTSTREAM_FEATURE_DECODE) != 0)
       demuxStream->externalInterfaces = thisClass->m_subAddonProvider;
   }
+
+  // Tie the lifetime of the stream to the CInputStreamAddon
+  thisClass->m_streams.emplace_back(demuxStream);
+
   return demuxStream;
 }
 
@@ -758,14 +762,11 @@ int CInputStreamAddon::ConvertAudioCodecProfile(STREAMCODEC_PROFILE profile)
     case DTSCodecProfileHDExpress:
       return FF_PROFILE_DTS_EXPRESS;
     case DTSCodecProfileHDMAX:
-      //! @todo: with ffmpeg >= 6.1 set the appropriate profile
-      return FF_PROFILE_UNKNOWN; // FF_PROFILE_DTS_HD_MA_X
+      return FF_PROFILE_DTS_HD_MA_X;
     case DTSCodecProfileHDMAIMAX:
-      //! @todo: with ffmpeg >= 6.1 set the appropriate profile
-      return FF_PROFILE_UNKNOWN; // FF_PROFILE_DTS_HD_MA_X_IMAX
+      return FF_PROFILE_DTS_HD_MA_X_IMAX;
     case DDPlusCodecProfileAtmos:
-      //! @todo: with ffmpeg >= 6.1 set the appropriate profile
-      return FF_PROFILE_UNKNOWN; // FF_PROFILE_EAC3_DDP_ATMOS
+      return FF_PROFILE_EAC3_DDP_ATMOS;
     default:
       return FF_PROFILE_UNKNOWN;
   }

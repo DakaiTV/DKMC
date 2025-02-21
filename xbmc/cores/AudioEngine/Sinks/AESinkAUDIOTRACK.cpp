@@ -11,12 +11,16 @@
 #include "ServiceBroker.h"
 #include "cores/AudioEngine/AESinkFactory.h"
 #include "cores/AudioEngine/Utils/AEUtil.h"
+#include "settings/AdvancedSettings.h"
 #include "settings/Settings.h"
+#include "settings/SettingsComponent.h"
 #include "utils/StringUtils.h"
 #include "utils/TimeUtils.h"
 #include "utils/log.h"
 
 #include "platform/android/activity/XBMCApp.h"
+
+#include <numeric>
 
 #include <androidjni/AudioFormat.h>
 #include <androidjni/AudioManager.h>
@@ -90,27 +94,6 @@ static AEChannel AUDIOTRACKChannelToAEChannel(int atChannel)
   return aeChannel;
 }
 
-static int AEChannelToAUDIOTRACKChannel(AEChannel aeChannel)
-{
-  int atChannel;
-  switch (aeChannel)
-  {
-    case AE_CH_FL:    atChannel = CJNIAudioFormat::CHANNEL_OUT_FRONT_LEFT; break;
-    case AE_CH_FR:    atChannel = CJNIAudioFormat::CHANNEL_OUT_FRONT_RIGHT; break;
-    case AE_CH_FC:    atChannel = CJNIAudioFormat::CHANNEL_OUT_FRONT_CENTER; break;
-    case AE_CH_LFE:   atChannel = CJNIAudioFormat::CHANNEL_OUT_LOW_FREQUENCY; break;
-    case AE_CH_BL:    atChannel = CJNIAudioFormat::CHANNEL_OUT_BACK_LEFT; break;
-    case AE_CH_BR:    atChannel = CJNIAudioFormat::CHANNEL_OUT_BACK_RIGHT; break;
-    case AE_CH_SL:    atChannel = CJNIAudioFormat::CHANNEL_OUT_SIDE_LEFT; break;
-    case AE_CH_SR:    atChannel = CJNIAudioFormat::CHANNEL_OUT_SIDE_RIGHT; break;
-    case AE_CH_BC:    atChannel = CJNIAudioFormat::CHANNEL_OUT_BACK_CENTER; break;
-    case AE_CH_FLOC:  atChannel = CJNIAudioFormat::CHANNEL_OUT_FRONT_LEFT_OF_CENTER; break;
-    case AE_CH_FROC:  atChannel = CJNIAudioFormat::CHANNEL_OUT_FRONT_RIGHT_OF_CENTER; break;
-    default:          atChannel = CJNIAudioFormat::CHANNEL_INVALID; break;
-  }
-  return atChannel;
-}
-
 static CAEChannelInfo AUDIOTRACKChannelMaskToAEChannelMap(int atMask)
 {
   CAEChannelInfo info;
@@ -130,26 +113,17 @@ static int AEChannelMapToAUDIOTRACKChannelMask(CAEChannelInfo info)
 {
   info.ResolveChannels(CAEChannelInfo(KnownChannels));
 
-  // Detect layouts with 6 channels including one LFE channel
-  // We currently support the following layouts:
-  // 5.1            FL+FR+FC+LFE+BL+BR
-  // 5.1(side)      FL+FR+FC+LFE+SL+SR
-  // According to CEA-861-D only RR and RL are defined
-  // Therefore we let Android decide about the 5.1 mapping
-  // For 8 channel layouts including one LFE channel
-  // we leave the same decision to Android
-  if (info.Count() == 6 && info.HasChannel(AE_CH_LFE))
-    return CJNIAudioFormat::CHANNEL_OUT_5POINT1;
+  // Sadly Android is quite limited these days with supported formats
+  // Therefore only distinguish between Stereo, 5.1 and 7.1
+  // simply by the number of speakers.
 
-  if (info.Count() == 8 && info.HasChannel(AE_CH_LFE))
+  if (info.Count() > 6)
     return CJNIAudioFormat::CHANNEL_OUT_7POINT1_SURROUND;
 
-  int atMask = 0;
+  if (info.Count() > 2)
+    return CJNIAudioFormat::CHANNEL_OUT_5POINT1;
 
-  for (unsigned int i = 0; i < info.Count(); i++)
-    atMask |= AEChannelToAUDIOTRACKChannel(info[i]);
-
-  return atMask;
+  return CJNIAudioFormat::CHANNEL_OUT_STEREO;
 }
 
 jni::CJNIAudioTrack *CAESinkAUDIOTRACK::CreateAudioTrack(int stream, int sampleRate, int channelMask, int encoding, int bufferSize)
@@ -190,7 +164,8 @@ int CAESinkAUDIOTRACK::AudioTrackWrite(char* audioData, int offsetInBytes, int s
     if (m_floatbuf.size() != (sizeInBytes - offsetInBytes) / sizeof(float))
       m_floatbuf.resize((sizeInBytes - offsetInBytes) / sizeof(float));
     memcpy(m_floatbuf.data(), audioData + offsetInBytes, sizeInBytes - offsetInBytes);
-    written = m_at_jni->write(m_floatbuf, 0, (sizeInBytes - offsetInBytes) / sizeof(float), CJNIAudioTrack::WRITE_BLOCKING);
+    written = m_at_jni->write(m_floatbuf, 0, (sizeInBytes - offsetInBytes) / sizeof(float),
+                              CJNIAudioTrack::WRITE_BLOCKING);
     written *= sizeof(float);
   }
   else if (m_jniAudioFormat == CJNIAudioFormat::ENCODING_IEC61937)
@@ -198,10 +173,8 @@ int CAESinkAUDIOTRACK::AudioTrackWrite(char* audioData, int offsetInBytes, int s
     if (m_shortbuf.size() != (sizeInBytes - offsetInBytes) / sizeof(int16_t))
       m_shortbuf.resize((sizeInBytes - offsetInBytes) / sizeof(int16_t));
     memcpy(m_shortbuf.data(), audioData + offsetInBytes, sizeInBytes - offsetInBytes);
-    if (CJNIBase::GetSDKVersion() >= 23)
-      written = m_at_jni->write(m_shortbuf, 0, (sizeInBytes - offsetInBytes) / sizeof(int16_t), CJNIAudioTrack::WRITE_BLOCKING);
-    else
-      written = m_at_jni->write(m_shortbuf, 0, (sizeInBytes - offsetInBytes) / sizeof(int16_t));
+    written = m_at_jni->write(m_shortbuf, 0, (sizeInBytes - offsetInBytes) / sizeof(int16_t),
+                              CJNIAudioTrack::WRITE_BLOCKING);
     written *= sizeof(uint16_t);
   }
   else
@@ -209,10 +182,8 @@ int CAESinkAUDIOTRACK::AudioTrackWrite(char* audioData, int offsetInBytes, int s
     if (static_cast<int>(m_charbuf.size()) != (sizeInBytes - offsetInBytes))
       m_charbuf.resize(sizeInBytes - offsetInBytes);
     memcpy(m_charbuf.data(), audioData + offsetInBytes, sizeInBytes - offsetInBytes);
-    if (CJNIBase::GetSDKVersion() >= 23)
-      written = m_at_jni->write(m_charbuf, 0, sizeInBytes - offsetInBytes, CJNIAudioTrack::WRITE_BLOCKING);
-    else
-      written = m_at_jni->write(m_charbuf, 0, sizeInBytes - offsetInBytes);
+    written =
+        m_at_jni->write(m_charbuf, 0, sizeInBytes - offsetInBytes, CJNIAudioTrack::WRITE_BLOCKING);
   }
 
   return written;
@@ -360,10 +331,17 @@ bool CAESinkAUDIOTRACK::Initialize(AEAudioFormat &format, std::string &device)
     m_encoding = AEStreamFormatToATFormat(m_format.m_streamInfo.m_type);
     m_format.m_channelLayout = AE_CH_LAYOUT_2_0;
 
-    if (m_format.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_DTSHD_MA ||
-        m_format.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD)
+    if (m_format.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_DTSHD_MA)
+    {
+      // we keep the 48 khz sample rate, reason: Androids packer only packs DTS Core
+      // even if we ask for DTS-HD-MA it seems.
+      m_format.m_channelLayout = AE_CH_LAYOUT_7_1;
+    }
+
+    if (m_format.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD)
     {
       m_format.m_channelLayout = AE_CH_LAYOUT_7_1;
+      m_sink_sampleRate = 192000;
     }
 
     // EAC3 needs real samplerate not the modulation
@@ -404,7 +382,10 @@ bool CAESinkAUDIOTRACK::Initialize(AEAudioFormat &format, std::string &device)
   {
     m_passthrough = false;
     m_format.m_sampleRate     = m_sink_sampleRate;
-    if (m_sinkSupportsMultiChannelFloat)
+    // this is temporarily opt-in via advancedsettings only
+    const bool allowMultiFloat =
+        CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_AllowMultiChannelFloat;
+    if (allowMultiFloat && m_sinkSupportsMultiChannelFloat)
     {
       m_encoding = CJNIAudioFormat::ENCODING_PCM_FLOAT;
       m_format.m_dataFormat     = AE_FMT_FLOAT;
@@ -420,6 +401,9 @@ bool CAESinkAUDIOTRACK::Initialize(AEAudioFormat &format, std::string &device)
       m_format.m_dataFormat     = AE_FMT_S16LE;
     }
   }
+
+  m_superviseAudioDelay =
+      CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_superviseAudioDelay;
 
   int atChannelMask = AEChannelMapToAUDIOTRACKChannelMask(m_format.m_channelLayout);
   m_format.m_channelLayout  = AUDIOTRACKChannelMaskToAEChannelMap(atChannelMask);
@@ -483,15 +467,15 @@ bool CAESinkAUDIOTRACK::Initialize(AEAudioFormat &format, std::string &device)
           rawlength_in_seconds = 8 * m_format.m_streamInfo.GetDuration() / 1000;
           break;
         case CAEStreamInfo::STREAM_TYPE_AC3:
-           ac3FrameSize = m_format.m_streamInfo.m_ac3FrameSize;
-           if (ac3FrameSize == 0)
-             ac3FrameSize = 1536; // fallback if not set, e.g. Transcoding
-           m_min_buffer_size = std::max(m_min_buffer_size * 3, ac3FrameSize * 8);
-           m_format.m_frames = m_min_buffer_size;
-           multiplier = m_min_buffer_size / ac3FrameSize; // int division is wanted
-           rawlength_in_seconds = multiplier * m_format.m_streamInfo.GetDuration() / 1000;
+          ac3FrameSize = m_format.m_streamInfo.m_frameSize;
+          if (ac3FrameSize == 0)
+            ac3FrameSize = 1536; // fallback if not set, e.g. Transcoding
+          m_min_buffer_size = std::max(m_min_buffer_size * 3, ac3FrameSize * 8);
+          m_format.m_frames = m_min_buffer_size;
+          multiplier = m_min_buffer_size / ac3FrameSize; // int division is wanted
+          rawlength_in_seconds = multiplier * m_format.m_streamInfo.GetDuration() / 1000;
           break;
-          // EAC3 is currently not supported
+        // EAC3 is currently not supported
         case CAEStreamInfo::STREAM_TYPE_EAC3:
           m_min_buffer_size = 2 * 10752; // least common multiple of 1792 and 1536
           m_format.m_frames = m_min_buffer_size; // needs testing
@@ -786,25 +770,16 @@ void CAESinkAUDIOTRACK::GetDelay(AEDelayStatus& status)
 
   // the RAW hack for simulating pause bursts should not come
   // into the way of hw delay
+  if (m_pause_ms > m_audiotrackbuffer_sec * 1000.0)
+    m_pause_ms = m_audiotrackbuffer_sec * 1000.0;
+
   if (m_pause_ms > 0.0)
   {
-    double difference = (m_audiotrackbuffer_sec - delay) * 1000;
-    if (usesAdvancedLogging)
-    {
-      CLog::Log(LOGINFO, "Faking Pause-Bursts in Delay - returning smoothed {} ms Original {} ms",
-                m_audiotrackbuffer_sec * 1000, delay * 1000);
-      CLog::Log(LOGINFO, "Difference: {} ms m_pause_ms {}", difference, m_pause_ms);
-    }
-    // buffer not yet reached
-    if (difference > 0.0)
+    if (delay < m_audiotrackbuffer_sec)
       delay = m_audiotrackbuffer_sec;
     else
-    {
-      CLog::Log(LOGINFO, "Resetting pause bursts as buffer level was reached! (2)");
-      m_pause_ms = 0.0;
-    }
+      m_audiotrackbuffer_sec = delay;
   }
-
   const double d = GetMovingAverageDelay(delay);
 
   // Audiotrack is caching more than we thought it would
@@ -816,6 +791,8 @@ void CAESinkAUDIOTRACK::GetDelay(AEDelayStatus& status)
   if (usesAdvancedLogging)
   {
     CLog::Log(LOGINFO, "Delay Current: {:f} ms", d * 1000);
+    if (m_pause_ms > 0.0)
+      CLog::Log(LOGINFO, "Delay faked due to pause delay: {:f} ms", m_pause_ms);
   }
   status.SetDelay(d);
 }
@@ -838,23 +815,34 @@ unsigned int CAESinkAUDIOTRACK::AddPackets(uint8_t **data, unsigned int frames, 
   if (!IsInitialized())
     return INT_MAX;
 
-  // If the sink did not move twice the buffer size in time it was opened
+  // If the sink did not move twice the buffer size at least 400 ms in time it was opened
   // take action. Some sinks open with e.g. 128 ms nicely but under the
   // hood need a bit more samples to start moving on sink start.
-  // Simple equation: N x stime packages in ms > 2 configured audiotrack_buffer in ms
+  // Simple equation: N x stime packages in ms > 400 ms or 2 buffer sizes in ms
   // will result in the error condition triggering.
 
   const bool isRawPt = m_passthrough && !m_info.m_wantsIECPassthrough;
+  bool forceBlock = false;
   if (!isRawPt)
   {
-    const double max_stuck_delay_ms = m_audiotrackbuffer_sec_orig * 2000.0;
+    const double max_stuck_delay_ms = std::max((m_audiotrackbuffer_sec_orig * 2000.0), 400.0);
     const double stime_ms = 1000.0 * frames / m_format.m_sampleRate;
 
-    if (m_stuckCounter * stime_ms > max_stuck_delay_ms)
+    if (m_superviseAudioDelay)
     {
-      CLog::Log(LOGERROR, "Sink got stuck with {:f} ms - ask AE for reopening", max_stuck_delay_ms);
-      usleep(max_stuck_delay_ms * 1000);
-      return INT_MAX;
+      if (m_stuckCounter * stime_ms > max_stuck_delay_ms)
+      {
+        CLog::Log(LOGERROR, "Sink got stuck with {:f} ms - ask AE for reopening",
+                  max_stuck_delay_ms);
+        usleep(max_stuck_delay_ms * 1000);
+        return INT_MAX;
+      }
+      else if (m_stuckCounter * stime_ms >= m_audiotrackbuffer_sec_orig * 1000.0)
+      {
+        CLog::LogF(LOGDEBUG, "Sink filling too fast - throttleing - Fillstate: {} ms!",
+                   (m_stuckCounter * stime_ms));
+        forceBlock = true;
+      }
     }
   }
 
@@ -945,35 +933,27 @@ unsigned int CAESinkAUDIOTRACK::AddPackets(uint8_t **data, unsigned int frames, 
   }
   unsigned int written_frames = static_cast<unsigned int>(written / m_format.m_frameSize);
   double time_to_add_ms = 1000.0 * (CurrentHostCounter() - startTime) / CurrentHostFrequency();
+  // Get Back in Sync with faked pause bursts
   if (m_passthrough && !m_info.m_wantsIECPassthrough)
   {
-    // AT does not consume in a blocking way - it runs ahead and blocks
-    // exactly once with the last package for some 100 ms
-    double extra_sleep = 0.0;
-    if (time_to_add_ms < m_format.m_streamInfo.GetDuration())
-      extra_sleep = (m_format.m_streamInfo.GetDuration() - time_to_add_ms) / 2;
-
-    // if there is still place, just add it without blocking
-    if (m_delay < (m_audiotrackbuffer_sec - (m_format.m_streamInfo.GetDuration() / 1000.0)))
-      extra_sleep = 0;
-
     if (m_pause_ms > 0.0)
     {
-      extra_sleep = 0;
-      m_pause_ms -= m_format.m_streamInfo.GetDuration();
+      // Idea here is: Slowly correct the wrong buffer so that AE should not realize
+      // but do not underrun while doing so
+      double extra_sleep_ms = m_format.m_streamInfo.GetDuration() / 2.0 - time_to_add_ms;
+      if (extra_sleep_ms > 0)
+      {
+        CLog::Log(LOGDEBUG, "Sleeping for {:f}", extra_sleep_ms);
+        m_pause_ms -= extra_sleep_ms;
+        usleep(extra_sleep_ms * 1000);
+      }
       if (m_pause_ms <= 0.0)
       {
         m_pause_ms = 0.0;
-        CLog::Log(LOGINFO, "Resetting pause bursts as buffer level was reached! (1)");
+        extra_sleep_ms = 0.0;
+        CLog::Log(LOGDEBUG, "Resetting pause bursts as buffer level was reached! (1)");
       }
     }
-    else
-    {
-      if (m_delay > 0.3)
-        extra_sleep *= 2;
-    }
-
-    usleep(extra_sleep * 1000);
   }
   else
   {
@@ -987,7 +967,19 @@ unsigned int CAESinkAUDIOTRACK::AddPackets(uint8_t **data, unsigned int frames, 
         usleep(time_off * 500); // sleep half the error on average away
     }
   }
-
+  if (forceBlock)
+  {
+    // Sink consumes too fast - block the frames minus they needed to add
+    // update time to add, so that above else case won't make us sleep twice the amount for the
+    // superviseaudiodelay use-case.
+    time_to_add_ms = 1000.0 * (CurrentHostCounter() - startTime) / CurrentHostFrequency();
+    double extra_sleep_ms = (1000.0 * frames / m_format.m_sampleRate) - time_to_add_ms;
+    if (extra_sleep_ms > 0.0)
+    {
+      CLog::LogF(LOGDEBUG, "Extra Sleeping for {:f}", extra_sleep_ms);
+      usleep(extra_sleep_ms * 1000);
+    }
+  }
   return written_frames;
 }
 
@@ -1098,6 +1090,8 @@ void CAESinkAUDIOTRACK::UpdateAvailablePassthroughCapabilities(bool isRaw)
   m_info.m_wantsIECPassthrough = false;
   m_info.m_dataFormats.push_back(AE_FMT_RAW);
   m_info.m_streamTypes.clear();
+  bool supports_192khz = m_sink_sampleRates.find(192000) != m_sink_sampleRates.end();
+
   if (isRaw)
   {
     bool canDoAC3 = false;
@@ -1141,26 +1135,23 @@ void CAESinkAUDIOTRACK::UpdateAvailablePassthroughCapabilities(bool isRaw)
       }
     }
 
-    if (CJNIAudioManager::GetSDKVersion() >= 23)
+    if (CJNIAudioFormat::ENCODING_DTS_HD != -1)
     {
-      if (CJNIAudioFormat::ENCODING_DTS_HD != -1)
+      if (VerifySinkConfiguration(48000, AEChannelMapToAUDIOTRACKChannelMask(AE_CH_LAYOUT_7_1),
+                                  CJNIAudioFormat::ENCODING_DTS_HD, true))
       {
-        if (VerifySinkConfiguration(48000, AEChannelMapToAUDIOTRACKChannelMask(AE_CH_LAYOUT_7_1),
-                                    CJNIAudioFormat::ENCODING_DTS_HD, true))
-        {
-          CLog::Log(LOGDEBUG, "Firmware implements DTS-HD RAW");
-          m_info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD);
-          m_info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD_MA);
-        }
+        CLog::Log(LOGDEBUG, "Firmware implements DTS-HD RAW");
+        m_info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD);
+        m_info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD_MA);
       }
-      if (CJNIAudioFormat::ENCODING_DOLBY_TRUEHD != -1)
+    }
+    if (CJNIAudioFormat::ENCODING_DOLBY_TRUEHD != -1 && supports_192khz)
+    {
+      if (VerifySinkConfiguration(192000, AEChannelMapToAUDIOTRACKChannelMask(AE_CH_LAYOUT_7_1),
+                                  CJNIAudioFormat::ENCODING_DOLBY_TRUEHD, true))
       {
-        if (VerifySinkConfiguration(48000, AEChannelMapToAUDIOTRACKChannelMask(AE_CH_LAYOUT_7_1),
-                                    CJNIAudioFormat::ENCODING_DOLBY_TRUEHD, true))
-        {
-          CLog::Log(LOGDEBUG, "Firmware implements TrueHD RAW");
-          m_info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_TRUEHD);
-        }
+        CLog::Log(LOGDEBUG, "Firmware implements TrueHD RAW");
+        m_info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_TRUEHD);
       }
     }
   }
@@ -1174,7 +1165,6 @@ void CAESinkAUDIOTRACK::UpdateAvailablePassthroughCapabilities(bool isRaw)
                                                   CJNIAudioFormat::ENCODING_IEC61937);
       if (supports_iec)
       {
-        bool supports_192khz = m_sink_sampleRates.find(192000) != m_sink_sampleRates.end();
         m_info.m_wantsIECPassthrough = true;
         m_info.m_streamTypes.clear();
         m_info.m_dataFormats.push_back(AE_FMT_RAW);
@@ -1221,11 +1211,10 @@ void CAESinkAUDIOTRACK::UpdateAvailablePCMCapabilities()
 
   int encoding = CJNIAudioFormat::ENCODING_PCM_16BIT;
   m_sinkSupportsFloat = VerifySinkConfiguration(native_sampleRate, CJNIAudioFormat::CHANNEL_OUT_STEREO, CJNIAudioFormat::ENCODING_PCM_FLOAT);
-  // Only try for Android 7 or later - there are a lot of old devices that open successfully
-  // but won't work correctly under the hood (famouse example: old FireTV)
-  // As even newish devices like Android Chromecast don't do it properly - just disable it ... and use 16 bit Integer
-  //if (CJNIAudioManager::GetSDKVersion() > 23)
-  //  m_sinkSupportsMultiChannelFloat = VerifySinkConfiguration(native_sampleRate, CJNIAudioFormat::CHANNEL_OUT_7POINT1_SURROUND, CJNIAudioFormat::ENCODING_PCM_FLOAT);
+
+  m_sinkSupportsMultiChannelFloat =
+      VerifySinkConfiguration(native_sampleRate, CJNIAudioFormat::CHANNEL_OUT_7POINT1_SURROUND,
+                              CJNIAudioFormat::ENCODING_PCM_FLOAT);
 
   if (m_sinkSupportsFloat)
   {
@@ -1269,7 +1258,6 @@ double CAESinkAUDIOTRACK::GetMovingAverageDelay(double newestdelay)
 
   return d;
 #endif
-
   m_linearmovingaverage.push_back(newestdelay);
 
   // new values are in the back, old values are in the front
@@ -1282,12 +1270,8 @@ double CAESinkAUDIOTRACK::GetMovingAverageDelay(double newestdelay)
     m_linearmovingaverage.pop_front();
     size--;
   }
-  // m_{LWMA}^{(n)}(t) = \frac{2}{n (n+1)} \sum_{i=1}^n i \; x(t-n+i)
-  const double denom = 2.0 / (size * (size + 1));
-  double sum = 0.0;
-  for (size_t i = 0; i < m_linearmovingaverage.size(); i++)
-    sum += (i + 1) * m_linearmovingaverage.at(i);
+  double sum = std::accumulate(m_linearmovingaverage.begin(), m_linearmovingaverage.end(), 0.0);
 
-  return sum * denom;
+  return sum / size;
 }
 

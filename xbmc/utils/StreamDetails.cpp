@@ -171,8 +171,9 @@ bool CStreamDetailSubtitle::IsWorseThan(const CStreamDetail &that) const
 
   // the best subtitle should be the one in the user's preferred language
   // If preferred language is set to "original" this is "eng"
-  return m_strLanguage.empty() ||
-    g_LangCodeExpander.CompareISO639Codes(static_cast<const CStreamDetailSubtitle &>(that).m_strLanguage, g_langInfo.GetSubtitleLanguage());
+  return m_strLanguage.empty() || g_LangCodeExpander.CompareISO639Codes(
+                                      static_cast<const CStreamDetailSubtitle&>(that).m_strLanguage,
+                                      g_langInfo.GetSubtitleLanguage(true));
 }
 
 CStreamDetailSubtitle& CStreamDetailSubtitle::operator=(const CStreamDetailSubtitle &that)
@@ -582,14 +583,15 @@ std::string CStreamDetails::VideoDimsToResolutionDescription(int iWidth, int iHe
   if (iWidth == 0 || iHeight == 0)
     return "";
 
-  else if (iWidth <= 720 && iHeight <= 480)
+  // Anamorphic NTSC DVD
+  else if (iWidth <= 854 && iHeight <= 480)
     return "480";
-  // 720x576 (PAL) (768 when rescaled for square pixels)
-  else if (iWidth <= 768 && iHeight <= 576)
-    return "576";
   // 960x540 (sometimes 544 which is multiple of 16)
   else if (iWidth <= 960 && iHeight <= 544)
     return "540";
+  // includes 768x576, 720x576 and 1024x576
+  else if (iWidth <= 1024 && iHeight <= 576)
+    return "576";
   // 1280x720
   else if (iWidth <= 1280 && iHeight <= 962)
     return "720";

@@ -82,7 +82,7 @@ protected:
   bool m_hasLightMetadata = false;
   AVContentLightMetadata m_lightMetadata;
   bool m_toneMapping = false;
-  ETONEMAPMETHOD m_toneMappingMethod = VS_TONEMAPMETHOD_REINHARD;
+  ETONEMAPMETHOD m_toneMappingMethod = VS_TONEMAPMETHOD_OFF;
   float m_toneMappingParam = 1.0;
 
   bool m_colorConversion{false};
@@ -134,7 +134,8 @@ public:
                            AVColorPrimaries srcPrimaries,
                            bool toneMap,
                            ETONEMAPMETHOD toneMapMethod,
-                           std::shared_ptr<GLSLOutput> output);
+                           std::shared_ptr<GLSLOutput> output,
+                           bool gammaCorrection);
 };
 
 class YUV2RGBFilterShader4 : public BaseYUV2RGBGLSLShader

@@ -34,6 +34,7 @@ enum class SettingOptionsType {
 };
 
 class CSetting;
+class TiXmlNode;
 using SettingPtr = std::shared_ptr<CSetting>;
 using SettingConstPtr = std::shared_ptr<const CSetting>;
 using SettingList = std::vector<SettingPtr>;
@@ -325,7 +326,7 @@ public:
     m_optionsFiller = optionsFiller;
     m_optionsFillerData = data;
   }
-  IntegerSettingOptions GetDynamicOptions() const { return m_dynamicOptions; }
+  const IntegerSettingOptions& GetDynamicOptions() const { return m_dynamicOptions; }
   IntegerSettingOptions UpdateDynamicOptions();
   SettingOptionsSort GetOptionsSort() const { return m_optionsSort; }
   void SetOptionsSort(SettingOptionsSort optionsSort) { m_optionsSort = optionsSort; }
@@ -469,7 +470,7 @@ public:
     m_optionsFiller = optionsFiller;
     m_optionsFillerData = data;
   }
-  StringSettingOptions GetDynamicOptions() const { return m_dynamicOptions; }
+  const StringSettingOptions& GetDynamicOptions() const { return m_dynamicOptions; }
   StringSettingOptions UpdateDynamicOptions();
   SettingOptionsSort GetOptionsSort() const { return m_optionsSort; }
   void SetOptionsSort(SettingOptionsSort optionsSort) { m_optionsSort = optionsSort; }

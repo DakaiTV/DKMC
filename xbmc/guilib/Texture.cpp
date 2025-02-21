@@ -15,10 +15,14 @@
 #include "filesystem/File.h"
 #include "filesystem/ResourceFile.h"
 #include "filesystem/XbtFile.h"
+#include "guilib/TextureBase.h"
+#include "guilib/TextureFormats.h"
 #include "guilib/iimage.h"
 #include "guilib/imagefactory.h"
+#include "messaging/ApplicationMessenger.h"
 #include "utils/URIUtils.h"
 #include "utils/log.h"
+#include "windowing/WinSystem.h"
 #if defined(TARGET_DARWIN_EMBEDDED)
 #include <ImageIO/ImageIO.h>
 #include "filesystem/File.h"
@@ -48,70 +52,6 @@ CTexture::~CTexture()
 {
   KODI::MEMORY::AlignedFree(m_pixels);
   m_pixels = NULL;
-}
-
-void CTexture::Allocate(unsigned int width, unsigned int height, XB_FMT format)
-{
-  m_imageWidth = m_originalWidth = width;
-  m_imageHeight = m_originalHeight = height;
-  m_format = format;
-  m_orientation = 0;
-
-  m_textureWidth = m_imageWidth;
-  m_textureHeight = m_imageHeight;
-
-  if (m_format & XB_FMT_DXT_MASK)
-  {
-    while (GetPitch() < CServiceBroker::GetRenderSystem()->GetMinDXTPitch())
-      m_textureWidth += GetBlockSize();
-  }
-
-  if (!CServiceBroker::GetRenderSystem()->SupportsNPOT((m_format & XB_FMT_DXT_MASK) != 0))
-  {
-    m_textureWidth = PadPow2(m_textureWidth);
-    m_textureHeight = PadPow2(m_textureHeight);
-  }
-
-  if (m_format & XB_FMT_DXT_MASK)
-  {
-    // DXT textures must be a multiple of 4 in width and height
-    m_textureWidth = ((m_textureWidth + 3) / 4) * 4;
-    m_textureHeight = ((m_textureHeight + 3) / 4) * 4;
-  }
-  else
-  {
-    // align all textures so that they have an even width
-    // in some circumstances when we downsize a thumbnail
-    // which has an uneven number of pixels in width
-    // we crash in CPicture::ScaleImage in ffmpegs swscale
-    // because it tries to access beyond the source memory
-    // (happens on osx and ios)
-    // UPDATE: don't just update to be on an even width;
-    // ffmpegs swscale relies on a 16-byte stride on some systems
-    // so the textureWidth needs to be a multiple of 16. see ffmpeg
-    // swscale headers for more info.
-    m_textureWidth = ((m_textureWidth + 15) / 16) * 16;
-  }
-
-  // check for max texture size
-  #define CLAMP(x, y) { if (x > y) x = y; }
-  CLAMP(m_textureWidth, CServiceBroker::GetRenderSystem()->GetMaxTextureSize());
-  CLAMP(m_textureHeight, CServiceBroker::GetRenderSystem()->GetMaxTextureSize());
-  CLAMP(m_imageWidth, m_textureWidth);
-  CLAMP(m_imageHeight, m_textureHeight);
-
-  KODI::MEMORY::AlignedFree(m_pixels);
-  m_pixels = NULL;
-  if (GetPitch() * GetRows() > 0)
-  {
-    size_t size = GetPitch() * GetRows();
-    m_pixels = static_cast<unsigned char*>(KODI::MEMORY::AlignedMalloc(size, 32));
-
-    if (m_pixels == nullptr)
-    {
-      CLog::Log(LOGERROR, "{} - Could not allocate {} bytes. Out of memory.", __FUNCTION__, size);
-    }
-  }
 }
 
 void CTexture::Update(unsigned int width,
@@ -156,43 +96,10 @@ void CTexture::Update(unsigned int width,
     LoadToGPU();
 }
 
-void CTexture::ClampToEdge()
-{
-  if (m_pixels == nullptr)
-    return;
-
-  unsigned int imagePitch = GetPitch(m_imageWidth);
-  unsigned int imageRows = GetRows(m_imageHeight);
-  unsigned int texturePitch = GetPitch(m_textureWidth);
-  unsigned int textureRows = GetRows(m_textureHeight);
-  if (imagePitch < texturePitch)
-  {
-    unsigned int blockSize = GetBlockSize();
-    unsigned char *src = m_pixels + imagePitch - blockSize;
-    unsigned char *dst = m_pixels;
-    for (unsigned int y = 0; y < imageRows; y++)
-    {
-      for (unsigned int x = imagePitch; x < texturePitch; x += blockSize)
-        memcpy(dst + x, src, blockSize);
-      dst += texturePitch;
-    }
-  }
-
-  if (imageRows < textureRows)
-  {
-    unsigned char *dst = m_pixels + imageRows * texturePitch;
-    for (unsigned int y = imageRows; y < textureRows; y++)
-    {
-      memcpy(dst, dst - texturePitch, texturePitch);
-      dst += texturePitch;
-    }
-  }
-}
-
 std::unique_ptr<CTexture> CTexture::LoadFromFile(const std::string& texturePath,
                                                  unsigned int idealWidth,
                                                  unsigned int idealHeight,
-                                                 bool requirePixels,
+                                                 CAspectRatio::AspectRatio aspectRatio,
                                                  const std::string& strMimeType)
 {
 #if defined(TARGET_ANDROID)
@@ -218,7 +125,7 @@ std::unique_ptr<CTexture> CTexture::LoadFromFile(const std::string& texturePath,
   }
 #endif
   std::unique_ptr<CTexture> texture = CTexture::CreateTexture();
-  if (texture->LoadFromFileInternal(texturePath, idealWidth, idealHeight, requirePixels, strMimeType))
+  if (texture->LoadFromFileInternal(texturePath, idealWidth, idealHeight, aspectRatio, strMimeType))
     return texture;
   return {};
 }
@@ -227,18 +134,20 @@ std::unique_ptr<CTexture> CTexture::LoadFromFileInMemory(unsigned char* buffer,
                                                          size_t bufferSize,
                                                          const std::string& mimeType,
                                                          unsigned int idealWidth,
-                                                         unsigned int idealHeight)
+                                                         unsigned int idealHeight,
+                                                         CAspectRatio::AspectRatio aspectRatio)
 {
   std::unique_ptr<CTexture> texture = CTexture::CreateTexture();
-  if (texture->LoadFromFileInMem(buffer, bufferSize, mimeType, idealWidth, idealHeight))
+  if (texture->LoadFromFileInMem(buffer, bufferSize, mimeType, idealWidth, idealHeight,
+                                 aspectRatio))
     return texture;
   return {};
 }
 
 bool CTexture::LoadFromFileInternal(const std::string& texturePath,
-                                    unsigned int maxWidth,
-                                    unsigned int maxHeight,
-                                    bool requirePixels,
+                                    unsigned int idealWidth,
+                                    unsigned int idealHeight,
+                                    CAspectRatio::AspectRatio aspectRatio,
                                     const std::string& strMimeType)
 {
   if (URIUtils::HasExtension(texturePath, ".dds"))
@@ -251,11 +160,6 @@ bool CTexture::LoadFromFileInternal(const std::string& texturePath,
     }
     return false;
   }
-
-  unsigned int width = maxWidth ? std::min(maxWidth, CServiceBroker::GetRenderSystem()->GetMaxTextureSize()) :
-                                  CServiceBroker::GetRenderSystem()->GetMaxTextureSize();
-  unsigned int height = maxHeight ? std::min(maxHeight, CServiceBroker::GetRenderSystem()->GetMaxTextureSize()) :
-                                    CServiceBroker::GetRenderSystem()->GetMaxTextureSize();
 
   // Read image into memory to use our vfs
   XFILE::CFile file;
@@ -279,9 +183,21 @@ bool CTexture::LoadFromFileInternal(const std::string& texturePath,
     XFILE::CXbtFile xbtFile;
     if (!xbtFile.Open(url))
       return false;
-
-    return LoadFromMemory(xbtFile.GetImageWidth(), xbtFile.GetImageHeight(), 0,
-                          xbtFile.GetImageFormat(), xbtFile.HasImageAlpha(), buf.data());
+    if (xbtFile.GetKDFormatType())
+    {
+      return UploadFromMemory(xbtFile.GetImageWidth(), xbtFile.GetImageHeight(), 0, buf.data(),
+                              xbtFile.GetKDFormat(), xbtFile.GetKDAlpha(), xbtFile.GetKDSwizzle());
+    }
+    else if (xbtFile.GetImageFormat() == XB_FMT_A8R8G8B8)
+    {
+      KD_TEX_ALPHA alpha = xbtFile.HasImageAlpha() ? KD_TEX_ALPHA_STRAIGHT : KD_TEX_ALPHA_OPAQUE;
+      return UploadFromMemory(xbtFile.GetImageWidth(), xbtFile.GetImageHeight(), 0, buf.data(),
+                              KD_TEX_FMT_SDR_BGRA8, alpha, KD_TEX_SWIZ_RGBA);
+    }
+    else
+    {
+      return false;
+    }
   }
 
   IImage* pImage;
@@ -291,7 +207,7 @@ bool CTexture::LoadFromFileInternal(const std::string& texturePath,
   else
     pImage = ImageFactory::CreateLoaderFromMimeType(strMimeType);
 
-  if (!LoadIImage(pImage, buf.data(), buf.size(), width, height))
+  if (!LoadIImage(pImage, buf.data(), buf.size(), idealWidth, idealHeight, aspectRatio))
   {
     CLog::Log(LOGDEBUG, "{} - Load of {} failed.", __FUNCTION__, CURL::GetRedacted(texturePath));
     delete pImage;
@@ -305,19 +221,15 @@ bool CTexture::LoadFromFileInternal(const std::string& texturePath,
 bool CTexture::LoadFromFileInMem(unsigned char* buffer,
                                  size_t size,
                                  const std::string& mimeType,
-                                 unsigned int maxWidth,
-                                 unsigned int maxHeight)
+                                 unsigned int idealWidth,
+                                 unsigned int idealHeight,
+                                 CAspectRatio::AspectRatio aspectRatio)
 {
   if (!buffer || !size)
     return false;
 
-  unsigned int width = maxWidth ? std::min(maxWidth, CServiceBroker::GetRenderSystem()->GetMaxTextureSize()) :
-                                  CServiceBroker::GetRenderSystem()->GetMaxTextureSize();
-  unsigned int height = maxHeight ? std::min(maxHeight, CServiceBroker::GetRenderSystem()->GetMaxTextureSize()) :
-                                    CServiceBroker::GetRenderSystem()->GetMaxTextureSize();
-
   IImage* pImage = ImageFactory::CreateLoaderFromMimeType(mimeType);
-  if(!LoadIImage(pImage, buffer, size, width, height))
+  if (!LoadIImage(pImage, buffer, size, idealWidth, idealHeight, aspectRatio))
   {
     delete pImage;
     return false;
@@ -329,29 +241,117 @@ bool CTexture::LoadFromFileInMem(unsigned char* buffer,
 bool CTexture::LoadIImage(IImage* pImage,
                           unsigned char* buffer,
                           unsigned int bufSize,
-                          unsigned int width,
-                          unsigned int height)
+                          unsigned int idealWidth,
+                          unsigned int idealHeight,
+                          CAspectRatio::AspectRatio aspectRatio)
 {
-  if(pImage != NULL && pImage->LoadImageFromMemory(buffer, bufSize, width, height))
+  if (pImage == nullptr)
+    return false;
+
+  unsigned int maxTextureSize = CServiceBroker::GetRenderSystem()->GetMaxTextureSize();
+  if (!pImage->LoadImageFromMemory(buffer, bufSize, maxTextureSize, maxTextureSize))
+    return false;
+
+  if (pImage->Width() == 0 || pImage->Height() == 0)
+    return false;
+
+  unsigned int width = idealWidth ? idealWidth : pImage->Width();
+  unsigned int height = idealHeight ? idealHeight : pImage->Height();
+
+  if (aspectRatio == CAspectRatio::STRETCH)
   {
-    if (pImage->Width() > 0 && pImage->Height() > 0)
+    // noop
+  }
+  else if (aspectRatio == CAspectRatio::CENTER)
+  {
+    width = pImage->Width();
+    height = pImage->Height();
+  }
+  else
+  {
+    float aspect = (float)(pImage->Width()) / pImage->Height();
+    unsigned int heightFromWidth = (unsigned int)(width / aspect + 0.5f);
+    if (aspectRatio == CAspectRatio::SCALE)
     {
-      Allocate(pImage->Width(), pImage->Height(), XB_FMT_A8R8G8B8);
-      if (m_pixels != nullptr && pImage->Decode(m_pixels, GetTextureWidth(), GetRows(), GetPitch(), XB_FMT_A8R8G8B8))
-      {
-        if (pImage->Orientation())
-          m_orientation = pImage->Orientation() - 1;
-        m_hasAlpha = pImage->hasAlpha();
-        m_originalWidth = pImage->originalWidth();
-        m_originalHeight = pImage->originalHeight();
-        m_imageWidth = pImage->Width();
-        m_imageHeight = pImage->Height();
-        ClampToEdge();
-        return true;
-      }
+      if (heightFromWidth > height)
+        height = heightFromWidth;
+      else
+        width = (unsigned int)(height * aspect + 0.5f);
+    }
+    else if (aspectRatio == CAspectRatio::KEEP)
+    {
+      if (heightFromWidth > height)
+        width = (unsigned int)(height * aspect + 0.5f);
+      else
+        height = heightFromWidth;
     }
   }
-  return false;
+
+  if (width > maxTextureSize || height > maxTextureSize)
+  {
+    float aspect = (float)width / height;
+    if (width >= height)
+    {
+      width = maxTextureSize;
+      height = (unsigned int)(width / aspect + 0.5f);
+    }
+    else
+    {
+      height = maxTextureSize;
+      width = (unsigned int)(height * aspect + 0.5f);
+    }
+  }
+
+  // align all textures so that they have an even width
+  // in some circumstances when we downsize a thumbnail
+  // which has an uneven number of pixels in width
+  // we crash in CPicture::ScaleImage in ffmpegs swscale
+  // because it tries to access beyond the source memory
+  // (happens on osx and ios)
+  // UPDATE: don't just update to be on an even width;
+  // ffmpegs swscale relies on a 16-byte stride on some systems
+  // so the textureWidth needs to be a multiple of 16. see ffmpeg
+  // swscale headers for more info.
+  unsigned int textureWidth = ((width + 15) / 16) * 16;
+
+  Allocate(textureWidth, height, XB_FMT_A8R8G8B8);
+
+  m_imageWidth = std::min(m_imageWidth, textureWidth);
+
+  if (m_pixels == nullptr)
+    return false;
+
+  if (!pImage->Decode(m_pixels, width, height, GetPitch(), XB_FMT_A8R8G8B8))
+    return false;
+
+  if (pImage->Orientation())
+    m_orientation = pImage->Orientation() - 1;
+
+  m_textureAlpha = pImage->hasAlpha() ? KD_TEX_ALPHA_STRAIGHT : KD_TEX_ALPHA_OPAQUE;
+  m_originalWidth = pImage->originalWidth();
+  m_originalHeight = pImage->originalHeight();
+  m_imageWidth = pImage->Width();
+  m_imageHeight = pImage->Height();
+
+  ClampToEdge();
+
+  return true;
+}
+
+void CTexture::LoadToGPUAsync()
+{
+  // Already in main context?
+  if (CServiceBroker::GetWinSystem()->HasContext())
+    return;
+
+  if (!CServiceBroker::GetWinSystem()->BindTextureUploadContext())
+    return;
+
+  LoadToGPU();
+
+  SyncGPU();
+
+  CServiceBroker::GetWinSystem()->UnbindTextureUploadContext();
 }
 
 bool CTexture::LoadFromMemory(unsigned int width,
@@ -364,8 +364,64 @@ bool CTexture::LoadFromMemory(unsigned int width,
   m_imageWidth = m_originalWidth = width;
   m_imageHeight = m_originalHeight = height;
   m_format = format;
-  m_hasAlpha = hasAlpha;
+  m_textureAlpha = hasAlpha ? KD_TEX_ALPHA_STRAIGHT : KD_TEX_ALPHA_OPAQUE;
   Update(width, height, pitch, format, pixels, false);
+  return true;
+}
+
+bool CTexture::UploadFromMemory(unsigned int width,
+                                unsigned int height,
+                                unsigned int pitch,
+                                unsigned char* pixels,
+                                KD_TEX_FMT format,
+                                KD_TEX_ALPHA alpha,
+                                KD_TEX_SWIZ swizzle)
+{
+  m_imageWidth = m_textureWidth = m_originalWidth = width;
+  m_imageHeight = m_textureHeight = m_originalHeight = height;
+  m_textureFormat = format;
+  m_textureAlpha = alpha;
+  m_textureSwizzle = swizzle;
+
+  if (!SupportsFormat(m_textureFormat, m_textureSwizzle) && !ConvertToLegacy(width, height, pixels))
+  {
+    CLog::LogF(
+        LOGERROR,
+        "Failed to upload texture. Format {} and swizzle {} not supported by the texture pipeline.",
+        m_textureFormat, m_textureSwizzle);
+
+    m_loadedToGPU = true;
+    return false;
+  }
+
+  if (CServiceBroker::GetAppMessenger()->IsProcessThread())
+  {
+    if (m_pixels)
+    {
+      LoadToGPU();
+    }
+    else
+    {
+      // just a borrowed buffer
+      m_pixels = pixels;
+      m_bCacheMemory = true;
+      LoadToGPU();
+      m_bCacheMemory = false;
+      m_pixels = nullptr;
+    }
+  }
+  else if (!m_pixels)
+  {
+    size_t size = GetPitch() * GetRows();
+    m_pixels = static_cast<unsigned char*>(KODI::MEMORY::AlignedMalloc(size, 32));
+    if (m_pixels == nullptr)
+    {
+      CLog::LogF(LOGERROR, "Could not allocate {} bytes. Out of memory.", size);
+      return false;
+    }
+    std::memcpy(m_pixels, pixels, size);
+  }
+
   return true;
 }
 
@@ -396,100 +452,4 @@ bool CTexture::LoadPaletted(unsigned int width,
   }
   ClampToEdge();
   return true;
-}
-
-unsigned int CTexture::PadPow2(unsigned int x)
-{
-  --x;
-  x |= x >> 1;
-  x |= x >> 2;
-  x |= x >> 4;
-  x |= x >> 8;
-  x |= x >> 16;
-  return ++x;
-}
-
-bool CTexture::SwapBlueRed(unsigned char* pixels,
-                           unsigned int height,
-                           unsigned int pitch,
-                           unsigned int elements,
-                           unsigned int offset)
-{
-  if (!pixels) return false;
-  unsigned char *dst = pixels;
-  for (unsigned int y = 0; y < height; y++)
-  {
-    dst = pixels + (y * pitch);
-    for (unsigned int x = 0; x < pitch; x+=elements)
-      std::swap(dst[x+offset], dst[x+2+offset]);
-  }
-  return true;
-}
-
-unsigned int CTexture::GetPitch(unsigned int width) const
-{
-  switch (m_format)
-  {
-  case XB_FMT_DXT1:
-    return ((width + 3) / 4) * 8;
-  case XB_FMT_DXT3:
-  case XB_FMT_DXT5:
-  case XB_FMT_DXT5_YCoCg:
-    return ((width + 3) / 4) * 16;
-  case XB_FMT_A8:
-    return width;
-  case XB_FMT_RGB8:
-    return (((width + 1)* 3 / 4) * 4);
-  case XB_FMT_RGBA8:
-  case XB_FMT_A8R8G8B8:
-  default:
-    return width*4;
-  }
-}
-
-unsigned int CTexture::GetRows(unsigned int height) const
-{
-  switch (m_format)
-  {
-  case XB_FMT_DXT1:
-    return (height + 3) / 4;
-  case XB_FMT_DXT3:
-  case XB_FMT_DXT5:
-  case XB_FMT_DXT5_YCoCg:
-    return (height + 3) / 4;
-  default:
-    return height;
-  }
-}
-
-unsigned int CTexture::GetBlockSize() const
-{
-  switch (m_format)
-  {
-  case XB_FMT_DXT1:
-    return 8;
-  case XB_FMT_DXT3:
-  case XB_FMT_DXT5:
-  case XB_FMT_DXT5_YCoCg:
-    return 16;
-  case XB_FMT_A8:
-    return 1;
-  default:
-    return 4;
-  }
-}
-
-bool CTexture::HasAlpha() const
-{
-  return m_hasAlpha;
-}
-
-void CTexture::SetMipmapping()
-{
-  m_mipmapping = true;
-}
-
-bool CTexture::IsMipmapped() const
-{
-  return m_mipmapping;
 }

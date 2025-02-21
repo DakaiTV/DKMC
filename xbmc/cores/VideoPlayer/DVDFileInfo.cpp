@@ -11,33 +11,37 @@
 #include "DVDInputStreams/DVDInputStream.h"
 #include "DVDStreamInfo.h"
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "filesystem/StackDirectory.h"
 #include "guilib/Texture.h"
+#include "network/NetworkFileItemClassify.h"
 #include "pictures/Picture.h"
+#include "playlists/PlayListFileItemClassify.h"
+#include "pvr/utils/PVRStreamUtils.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/SettingsComponent.h"
 #include "utils/MemUtils.h"
 #include "utils/URIUtils.h"
 #include "utils/log.h"
+#include "video/VideoFileItemClassify.h"
 #include "video/VideoInfoTag.h"
 #ifdef HAVE_LIBBLURAY
 #include "DVDInputStreams/DVDInputStreamBluray.h"
 #endif
-#include "DVDInputStreams/DVDFactoryInputStream.h"
-#include "DVDDemuxers/DVDDemux.h"
-#include "DVDDemuxers/DVDDemuxUtils.h"
-#include "DVDDemuxers/DVDFactoryDemuxer.h"
 #include "DVDCodecs/DVDFactoryCodec.h"
 #include "DVDCodecs/Video/DVDVideoCodec.h"
 #include "DVDCodecs/Video/DVDVideoCodecFFmpeg.h"
+#include "DVDDemuxers/DVDDemux.h"
+#include "DVDDemuxers/DVDDemuxUtils.h"
 #include "DVDDemuxers/DVDDemuxVobsub.h"
+#include "DVDDemuxers/DVDFactoryDemuxer.h"
+#include "DVDInputStreams/DVDFactoryInputStream.h"
 #include "Process/ProcessInfo.h"
-
-#include "filesystem/File.h"
-#include "cores/FFmpeg.h"
 #include "TextureCache.h"
 #include "Util.h"
+#include "cores/FFmpeg.h"
+#include "filesystem/File.h"
 #include "utils/LangCodeExpander.h"
 
 #include <cstdlib>
@@ -48,6 +52,8 @@ extern "C" {
 #include <libavformat/avformat.h>
 #include <libswscale/swscale.h>
 }
+
+using namespace KODI;
 
 bool CDVDFileInfo::GetFileDuration(const std::string &path, int& duration)
 {
@@ -252,18 +258,17 @@ bool CDVDFileInfo::CanExtract(const CFileItem& fileItem)
   if (fileItem.m_bIsFolder)
     return false;
 
-  if (fileItem.IsLiveTV() ||
-      // Due to a pvr addon api design flaw (no support for multiple concurrent streams
-      // per addon instance), pvr recording thumbnail extraction does not work (reliably).
-      URIUtils::IsPVRRecording(fileItem.GetDynPath()) ||
+  if ((URIUtils::IsPVR(fileItem.GetPath()) &&
+       !PVR::UTILS::ProvidesStreamForMetaDataExtraction(fileItem)) ||
       // plugin path not fully resolved
       URIUtils::IsPlugin(fileItem.GetDynPath()) || URIUtils::IsUPnP(fileItem.GetPath()) ||
-      fileItem.IsInternetStream() || fileItem.IsDiscStub() || fileItem.IsPlayList())
+      NETWORK::IsInternetStream(fileItem) || VIDEO::IsDiscStub(fileItem) ||
+      PLAYLIST::IsPlayList(fileItem))
     return false;
 
   // mostly can't extract from discs and files from discs.
-  if (URIUtils::IsBluray(fileItem.GetPath()) || fileItem.IsBDFile() || fileItem.IsDVD() ||
-      fileItem.IsDiscImage() || fileItem.IsDVDFile(false, true))
+  if (URIUtils::IsBlurayPath(fileItem.GetPath()) || VIDEO::IsBDFile(fileItem) || fileItem.IsDVD() ||
+      fileItem.IsDiscImage() || VIDEO::IsDVDFile(fileItem, false, true))
     return false;
 
   // For HTTP/FTP we only allow extraction when on a LAN
@@ -303,11 +308,6 @@ bool CDVDFileInfo::GetFileStreamDetails(CFileItem *pItem)
   if (!pInputStream)
     return false;
 
-  if (pInputStream->IsStreamType(DVDSTREAM_TYPE_PVRMANAGER))
-  {
-    return false;
-  }
-
   if (pInputStream->IsStreamType(DVDSTREAM_TYPE_DVD) || !pInputStream->Open())
   {
     return false;
@@ -317,7 +317,10 @@ bool CDVDFileInfo::GetFileStreamDetails(CFileItem *pItem)
   if (pDemuxer)
   {
     bool retVal = DemuxerToStreamDetails(pInputStream, pDemuxer, pItem->GetVideoInfoTag()->m_streamDetails, strFileNameAndPath);
-    ProcessExternalSubtitles(pItem);
+
+    if (!pInputStream->IsStreamType(DVDSTREAM_TYPE_PVRMANAGER))
+      ProcessExternalSubtitles(pItem);
+
     delete pDemuxer;
     return retVal;
   }

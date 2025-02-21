@@ -14,6 +14,9 @@
 #include "GUIFont.h"
 #include "utils/CharsetConverter.h"
 #include "utils/StringUtils.h"
+#include "utils/log.h"
+
+#include <limits>
 
 CGUIString::CGUIString(iString start, iString end, bool carriageReturn)
 {
@@ -26,18 +29,6 @@ std::string CGUIString::GetAsString() const
   std::string text;
   for (unsigned int i = 0; i < m_text.size(); i++)
     text += (char)(m_text[i] & 0xff);
-  return text;
-}
-
-std::wstring CGUIString::GetAsWstring() const
-{
-  std::wstring text;
-  text.reserve(m_text.size());
-  // Get text without style
-  for (const auto& it : m_text)
-  {
-    text += static_cast<wchar_t>(it & 0xffff);
-  }
   return text;
 }
 
@@ -61,8 +52,8 @@ void CGUITextLayout::SetWrap(bool bWrap)
 void CGUITextLayout::Render(float x,
                             float y,
                             float angle,
-                            UTILS::COLOR::Color color,
-                            UTILS::COLOR::Color shadowColor,
+                            KODI::UTILS::COLOR::Color color,
+                            KODI::UTILS::COLOR::Color shadowColor,
                             uint32_t alignment,
                             float maxWidth,
                             bool solid)
@@ -113,12 +104,11 @@ bool CGUITextLayout::UpdateScrollinfo(CScrollInfo &scrollInfo)
   return m_font->UpdateScrollInfo(m_lines[0].m_text, scrollInfo);
 }
 
-
 void CGUITextLayout::RenderScrolling(float x,
                                      float y,
                                      float angle,
-                                     UTILS::COLOR::Color color,
-                                     UTILS::COLOR::Color shadowColor,
+                                     KODI::UTILS::COLOR::Color color,
+                                     KODI::UTILS::COLOR::Color shadowColor,
                                      uint32_t alignment,
                                      float maxWidth,
                                      const CScrollInfo& scrollInfo)
@@ -161,8 +151,8 @@ void CGUITextLayout::RenderScrolling(float x,
 
 void CGUITextLayout::RenderOutline(float x,
                                    float y,
-                                   UTILS::COLOR::Color color,
-                                   UTILS::COLOR::Color outlineColor,
+                                   KODI::UTILS::COLOR::Color color,
+                                   KODI::UTILS::COLOR::Color outlineColor,
                                    uint32_t alignment,
                                    float maxWidth)
 {
@@ -170,7 +160,7 @@ void CGUITextLayout::RenderOutline(float x,
     return;
 
   // set the outline color
-  std::vector<UTILS::COLOR::Color> outlineColors;
+  std::vector<KODI::UTILS::COLOR::Color> outlineColors;
   if (m_colors.size())
     outlineColors.push_back(outlineColor);
 
@@ -257,7 +247,7 @@ void CGUITextLayout::UpdateCommon(const std::wstring &text, float maxWidth, bool
 {
   // parse the text for style information
   vecText parsedText;
-  std::vector<UTILS::COLOR::Color> colors;
+  std::vector<KODI::UTILS::COLOR::Color> colors;
   ParseText(text, m_font ? m_font->GetStyle() : 0, m_textColor, colors, parsedText);
 
   // and update
@@ -265,7 +255,7 @@ void CGUITextLayout::UpdateCommon(const std::wstring &text, float maxWidth, bool
 }
 
 void CGUITextLayout::UpdateStyled(const vecText& text,
-                                  const std::vector<UTILS::COLOR::Color>& colors,
+                                  const std::vector<KODI::UTILS::COLOR::Color>& colors,
                                   float maxWidth,
                                   bool forceLTRReadingOrder)
 {
@@ -274,7 +264,7 @@ void CGUITextLayout::UpdateStyled(const vecText& text,
   m_colors = colors;
 
   // if we need to wrap the text, then do so
-  if (m_wrap && maxWidth > 0)
+  if (m_wrap)
     WrapText(text, maxWidth);
   else
     LineBreakText(text, m_lines);
@@ -361,7 +351,7 @@ void CGUITextLayout::Filter(std::string &text)
 {
   std::wstring utf16;
   g_charsetConverter.utf8ToW(text, utf16, false);
-  std::vector<UTILS::COLOR::Color> colors;
+  std::vector<KODI::UTILS::COLOR::Color> colors;
   vecText parsedText;
   ParseText(utf16, 0, 0xffffffff, colors, parsedText);
   utf16.clear();
@@ -372,8 +362,8 @@ void CGUITextLayout::Filter(std::string &text)
 
 void CGUITextLayout::ParseText(const std::wstring& text,
                                uint32_t defaultStyle,
-                               UTILS::COLOR::Color defaultColor,
-                               std::vector<UTILS::COLOR::Color>& colors,
+                               KODI::UTILS::COLOR::Color defaultColor,
+                               std::vector<KODI::UTILS::COLOR::Color>& colors,
                                vecText& parsedText)
 {
   // run through the string, searching for:
@@ -384,10 +374,10 @@ void CGUITextLayout::ParseText(const std::wstring& text,
   // [TABS] tab amount [/TABS] -> add tabulator space in view
 
   uint32_t currentStyle = defaultStyle; // start with the default font's style
-  UTILS::COLOR::Color currentColor = 0;
+  KODI::UTILS::COLOR::Color currentColor = 0;
 
   colors.push_back(defaultColor);
-  std::stack<UTILS::COLOR::Color> colorStack;
+  std::stack<KODI::UTILS::COLOR::Color> colorStack;
   colorStack.push(0);
 
   // these aren't independent, but that's probably not too much of an issue
@@ -399,7 +389,7 @@ void CGUITextLayout::ParseText(const std::wstring& text,
   while (pos != std::string::npos && pos + 1 < text.size())
   {
     uint32_t newStyle = 0;
-    UTILS::COLOR::Color newColor = currentColor;
+    KODI::UTILS::COLOR::Color newColor = currentColor;
     bool colorTagChange = false;
     bool newLine = false;
     int tabs = 0;
@@ -478,7 +468,7 @@ void CGUITextLayout::ParseText(const std::wstring& text,
       {
         std::string t;
         g_charsetConverter.wToUTF8(text.substr(pos + 5, finish - pos - 5), t);
-        UTILS::COLOR::Color color = CServiceBroker::GetGUI()->GetColorManager().GetColor(t);
+        KODI::UTILS::COLOR::Color color = CServiceBroker::GetGUI()->GetColorManager().GetColor(t);
         const auto& it = std::find(colors.begin(), colors.end(), color);
         if (it == colors.end())
         { // create new color
@@ -552,75 +542,103 @@ void CGUITextLayout::WrapText(const vecText &text, float maxWidth)
   if (!m_font)
     return;
 
-  int nMaxLines = (m_maxHeight > 0 && m_font->GetLineHeight() > 0)?(int)ceilf(m_maxHeight / m_font->GetLineHeight()):-1;
-
   m_lines.clear();
+
+  if (maxWidth < 0)
+  {
+    CLog::LogF(LOGWARNING, "Cannot wrap the text due to invalid max width value.");
+    return;
+  }
+
+  if (maxWidth == 0) // Unlimited max width
+  {
+    LineBreakText(text, m_lines);
+    return;
+  }
 
   std::vector<CGUIString> lines;
   LineBreakText(text, lines);
 
-  for (unsigned int i = 0; i < lines.size(); i++)
+  size_t nMaxLines;
+  if (m_maxHeight > 0 && m_font->GetLineHeight() > 0)
+    nMaxLines = static_cast<size_t>(std::ceil(m_maxHeight / m_font->GetLineHeight()));
+  else
+    nMaxLines = std::numeric_limits<size_t>::max();
+
+  // Split lines that exceed the maximum width,
+  // lines can be split by last space char or if there are no spaces by character
+  // to mimics the line behavior of word processors
+  for (const CGUIString& line : lines)
   {
-    const CGUIString &line = lines[i];
-    vecText::const_iterator lastSpace = line.m_text.begin();
+    if (m_lines.size() >= nMaxLines)
+      return;
+
+    if (line.m_text.empty()) // Blank line
+    {
+      m_lines.emplace_back(line);
+      continue;
+    }
+
     vecText::const_iterator pos = line.m_text.begin();
-    unsigned int lastSpaceInLine = 0;
+    vecText::const_iterator lastBeginPos = line.m_text.begin();
+    vecText::const_iterator lastSpacePos = line.m_text.end();
     vecText curLine;
-    while (pos != line.m_text.end())
+
+    while (pos < line.m_text.end())
     {
       // Get the current letter in the string
-      character_t letter = *pos;
-      // check for a space
-      if (CanWrapAtLetter(letter))
+      const character_t& letter = *pos;
+
+      if (CanWrapAtLetter(letter)) // Check for a space char
+        lastSpacePos = pos;
+
+      curLine.emplace_back(letter);
+
+      const float currWidth = m_font->GetTextWidth(curLine);
+
+      if (currWidth > maxWidth)
       {
-        float width = m_font->GetTextWidth(curLine);
-        if (width > maxWidth)
+        if (lastSpacePos > pos) // No space char where split the line, so split by char
         {
-          if (lastSpace != line.m_text.begin() && lastSpaceInLine > 0)
-          {
-            CGUIString string(curLine.begin(), curLine.begin() + lastSpaceInLine, false);
-            m_lines.push_back(string);
-            // check for exceeding our number of lines
-            if (nMaxLines > 0 && m_lines.size() >= (size_t)nMaxLines)
-              return;
-            // skip over spaces
-            pos = lastSpace;
-            while (pos != line.m_text.end() && IsSpace(*pos))
-              ++pos;
-            curLine.clear();
-            lastSpaceInLine = 0;
-            lastSpace = line.m_text.begin();
-            continue;
-          }
+          // If the pos is equal to lastBeginPos, maxWidth is not large enough to contain 1 character
+          // Push a line with the single character and move on to the next character.
+          if (pos == lastBeginPos)
+            ++pos;
+
+          CGUIString linePart{lastBeginPos, pos, false};
+          m_lines.emplace_back(linePart);
         }
-        lastSpace = pos;
-        lastSpaceInLine = curLine.size();
+        else
+        {
+          CGUIString linePart{lastBeginPos, lastSpacePos, false};
+          m_lines.emplace_back(linePart);
+
+          pos = lastSpacePos + 1;
+          lastSpacePos = line.m_text.end();
+        }
+
+        curLine.clear();
+        lastBeginPos = pos;
+
+        if (m_lines.size() >= nMaxLines)
+          return;
+
+        continue;
       }
-      curLine.push_back(letter);
+
       ++pos;
     }
-    // now add whatever we have left to the string
-    float width = m_font->GetTextWidth(curLine);
-    if (width > maxWidth)
+
+    // Add the remaining text part
+    if (!curLine.empty())
     {
-      // too long - put up to the last space on if we can + remove it from what's left.
-      if (lastSpace != line.m_text.begin() && lastSpaceInLine > 0)
-      {
-        CGUIString string(curLine.begin(), curLine.begin() + lastSpaceInLine, false);
-        m_lines.push_back(string);
-        // check for exceeding our number of lines
-        if (nMaxLines > 0 && m_lines.size() >= (size_t)nMaxLines)
-          return;
-        curLine.erase(curLine.begin(), curLine.begin() + lastSpaceInLine);
-        while (curLine.size() && IsSpace(curLine.at(0)))
-          curLine.erase(curLine.begin());
-      }
+      CGUIString linePart{curLine.begin(), curLine.end(), false};
+      m_lines.emplace_back(linePart);
     }
-    CGUIString string(curLine.begin(), curLine.end(), true);
-    m_lines.push_back(string);
-    // check for exceeding our number of lines
-    if (nMaxLines > 0 && m_lines.size() >= (size_t)nMaxLines)
-      return;
+
+    // Restore carriage return marker for the end of paragraph
+    if (!m_lines.empty())
+      m_lines.back().m_carriageReturn = line.m_carriageReturn;
   }
 }
 
@@ -696,6 +714,11 @@ float CGUITextLayout::GetTextWidth(const std::wstring &text) const
   return m_font->GetTextWidth(utf32);
 }
 
+float CGUITextLayout::GetTextWidth(const vecText& text) const
+{
+  return m_font->GetTextWidth(text);
+}
+
 std::string CGUITextLayout::GetText() const
 {
   if (m_lastUpdateW)
@@ -710,8 +733,8 @@ std::string CGUITextLayout::GetText() const
 void CGUITextLayout::DrawText(CGUIFont* font,
                               float x,
                               float y,
-                              UTILS::COLOR::Color color,
-                              UTILS::COLOR::Color shadowColor,
+                              KODI::UTILS::COLOR::Color color,
+                              KODI::UTILS::COLOR::Color shadowColor,
                               const std::string& text,
                               uint32_t align)
 {

@@ -9,6 +9,7 @@
 #include "ControllerInstaller.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "addons/Addon.h"
 #include "addons/AddonInstaller.h"
@@ -73,6 +74,7 @@ void CControllerInstaller::Process()
   pSelectDialog->SetHeading(39020); // "The following additional add-ons will be installed"
   pSelectDialog->SetUseDetails(true);
   pSelectDialog->EnableButton(true, 186); // "OK""
+  pSelectDialog->SetButtonFocus(true);
   for (const auto& it : items)
     pSelectDialog->Add(*it);
   pSelectDialog->Open();

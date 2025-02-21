@@ -9,8 +9,9 @@
 
 #include "filesystem/File.h"
 
-#include <limits.h>
+#include <limits>
 
+#include <taglib/taglib.h>
 #include <taglib/tiostream.h>
 
 using namespace XFILE;
@@ -57,9 +58,17 @@ FileName TagLibVFSStream::name() const
 /*!
  * Reads a block of size \a length at the current get pointer.
  */
+#if (TAGLIB_MAJOR_VERSION >= 2)
+ByteVector TagLibVFSStream::readBlock(size_t length)
+#else
 ByteVector TagLibVFSStream::readBlock(TagLib::ulong length)
+#endif
 {
+#if (TAGLIB_MAJOR_VERSION >= 2)
+  ByteVector byteVector(static_cast<unsigned int>(length));
+#else
   ByteVector byteVector(static_cast<TagLib::uint>(length));
+#endif
   ssize_t read = m_file.Read(byteVector.data(), length);
   if (read > 0)
     byteVector.resize(read);
@@ -90,7 +99,11 @@ void TagLibVFSStream::writeBlock(const ByteVector &data)
  * \note This method is slow since it requires rewriting all of the file
  * after the insertion point.
  */
+#if (TAGLIB_MAJOR_VERSION >= 2)
+void TagLibVFSStream::insert(const ByteVector& data, TagLib::offset_t start, size_t replace)
+#else
 void TagLibVFSStream::insert(const ByteVector &data, TagLib::ulong start, TagLib::ulong replace)
+#endif
 {
   if (data.size() == replace)
   {
@@ -114,7 +127,11 @@ void TagLibVFSStream::insert(const ByteVector &data, TagLib::ulong start, TagLib
   // First, make sure that we're working with a buffer that is longer than
   // the *difference* in the tag sizes.  We want to avoid overwriting parts
   // that aren't yet in memory, so this is necessary.
+#if (TAGLIB_MAJOR_VERSION >= 2)
+  unsigned long bufferLength = bufferSize();
+#else
   TagLib::ulong bufferLength = bufferSize();
+#endif
 
   while (data.size() - replace > bufferLength)
     bufferLength += bufferSize();
@@ -123,7 +140,11 @@ void TagLibVFSStream::insert(const ByteVector &data, TagLib::ulong start, TagLib
   long readPosition = start + replace;
   long writePosition = start;
   ByteVector buffer;
+#if (TAGLIB_MAJOR_VERSION >= 2)
+  ByteVector aboutToOverwrite(static_cast<unsigned int>(bufferLength));
+#else
   ByteVector aboutToOverwrite(static_cast<TagLib::uint>(bufferLength));
+#endif
 
   // This is basically a special case of the loop below.  Here we're just
   // doing the same steps as below, but since we aren't using the same buffer
@@ -158,7 +179,11 @@ void TagLibVFSStream::insert(const ByteVector &data, TagLib::ulong start, TagLib
 
     // Check to see if we just read the last block.  We need to call clear()
     // if we did so that the last write succeeds.
+#if (TAGLIB_MAJOR_VERSION >= 2)
+    if (static_cast<unsigned long>(bytesRead) < bufferLength)
+#else
     if (TagLib::ulong(bytesRead) < bufferLength)
+#endif
       clear();
 
     // Seek to the write position and write our buffer.  Increment the
@@ -180,16 +205,32 @@ void TagLibVFSStream::insert(const ByteVector &data, TagLib::ulong start, TagLib
  * \note This method is slow since it involves rewriting all of the file
  * after the removed portion.
  */
+#if (TAGLIB_MAJOR_VERSION >= 2)
+void TagLibVFSStream::removeBlock(TagLib::offset_t start, size_t length)
+#else
 void TagLibVFSStream::removeBlock(TagLib::ulong start, TagLib::ulong length)
+#endif
 {
+#if (TAGLIB_MAJOR_VERSION >= 2)
+  unsigned long bufferLength = bufferSize();
+#else
   TagLib::ulong bufferLength = bufferSize();
+#endif
 
   long readPosition = start + length;
   long writePosition = start;
 
+#if (TAGLIB_MAJOR_VERSION >= 2)
+  ByteVector buffer(static_cast<unsigned int>(bufferLength));
+#else
   ByteVector buffer(static_cast<TagLib::uint>(bufferLength));
+#endif
 
+#if (TAGLIB_MAJOR_VERSION >= 2)
+  unsigned long bytesRead = 1;
+#else
   TagLib::ulong bytesRead = 1;
+#endif
 
   while(bytesRead != 0)
   {
@@ -198,7 +239,11 @@ void TagLibVFSStream::removeBlock(TagLib::ulong start, TagLib::ulong length)
     if (read < 0)
       return;// explicit error
 
+#if (TAGLIB_MAJOR_VERSION >= 2)
+    bytesRead = static_cast<unsigned long>(read);
+#else
     bytesRead = static_cast<TagLib::ulong>(read);
+#endif
     readPosition += bytesRead;
 
     // Check to see if we just read the last block.  We need to call clear()
@@ -237,7 +282,11 @@ bool TagLibVFSStream::isOpen() const
  *
  * \see Position
  */
+#if (TAGLIB_MAJOR_VERSION >= 2)
+void TagLibVFSStream::seek(TagLib::offset_t offset, Position p)
+#else
 void TagLibVFSStream::seek(long offset, Position p)
+#endif
 {
   const long fileLen = length();
   if (m_bIsReadOnly && fileLen > 0)
@@ -295,27 +344,49 @@ void TagLibVFSStream::clear()
 /*!
  * Returns the current offset within the file.
  */
+#if (TAGLIB_MAJOR_VERSION >= 2)
+TagLib::offset_t TagLibVFSStream::tell() const
+{
+  int64_t pos = m_file.GetPosition();
+  if (pos > std::numeric_limits<TagLib::offset_t>::max())
+    return -1;
+  else
+    return static_cast<TagLib::offset_t>(pos);
+}
+#else
 long TagLibVFSStream::tell() const
 {
   int64_t pos = m_file.GetPosition();
-  if(pos > LONG_MAX)
+  if (pos > std::numeric_limits<long>::max())
     return -1;
   else
-    return (long)pos;
+    return static_cast<long>(pos);
 }
+#endif
 
 /*!
  * Returns the length of the file.
  */
+#if (TAGLIB_MAJOR_VERSION >= 2)
+TagLib::offset_t TagLibVFSStream::length()
+{
+  return static_cast<TagLib::offset_t>(m_file.GetLength());
+}
+#else
 long TagLibVFSStream::length()
 {
-  return (long)m_file.GetLength();
+  return static_cast<long>(m_file.GetLength());
 }
+#endif
 
 /*!
  * Truncates the file to a \a length.
  */
+#if (TAGLIB_MAJOR_VERSION >= 2)
+void TagLibVFSStream::truncate(TagLib::offset_t length)
+#else
 void TagLibVFSStream::truncate(long length)
+#endif
 {
   m_file.Truncate(length);
 }

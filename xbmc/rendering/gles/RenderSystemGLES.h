@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2018 Team Kodi
+ *  Copyright (C) 2005-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -23,10 +23,15 @@ enum class ShaderMethodGLES
 {
   SM_DEFAULT,
   SM_TEXTURE,
+  SM_TEXTURE_111R,
   SM_MULTI,
+  SM_MULTI_RGBA_111R,
   SM_FONTS,
+  SM_FONTS_SHADER_CLIP,
   SM_TEXTURE_NOBLEND,
   SM_MULTI_BLENDCOLOR,
+  SM_MULTI_RGBA_111R_BLENDCOLOR,
+  SM_MULTI_111R_111R_BLENDCOLOR,
   SM_TEXTURE_RGBA,
   SM_TEXTURE_RGBA_OES,
   SM_TEXTURE_RGBA_BLENDCOLOR,
@@ -53,10 +58,17 @@ private:
   static constexpr auto ShaderMethodGLESMap = make_map<ShaderMethodGLES, std::string_view>({
       {ShaderMethodGLES::SM_DEFAULT, "default"},
       {ShaderMethodGLES::SM_TEXTURE, "texture"},
+      {ShaderMethodGLES::SM_TEXTURE_111R, "alpha texture with diffuse color"},
       {ShaderMethodGLES::SM_MULTI, "multi"},
+      {ShaderMethodGLES::SM_MULTI_RGBA_111R, "multi with color/alpha texture"},
       {ShaderMethodGLES::SM_FONTS, "fonts"},
+      {ShaderMethodGLES::SM_FONTS_SHADER_CLIP, "fonts with vertex shader based clipping"},
       {ShaderMethodGLES::SM_TEXTURE_NOBLEND, "texture no blending"},
       {ShaderMethodGLES::SM_MULTI_BLENDCOLOR, "multi blend colour"},
+      {ShaderMethodGLES::SM_MULTI_RGBA_111R_BLENDCOLOR,
+       "multi with color/alpha texture and blend color"},
+      {ShaderMethodGLES::SM_MULTI_111R_111R_BLENDCOLOR,
+       "multi with alpha/alpha texture and blend color"},
       {ShaderMethodGLES::SM_TEXTURE_RGBA, "texure rgba"},
       {ShaderMethodGLES::SM_TEXTURE_RGBA_OES, "texture rgba OES"},
       {ShaderMethodGLES::SM_TEXTURE_RGBA_BLENDCOLOR, "texture rgba blend colour"},
@@ -83,7 +95,8 @@ public:
   bool BeginRender() override;
   bool EndRender() override;
   void PresentRender(bool rendered, bool videoLayer) override;
-  bool ClearBuffers(UTILS::COLOR::Color color) override;
+  void InvalidateColorBuffer() override;
+  bool ClearBuffers(KODI::UTILS::COLOR::Color color) override;
   bool IsExtSupported(const char* extension) const override;
 
   void SetVSync(bool vsync);
@@ -97,6 +110,8 @@ public:
   void SetScissors(const CRect& rect) override;
   void ResetScissors() override;
 
+  void SetDepthCulling(DEPTH_CULLING culling) override;
+
   void CaptureStateBlock() override;
   void ApplyStateBlock() override;
 
@@ -106,7 +121,7 @@ public:
 
   void Project(float &x, float &y, float &z) override;
 
-  std::string GetShaderPath(const std::string &filename) override { return "GLES/2.0/"; }
+  std::string GetShaderPath(const std::string& filename) override;
 
   void InitialiseShaders();
   void ReleaseShaders();
@@ -124,6 +139,10 @@ public:
   GLint GUIShaderGetContrast();
   GLint GUIShaderGetBrightness();
   GLint GUIShaderGetModel();
+  GLint GUIShaderGetMatrix();
+  GLint GUIShaderGetClip();
+  GLint GUIShaderGetCoordStep();
+  GLint GUIShaderGetDepth();
 
 protected:
   virtual void SetVSyncImpl(bool enable) = 0;

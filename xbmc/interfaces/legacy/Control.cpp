@@ -9,6 +9,7 @@
 #include "Control.h"
 
 #include "AddonUtils.h"
+#include "FileItemList.h"
 #include "LanguageHook.h"
 #include "ServiceBroker.h"
 #include "WindowException.h"
@@ -27,7 +28,7 @@
 #include "guilib/GUISliderControl.h"
 #include "guilib/GUITextBox.h"
 #include "guilib/GUIWindowManager.h"
-#include "listproviders/StaticProvider.h"
+#include "guilib/listproviders/StaticProvider.h"
 #include "utils/StringUtils.h"
 #include "utils/XBMCTinyXML.h"
 
@@ -378,8 +379,9 @@ namespace XBMCAddon
             CTextureInfo(strFileName));
       pGUIControl->SetVisible(m_visible);
 
-      if (pGUIControl && aspectRatio <= CAspectRatio::AR_KEEP)
-        static_cast<CGUIImage*>(pGUIControl)->SetAspectRatio((CAspectRatio::ASPECT_RATIO)aspectRatio);
+      if (pGUIControl && (CAspectRatio::AspectRatio)aspectRatio <= CAspectRatio::KEEP)
+        static_cast<CGUIImage*>(pGUIControl)
+            ->SetAspectRatio((CAspectRatio::AspectRatio)aspectRatio);
 
       if (pGUIControl && colorDiffuse)
         static_cast<CGUIImage*>(pGUIControl)->SetColorDiffuse(GUILIB::GUIINFO::CGUIInfoColor(colorDiffuse));
@@ -1266,7 +1268,7 @@ namespace XBMCAddon
     void ControlList::sendLabelBind(int tail)
     {
       // construct a CFileItemList to pass 'em on to the list
-      CGUIListItemPtr items(new CFileItemList());
+      std::shared_ptr<CGUIListItem> items(new CFileItemList());
       for (unsigned int i = vecItems.size() - tail; i < vecItems.size(); i++)
         static_cast<CFileItemList*>(items.get())->Add(vecItems[i]->item);
 

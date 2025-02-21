@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2018 Team Kodi
+ *  Copyright (C) 2005-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -14,6 +14,9 @@
 #include "utils/log.h"
 
 #include <map>
+
+using namespace KODI;
+using namespace ACTION;
 
 namespace
 {
@@ -50,8 +53,12 @@ static const std::map<ActionName, ActionID> ActionMappings = {
     {"osd", ACTION_SHOW_OSD},
     {"showsubtitles", ACTION_SHOW_SUBTITLES},
     {"nextsubtitle", ACTION_NEXT_SUBTITLE},
+    {"previoussubtitle", ACTION_PREV_SUBTITLE},
     {"browsesubtitle", ACTION_BROWSE_SUBTITLE},
     {"cyclesubtitle", ACTION_CYCLE_SUBTITLE},
+    {"dialogselectvideo", ACTION_DIALOG_SELECT_VIDEO},
+    {"dialogselectaudio", ACTION_DIALOG_SELECT_AUDIO},
+    {"dialogselectsubtitle", ACTION_DIALOG_SELECT_SUBTITLE},
     {"playerdebug", ACTION_PLAYER_DEBUG},
     {"playerdebugvideo", ACTION_PLAYER_DEBUG_VIDEO},
     {"codecinfo", ACTION_PLAYER_PROCESS_INFO},
@@ -112,6 +119,8 @@ static const std::map<ActionName, ActionID> ActionMappings = {
     {"smallstepback", ACTION_SMALL_STEP_BACK},
     {"fastforward", ACTION_PLAYER_FORWARD},
     {"rewind", ACTION_PLAYER_REWIND},
+    {"tempoup", ACTION_PLAYER_INCREASE_TEMPO},
+    {"tempodown", ACTION_PLAYER_DECREASE_TEMPO},
     {"play", ACTION_PLAYER_PLAY},
     {"playpause", ACTION_PLAYER_PLAYPAUSE},
     {"switchplayer", ACTION_SWITCH_PLAYER},

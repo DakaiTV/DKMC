@@ -17,8 +17,6 @@
 #include <vector>
 
 // forward references
-
-class TiXmlElement;
 class CFileItem;
 class CPlayerCoreConfig;
 class CPlayerSelectionRule;
@@ -45,6 +43,7 @@ public:
   void GetRemotePlayers(std::vector<std::string>&players) const;                    //All remote players we can attach to
   std::string GetPlayerType(const std::string &player) const;
   bool IsExternalPlayer(const std::string& player) const;
+  bool IsRemotePlayer(const std::string& player) const;
   bool PlaysAudio(const std::string &player) const;
   bool PlaysVideo(const std::string &player) const;
 

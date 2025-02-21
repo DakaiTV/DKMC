@@ -11,6 +11,7 @@
 #include "ServiceBroker.h"
 #include "application/AppInboundProtocol.h"
 #include "application/Application.h"
+#include "interfaces/AnnouncementManager.h"
 #include "messaging/ApplicationMessenger.h"
 #include "settings/DisplaySettings.h"
 #include "settings/Settings.h"
@@ -61,18 +62,37 @@
 
     XBMC_Event newEvent = {};
     newEvent.type = XBMC_VIDEORESIZE;
-    newEvent.resize.w = static_cast<int>(rect.size.width);
-    newEvent.resize.h = static_cast<int>(rect.size.height);
+    newEvent.resize.width = static_cast<int>(rect.size.width);
+    newEvent.resize.height = static_cast<int>(rect.size.height);
+    newEvent.resize.scale = 1.0;
 
     // check for valid sizes cause in some cases
     // we are hit during fullscreen transition from macos
     // and might be technically "zero" sized
-    if (newEvent.resize.w != 0 && newEvent.resize.h != 0)
+    if (newEvent.resize.width != 0 && newEvent.resize.height != 0)
     {
       std::shared_ptr<CAppInboundProtocol> appPort = CServiceBroker::GetAppPort();
       if (appPort)
         appPort->OnEvent(newEvent);
     }
+  }
+}
+
+- (void)windowWillStartLiveResize:(NSNotification*)notification
+{
+  std::shared_ptr<CAppInboundProtocol> appPort = CServiceBroker::GetAppPort();
+  if (appPort)
+  {
+    appPort->SetRenderGUI(false);
+  }
+}
+
+- (void)windowDidEndLiveResize:(NSNotification*)notification
+{
+  std::shared_ptr<CAppInboundProtocol> appPort = CServiceBroker::GetAppPort();
+  if (appPort)
+  {
+    appPort->SetRenderGUI(true);
   }
 }
 
@@ -89,6 +109,7 @@
 - (void)windowDidBecomeKey:(NSNotification*)aNotification
 {
   g_application.m_AppFocused = true;
+  CServiceBroker::GetAnnouncementManager()->Announce(ANNOUNCEMENT::GUI, "WindowFocused");
 
   auto winSystem = dynamic_cast<CWinSystemOSX*>(CServiceBroker::GetWinSystem());
   if (winSystem)
@@ -100,6 +121,7 @@
 - (void)windowDidResignKey:(NSNotification*)aNotification
 {
   g_application.m_AppFocused = false;
+  CServiceBroker::GetAnnouncementManager()->Announce(ANNOUNCEMENT::GUI, "WindowUnfocused");
 
   auto winSystem = dynamic_cast<CWinSystemOSX*>(CServiceBroker::GetWinSystem());
   if (winSystem)

@@ -27,6 +27,7 @@
 #include "utils/URIUtils.h"
 #include "utils/XTimeUtils.h"
 #include "utils/log.h"
+#include "video/VideoFileItemClassify.h"
 
 #include <functional>
 #include <limits>
@@ -37,23 +38,17 @@
 
 #define LIBBLURAY_BYTESEEK 0
 
+using namespace KODI;
 using namespace XFILE;
 
 using namespace std::chrono_literals;
 
 static int read_blocks(void* handle, void* buf, int lba, int num_blocks)
 {
-  int result = -1;
-  CDVDInputStreamFile* lpstream = reinterpret_cast<CDVDInputStreamFile*>(handle);
-  int64_t offset = static_cast<int64_t>(lba) * 2048;
-  if (lpstream->Seek(offset, SEEK_SET) >= 0)
-  {
-    int64_t size = static_cast<int64_t>(num_blocks) * 2048;
-    if (size <= std::numeric_limits<int>::max())
-      result = lpstream->Read(reinterpret_cast<uint8_t*>(buf), static_cast<int>(size)) / 2048;
-  }
-
-  return result;
+  CDVDInputStreamBluray* blurayStream = reinterpret_cast<CDVDInputStreamBluray*>(handle);
+  if (!blurayStream)
+    return -1;
+  return blurayStream->ReadBlocks(reinterpret_cast<uint8_t*>(buf), lba, num_blocks);
 }
 
 static void bluray_overlay_cb(void *this_gen, const BD_OVERLAY * ov)
@@ -152,10 +147,11 @@ bool CDVDInputStreamBluray::Open()
     // Check whether disc is AACS protected
     CURL url3(root);
     CFileItem base(url3, false);
-    openDisc = base.IsProtectedBlurayDisc();
+    openDisc = VIDEO::IsProtectedBlurayDisc(base);
 
     // check for a menu call for an image file
-    if (StringUtils::EqualsNoCase(filename, "menu"))
+    if (StringUtils::EqualsNoCase(filename, "menu") &&
+        !(m_item.GetStartOffset() == STARTOFFSET_RESUME && m_item.IsResumable()))
     {
       //get rid of the udf:// protocol
       CURL url2(root);
@@ -166,7 +162,7 @@ bool CDVDInputStreamBluray::Open()
 
       // Check whether disc is AACS protected
       if (!openDisc)
-        openDisc = item.IsProtectedBlurayDisc();
+        openDisc = VIDEO::IsProtectedBlurayDisc(item);
 
       if (item.IsDiscImage())
       {
@@ -184,7 +180,7 @@ bool CDVDInputStreamBluray::Open()
 
     openStream = true;
   }
-  else if (m_item.IsProtectedBlurayDisc())
+  else if (VIDEO::IsProtectedBlurayDisc(m_item))
   {
     openDisc = true;
   }
@@ -228,7 +224,7 @@ bool CDVDInputStreamBluray::Open()
 
   if (openStream)
   {
-    if (!bd_open_stream(m_bd, m_pstream.get(), read_blocks))
+    if (!bd_open_stream(m_bd, this, read_blocks))
     {
       CLog::Log(LOGERROR, "CDVDInputStreamBluray::Open - failed to open {} in stream mode",
                 CURL::GetRedacted(root));
@@ -694,6 +690,23 @@ int CDVDInputStreamBluray::Read(uint8_t* buf, int buf_size)
   return result;
 }
 
+int CDVDInputStreamBluray::ReadBlocks(uint8_t* buf, int lba, int num_blocks)
+{
+  CDVDInputStreamFile* lpstream = m_pstream.get();
+  if (!lpstream)
+    return -1;
+  int result = -1;
+  int64_t offset = static_cast<int64_t>(lba) * 2048;
+  std::unique_lock<CCriticalSection> lock(m_readBlocksLock);
+  if (lpstream->Seek(offset, SEEK_SET) >= 0)
+  {
+    int64_t size = static_cast<int64_t>(num_blocks) * 2048;
+    if (size <= std::numeric_limits<int>::max())
+      result = lpstream->Read(buf, static_cast<int>(size)) / 2048;
+  }
+  return result;
+}
+
 static uint8_t  clamp(double v)
 {
   return (v) > 255.0 ? 255 : ((v) < 0.0 ? 0 : static_cast<uint32_t>((v + 0.5)));
@@ -1001,7 +1014,7 @@ int64_t CDVDInputStreamBluray::Seek(int64_t offset, int whence)
 
   return offset;
 #else
-  if(whence == SEEK_POSSIBLE)
+  if (whence == DVDSTREAM_SEEK_POSSIBLE)
     return 0;
   return -1;
 #endif
@@ -1242,8 +1255,8 @@ void CDVDInputStreamBluray::SetupPlayerSettings()
 
 bool CDVDInputStreamBluray::OpenStream(CFileItem &item)
 {
-  m_pstream = std::make_unique<CDVDInputStreamFile>(item, READ_TRUNCATED | READ_BITRATE |
-                                                              READ_CHUNKED | READ_NO_CACHE);
+  m_pstream =
+      std::make_unique<CDVDInputStreamFile>(item, READ_TRUNCATED | READ_BITRATE | READ_NO_CACHE);
 
   if (!m_pstream->Open())
   {

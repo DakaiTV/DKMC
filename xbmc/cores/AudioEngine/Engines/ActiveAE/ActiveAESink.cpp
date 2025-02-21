@@ -1026,7 +1026,6 @@ unsigned int CActiveAESink::OutputSamples(CSampleBuffer* samples)
   unsigned int maxFrames;
   int retry = 0;
   unsigned int written = 0;
-  uint8_t* p_mergeBuffer = nullptr;
   AEDelayStatus status;
 
   if (m_requestedFormat.m_dataFormat == AE_FMT_RAW)
@@ -1037,28 +1036,7 @@ unsigned int CActiveAESink::OutputSamples(CSampleBuffer* samples)
       if (frames > 0)
       {
         m_packer->Reset();
-        if (m_sinkFormat.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD)
-        {
-          if (frames == 61440)
-          {
-            for (int i = 0, of = 0; i < 12; i++)
-            {
-              // calculates length of each audio unit using raw data of stream
-              const uint16_t len = ((*(buffer[0] + of) & 0x0F) << 8 | *(buffer[0] + of + 1)) << 1;
-
-              m_packer->Pack(m_sinkFormat.m_streamInfo, buffer[0] + of, len);
-              of += len;
-            }
-          }
-          else
-          {
-            m_extError = true;
-            CLog::Log(LOGERROR, "CActiveAESink::OutputSamples - incomplete TrueHD buffer");
-            return 0;
-          }
-        }
-        else
-          m_packer->Pack(m_sinkFormat.m_streamInfo, buffer[0], frames);
+        m_packer->Pack(m_sinkFormat.m_streamInfo, buffer[0], frames);
       }
       else if (samples->pkt->pause_burst_ms > 0)
       {
@@ -1095,28 +1073,6 @@ unsigned int CActiveAESink::OutputSamples(CSampleBuffer* samples)
     }
     else // Android IEC packer (RAW)
     {
-      if (m_sinkFormat.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD && frames == 61440)
-      {
-        if (m_mergeBuffer.empty())
-          m_mergeBuffer.resize(MAX_IEC61937_PACKET);
-
-        p_mergeBuffer = m_mergeBuffer.data();
-        unsigned int size = 0;
-
-        for (int i = 0, of = 0; i < 24; i++)
-        {
-          // calculates length of each audio unit using raw data of stream
-          const uint16_t len = ((*(buffer[0] + of) & 0x0F) << 8 | *(buffer[0] + of + 1)) << 1;
-
-          memcpy(m_mergeBuffer.data() + of, buffer[0] + of, len);
-          size += len;
-          of += len;
-        }
-
-        buffer = &p_mergeBuffer;
-        totalFrames = size / m_sinkFormat.m_frameSize; // m_frameSize = 1
-        frames = totalFrames;
-      }
       if (samples->pkt->pause_burst_ms > 0)
       {
         m_sink->AddPause(samples->pkt->pause_burst_ms);
@@ -1236,8 +1192,8 @@ void CActiveAESink::GenerateNoise()
   srcConfig.bits_per_sample = CAEUtil::DataFormatToUsedBits(m_sinkFormat.m_dataFormat);
   srcConfig.dither_bits = CAEUtil::DataFormatToDitherBits(m_sinkFormat.m_dataFormat);
 
-  resampler->Init(dstConfig, srcConfig,
-                  false, false, M_SQRT1_2, nullptr, AE_QUALITY_UNKNOWN, false);
+  resampler->Init(dstConfig, srcConfig, false, false, M_SQRT1_2, nullptr, AE_QUALITY_UNKNOWN, false,
+                  0.0);
 
   resampler->Resample(m_sampleOfSilence.pkt->data, m_sampleOfSilence.pkt->max_nb_samples,
                      (uint8_t**)&noise, m_sampleOfSilence.pkt->max_nb_samples, 1.0);
@@ -1251,12 +1207,7 @@ void CActiveAESink::SetSilenceTimer()
     m_extSilenceTimeout = XbmcThreads::EndTime<decltype(m_extSilenceTimeout)>::Max();
   else if (m_extAppFocused) // handles no playback/GUI and playback in pause and seek
   {
-    // only true with AudioTrack RAW + passthrough + TrueHD
-    const bool noSilenceOnPause =
-        !m_needIecPack && m_requestedFormat.m_dataFormat == AE_FMT_RAW &&
-        m_sinkFormat.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD;
-
-    m_extSilenceTimeout = (noSilenceOnPause) ? 0ms : m_silenceTimeOut;
+    m_extSilenceTimeout = m_silenceTimeOut;
   }
   else
   {

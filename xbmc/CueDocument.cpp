@@ -43,10 +43,12 @@
 #include "CueDocument.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "Util.h"
 #include "filesystem/Directory.h"
 #include "filesystem/File.h"
+#include "music/tags/MusicInfoTag.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/SettingsComponent.h"
 #include "utils/CharsetConverter.h"
@@ -74,17 +76,13 @@ class FileReader
   : public CueReader
 {
 public:
-  explicit FileReader(const std::string &strFile) : m_szBuffer{}
-  {
-    m_opened = m_file.Open(strFile);
-  }
+  explicit FileReader(const std::string& strFile) { m_opened = m_file.Open(strFile); }
   bool ReadLine(std::string &line) override
   {
     // Read the next line.
-    while (m_file.ReadString(m_szBuffer, 1023)) // Bigger than MAX_PATH_SIZE, for usage with relax!
+    while (m_file.ReadLine(line))
     {
       // Remove the white space at the beginning and end of the line.
-      line = m_szBuffer;
       StringUtils::Trim(line);
       if (!line.empty())
         return true;
@@ -105,7 +103,6 @@ public:
 private:
   CFile m_file;
   bool m_opened;
-  char m_szBuffer[1024];
 };
 
 class BufferReader
@@ -232,11 +229,6 @@ void CCueDocument::GetMediaFiles(std::vector<std::string>& mediaFiles)
 
   for (TSet::const_iterator it = uniqueFiles.begin(); it != uniqueFiles.end(); ++it)
     mediaFiles.push_back(*it);
-}
-
-std::string CCueDocument::GetMediaTitle()
-{
-  return m_strAlbum;
 }
 
 bool CCueDocument::IsLoaded() const
@@ -484,3 +476,61 @@ bool CCueDocument::ResolvePath(std::string &strPath, const std::string &strBase)
   return true;
 }
 
+bool CCueDocument::LoadTracks(CFileItemList& scannedItems, const CFileItem& item)
+{
+  const auto& tag = *item.GetMusicInfoTag();
+
+  VECSONGS tracks;
+  this->GetSongs(tracks);
+
+  bool oneFilePerTrack = this->IsOneFilePerTrack();
+
+  int tracksFound = 0;
+  for (auto& song : tracks)
+  {
+    if (song.strFileName == item.GetPath())
+    {
+      if (tag.Loaded())
+      {
+        if (song.strAlbum.empty() && !tag.GetAlbum().empty())
+          song.strAlbum = tag.GetAlbum();
+        //Pass album artist to final MusicInfoTag object via setting song album artist vector.
+        if (song.GetAlbumArtist().empty() && !tag.GetAlbumArtist().empty())
+          song.SetAlbumArtist(tag.GetAlbumArtist());
+        if (song.genre.empty() && !tag.GetGenre().empty())
+          song.genre = tag.GetGenre();
+        //Pass artist to final MusicInfoTag object via setting song artist description string only.
+        //Artist credits not used during loading from cue sheet.
+        if (song.strArtistDesc.empty() && !tag.GetArtistString().empty())
+          song.strArtistDesc = tag.GetArtistString();
+        if (tag.GetDiscNumber())
+          song.iTrack |= (tag.GetDiscNumber() << 16); // see CMusicInfoTag::GetDiscNumber()
+        if (!tag.GetCueSheet().empty())
+          song.strCueSheet = tag.GetCueSheet();
+
+        if (tag.GetYear())
+          song.strReleaseDate = tag.GetReleaseDate();
+        if (song.embeddedArt.Empty() && !tag.GetCoverArtInfo().Empty())
+          song.embeddedArt = tag.GetCoverArtInfo();
+      }
+
+      if (!song.iDuration && tag.GetDuration() > 0)
+      { // must be the last song
+        song.iDuration = CUtil::ConvertMilliSecsToSecsIntRounded(
+            CUtil::ConvertSecsToMilliSecs(tag.GetDuration()) - song.iStartOffset);
+      }
+      if (tag.Loaded() && oneFilePerTrack &&
+          !(tag.GetAlbum().empty() || tag.GetArtist().empty() || tag.GetTitle().empty()))
+      {
+        // If there are multiple files in a cue file, the tags from the files should be preferred if they exist.
+        scannedItems.Add(std::make_shared<CFileItem>(song, tag));
+      }
+      else
+      {
+        scannedItems.Add(std::make_shared<CFileItem>(song));
+      }
+      ++tracksFound;
+    }
+  }
+  return tracksFound != 0;
+}

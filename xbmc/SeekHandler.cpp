@@ -19,6 +19,7 @@
 #include "guilib/LocalizeStrings.h"
 #include "input/actions/Action.h"
 #include "input/actions/ActionIDs.h"
+#include "music/MusicFileItemClassify.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
@@ -34,6 +35,8 @@
 #include <mutex>
 #include <stdlib.h>
 
+using namespace KODI;
+
 CSeekHandler::~CSeekHandler()
 {
   m_seekDelays.clear();
@@ -48,15 +51,19 @@ void CSeekHandler::Configure()
   const std::shared_ptr<CSettings> settings = CServiceBroker::GetSettingsComponent()->GetSettings();
 
   m_seekDelays.clear();
-  m_seekDelays.insert(std::make_pair(SEEK_TYPE_VIDEO, settings->GetInt(CSettings::SETTING_VIDEOPLAYER_SEEKDELAY)));
-  m_seekDelays.insert(std::make_pair(SEEK_TYPE_MUSIC, settings->GetInt(CSettings::SETTING_MUSICPLAYER_SEEKDELAY)));
+  m_seekDelays.insert(
+      std::make_pair(SeekType::VIDEO, settings->GetInt(CSettings::SETTING_VIDEOPLAYER_SEEKDELAY)));
+  m_seekDelays.insert(
+      std::make_pair(SeekType::MUSIC, settings->GetInt(CSettings::SETTING_MUSICPLAYER_SEEKDELAY)));
 
   m_forwardSeekSteps.clear();
   m_backwardSeekSteps.clear();
 
   std::map<SeekType, std::string> seekTypeSettingMap;
-  seekTypeSettingMap.insert(std::make_pair(SEEK_TYPE_VIDEO, CSettings::SETTING_VIDEOPLAYER_SEEKSTEPS));
-  seekTypeSettingMap.insert(std::make_pair(SEEK_TYPE_MUSIC, CSettings::SETTING_MUSICPLAYER_SEEKSTEPS));
+  seekTypeSettingMap.insert(
+      std::make_pair(SeekType::VIDEO, CSettings::SETTING_VIDEOPLAYER_SEEKSTEPS));
+  seekTypeSettingMap.insert(
+      std::make_pair(SeekType::MUSIC, CSettings::SETTING_MUSICPLAYER_SEEKSTEPS));
 
   for (std::map<SeekType, std::string>::iterator it = seekTypeSettingMap.begin(); it!=seekTypeSettingMap.end(); ++it)
   {
@@ -97,8 +104,7 @@ int CSeekHandler::GetSeekStepSize(SeekType type, int step)
   if (seekSteps.empty())
   {
     CLog::Log(LOGERROR, "SeekHandler - {} - No {} {} seek steps configured.", __FUNCTION__,
-              (type == SeekType::SEEK_TYPE_VIDEO ? "video" : "music"),
-              (step > 0 ? "forward" : "backward"));
+              (type == SeekType::VIDEO ? "video" : "music"), (step > 0 ? "forward" : "backward"));
     return 0;
   }
 
@@ -275,7 +281,8 @@ bool CSeekHandler::OnAction(const CAction &action)
   if (!appPlayer->IsPlaying() || !appPlayer->CanSeek())
     return false;
 
-  SeekType type = g_application.CurrentFileItem().IsAudio() ? SEEK_TYPE_MUSIC : SEEK_TYPE_VIDEO;
+  SeekType type =
+      MUSIC::IsAudio(g_application.CurrentFileItem()) ? SeekType::MUSIC : SeekType::VIDEO;
 
   if (SeekTimeCode(action))
     return true;
@@ -307,12 +314,12 @@ bool CSeekHandler::OnAction(const CAction &action)
     }
     case ACTION_NEXT_SCENE:
     {
-      appPlayer->SeekScene(true);
+      appPlayer->SeekScene(Direction::FORWARD);
       return true;
     }
     case ACTION_PREV_SCENE:
     {
-      appPlayer->SeekScene(false);
+      appPlayer->SeekScene(Direction::BACKWARD);
       return true;
     }
     case ACTION_ANALOG_SEEK_FORWARD:

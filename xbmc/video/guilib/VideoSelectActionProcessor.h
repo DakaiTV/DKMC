@@ -14,25 +14,17 @@
 
 class CFileItem;
 
-namespace VIDEO
+namespace KODI::VIDEO::GUILIB
 {
-namespace GUILIB
-{
-class CVideoSelectActionProcessorBase : public CVideoPlayActionProcessorBase
+class CVideoSelectActionProcessor : public CVideoPlayActionProcessor
 {
 public:
-  explicit CVideoSelectActionProcessorBase(const std::shared_ptr<CFileItem>& item)
-    : CVideoPlayActionProcessorBase(item)
+  explicit CVideoSelectActionProcessor(const std::shared_ptr<CFileItem>& item)
+    : CVideoPlayActionProcessor(item)
   {
   }
 
-  CVideoSelectActionProcessorBase(const std::shared_ptr<CFileItem>& item,
-                                  const std::shared_ptr<const CFileItem>& videoVersion)
-    : CVideoPlayActionProcessorBase(item, videoVersion)
-  {
-  }
-
-  ~CVideoSelectActionProcessorBase() override = default;
+  ~CVideoSelectActionProcessor() override = default;
 
   static Action GetDefaultSelectAction();
 
@@ -40,15 +32,11 @@ protected:
   Action GetDefaultAction() override;
   bool Process(Action action) override;
 
-  virtual bool OnPlayPartSelected(unsigned int part) = 0;
-  virtual bool OnQueueSelected() = 0;
-  virtual bool OnInfoSelected() = 0;
-  virtual bool OnMoreSelected() = 0;
+  virtual bool OnQueueSelected();
+  virtual bool OnInfoSelected();
+  virtual bool OnChooseSelected();
 
 private:
-  CVideoSelectActionProcessorBase() = delete;
-  Action ChooseVideoItemSelectAction() const;
-  unsigned int ChooseStackItemPartNumber() const;
+  CVideoSelectActionProcessor() = delete;
 };
-} // namespace GUILIB
-} // namespace VIDEO
+} // namespace KODI::VIDEO::GUILIB

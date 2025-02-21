@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2014-2018 Team Kodi
+ *  Copyright (C) 2014-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -438,10 +438,6 @@ void CAnalogStick::ProcessMotions(void)
   const float newHorizState = m_horizAxis.GetPosition();
 
   const bool bActivated = (newVertState != 0.0f || newHorizState != 0.0f);
-
-  if (!AcceptsInput(bActivated))
-    return;
-
   const bool bWasActivated = (m_vertState != 0.0f || m_horizState != 0.0f);
 
   if (bActivated ^ bWasActivated)

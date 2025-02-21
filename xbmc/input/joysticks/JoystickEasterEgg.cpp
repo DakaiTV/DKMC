@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2016-2018 Team Kodi
+ *  Copyright (C) 2016-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -12,6 +12,7 @@
 #include "games/GameServices.h"
 #include "games/GameSettings.h"
 #include "games/controllers/ControllerIDs.h"
+#include "games/controllers/DefaultController.h"
 #include "guilib/GUIAudioManager.h"
 #include "guilib/WindowIDs.h"
 
@@ -20,22 +21,22 @@ using namespace JOYSTICK;
 
 const std::map<std::string, std::vector<FeatureName>> CJoystickEasterEgg::m_sequence = {
     {
-        DEFAULT_CONTROLLER_ID,
+        GAME::DEFAULT_CONTROLLER_ID,
         {
-            "up",
-            "up",
-            "down",
-            "down",
-            "left",
-            "right",
-            "left",
-            "right",
-            "b",
-            "a",
+            GAME::CDefaultController::FEATURE_UP,
+            GAME::CDefaultController::FEATURE_UP,
+            GAME::CDefaultController::FEATURE_DOWN,
+            GAME::CDefaultController::FEATURE_DOWN,
+            GAME::CDefaultController::FEATURE_LEFT,
+            GAME::CDefaultController::FEATURE_RIGHT,
+            GAME::CDefaultController::FEATURE_LEFT,
+            GAME::CDefaultController::FEATURE_RIGHT,
+            GAME::CDefaultController::FEATURE_B,
+            GAME::CDefaultController::FEATURE_A,
         },
     },
     {
-        DEFAULT_REMOTE_ID,
+        GAME::DEFAULT_REMOTE_ID,
         {
             "up",
             "up",

@@ -10,6 +10,7 @@ NATIVE= \
   autoconf-archive \
   automake \
   cmake \
+  bison \
   gas-preprocessor \
   gettext \
   giflib \
@@ -23,8 +24,9 @@ NATIVE= \
   nasm \
   ninja \
   openssl \
-  pcre \
+  pcre2 \
   perlmodule-parseyapp \
+  pythonmodule-setuptools \
   pkg-config \
   python3 \
   swig \
@@ -46,6 +48,10 @@ ifeq ($(OS),linux)
 
   ifeq ($(RENDER_SYSTEM),gles)
     NATIVE += MarkupSafe Mako
+  endif
+
+  ifeq ($(TARGET_PLATFORM),webos)
+    NATIVE += rustup cargo-c
   endif
 endif
 
@@ -69,6 +75,7 @@ download: $(DOWNLOAD_TARGETS)
 autoconf-archive: autoconf
 autoconf: m4
 automake: autoconf
+bison: gettext
 cargo-c: pkg-config openssl rustup
 dpkg: automake gettext libtool pkg-config tar
 heimdal: libtool
@@ -77,12 +84,14 @@ libjpeg-turbo: cmake nasm
 libpng: zlib automake
 libtool: automake
 Mako: MarkupSafe
-meson: python3
+meson: python3 pythonmodule-setuptools
 ninja: meson
 openssl: zlib
+pcre2: cmake
 pugixml: cmake
 python3: $(EXPAT) $(LIBFFI) pkg-config zlib openssl autoconf-archive
-swig: pcre
+pythonmodule-setuptools: python3
+swig: bison cmake pcre2
 tar: xz automake
 TexturePacker: cmake libpng liblzo2 giflib libjpeg-turbo
 wayland-scanner: expat ninja pkg-config

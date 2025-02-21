@@ -7,6 +7,7 @@
  */
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "URL.h"
 #include "filesystem/CurlFile.h"
 #include "filesystem/HTTPDirectory.h"
@@ -103,8 +104,8 @@ protected:
     source.strPath = m_sourcePath;
     source.vecPaths.push_back(m_sourcePath);
     source.m_allowSharing = true;
-    source.m_iDriveType = CMediaSource::SOURCE_TYPE_LOCAL;
-    source.m_iLockMode = LOCK_MODE_EVERYONE;
+    source.m_iDriveType = SourceType::LOCAL;
+    source.m_iLockMode = LockMode::EVERYONE;
     source.m_ignore = true;
 
     CMediaSourceSettings::GetInstance().AddShare("videos", source);

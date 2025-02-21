@@ -14,7 +14,7 @@
 #include <vector>
 
 //! \brief Video tag loader using nfo files.
-class CVideoTagLoaderNFO : public VIDEO::IVideoInfoTagLoader
+class CVideoTagLoaderNFO : public KODI::VIDEO::IVideoInfoTagLoader
 {
 public:
   CVideoTagLoaderNFO(const CFileItem& item,
@@ -28,8 +28,9 @@ public:
 
   //! \brief Load "tag" from nfo file.
   //! \brief tag Tag to load info into
-  CInfoScanner::INFO_TYPE Load(CVideoInfoTag& tag, bool prioritise,
-                               std::vector<EmbeddedArt>* = nullptr) override;
+  CInfoScanner::InfoType Load(CVideoInfoTag& tag,
+                              bool prioritise,
+                              std::vector<EmbeddedArt>* = nullptr) override;
 
 protected:
   //! \brief Find nfo file for item

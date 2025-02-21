@@ -14,23 +14,19 @@
 
 class CFileItem;
 
-namespace VIDEO
+namespace KODI::VIDEO::GUILIB
 {
-namespace GUILIB
-{
-class CVideoPlayActionProcessorBase
+class CVideoPlayActionProcessor
 {
 public:
-  explicit CVideoPlayActionProcessorBase(const std::shared_ptr<CFileItem>& item) : m_item(item) {}
-  CVideoPlayActionProcessorBase(const std::shared_ptr<CFileItem>& item,
-                                const std::shared_ptr<const CFileItem>& videoVersion)
-    : m_item{item}, m_videoVersion{videoVersion}
-  {
-  }
-  virtual ~CVideoPlayActionProcessorBase() = default;
+  explicit CVideoPlayActionProcessor(const std::shared_ptr<CFileItem>& item) : m_item(item) {}
+  virtual ~CVideoPlayActionProcessor() = default;
 
   bool ProcessDefaultAction();
   bool ProcessAction(Action action);
+
+  void SetChoosePlayer() { m_choosePlayer = true; }
+  void SetChooseStackPart() { m_chooseStackPart = true; }
 
   bool UserCancelled() const { return m_userCancelled; }
 
@@ -40,16 +36,23 @@ protected:
   virtual Action GetDefaultAction();
   virtual bool Process(Action action);
 
-  virtual bool OnResumeSelected() = 0;
-  virtual bool OnPlaySelected() = 0;
+  virtual bool OnResumeSelected();
+  virtual bool OnPlaySelected();
+
+  void Play(const std::string& player);
 
   std::shared_ptr<CFileItem> m_item;
   bool m_userCancelled{false};
+  bool m_choosePlayer{false};
+  bool m_chooseStackPart{false};
+  unsigned int m_chosenStackPart{0};
 
 private:
-  CVideoPlayActionProcessorBase() = delete;
-
-  const std::shared_ptr<const CFileItem> m_videoVersion;
+  CVideoPlayActionProcessor() = delete;
+  unsigned int ChooseStackPart() const;
+  Action ChoosePlayOrResume() const;
+  static Action ChoosePlayOrResume(const std::string& resumeString);
+  void SetResumeData();
+  void SetStartData();
 };
-} // namespace GUILIB
-} // namespace VIDEO
+} // namespace KODI::VIDEO::GUILIB

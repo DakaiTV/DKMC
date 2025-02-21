@@ -322,6 +322,19 @@ TEST_F(TestURIUtils, IsLiveTV)
   EXPECT_TRUE(URIUtils::IsLiveTV("whatever://path/to/file.pvr"));
 }
 
+TEST_F(TestURIUtils, IsPVRRadioChannel)
+{
+  // pvr://channels/(tv|radio)/<groupname>@<clientid>/<instanceid>@<addonid>_<channeluid>.pvr
+  EXPECT_TRUE(
+      URIUtils::IsPVRRadioChannel("pvr://channels/radio/groupname@0815/1@pvr.demo_4711.pvr"));
+  EXPECT_FALSE(URIUtils::IsPVRRadioChannel(
+      "pvr://channels/tv/groupname@0815/1@pvr.demo_4711.pvr")); // a tv channel
+  EXPECT_FALSE(
+      URIUtils::IsPVRRadioChannel("pvr://channels/radio/")); // root folder for all radio channels
+  EXPECT_FALSE(
+      URIUtils::IsPVRRadioChannel("pvr://channels/radio/groupname@0815/")); // a radio channel group
+}
+
 TEST_F(TestURIUtils, IsMultiPath)
 {
   EXPECT_TRUE(URIUtils::IsMultiPath("multipath://path/to/file"));
@@ -429,9 +442,10 @@ TEST_F(TestURIUtils, IsZIP)
   EXPECT_FALSE(URIUtils::IsZIP("zip://path/to/file"));
 }
 
-TEST_F(TestURIUtils, IsBluray)
+TEST_F(TestURIUtils, IsBlurayPath)
 {
-  EXPECT_TRUE(URIUtils::IsBluray("bluray://path/to/file"));
+  EXPECT_TRUE(URIUtils::IsBlurayPath("bluray://path/to/file"));
+  EXPECT_FALSE(URIUtils::IsBlurayPath("zip://path/to/file"));
 }
 
 TEST_F(TestURIUtils, AddSlashAtEnd)

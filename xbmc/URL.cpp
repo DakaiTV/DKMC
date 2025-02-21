@@ -7,15 +7,17 @@
  */
 
 #include "URL.h"
-#include "utils/log.h"
-#include "utils/URIUtils.h"
-#include "utils/StringUtils.h"
+
+#include "FileItem.h"
+#include "FileItemList.h"
+#include "ServiceBroker.h"
 #include "Util.h"
 #include "filesystem/File.h"
-#include "FileItem.h"
 #include "filesystem/StackDirectory.h"
 #include "network/Network.h"
-#include "ServiceBroker.h"
+#include "utils/StringUtils.h"
+#include "utils/URIUtils.h"
+#include "utils/log.h"
 #ifndef TARGET_POSIX
 #include <sys\stat.h>
 #endif
@@ -129,13 +131,16 @@ void CURL::Parse(std::string strURL1)
   // ones that come to mind are iso9660, cdda, musicdb, etc.
   // they are all local protocols and have no server part, port number, special options, etc.
   // this removes the need for special handling below.
+  // clang-format off
   if (
     IsProtocol("stack") ||
     IsProtocol("virtualpath") ||
     IsProtocol("multipath") ||
     IsProtocol("special") ||
-    IsProtocol("resource")
+    IsProtocol("resource") ||
+    IsProtocol("file")
     )
+  // clang-format on
   {
     SetFileName(std::move(strURL).substr(iPos));
     return;
@@ -257,7 +262,7 @@ void CURL::Parse(std::string strURL1)
   // if [] found, let's store string inside as hostname
   // and remove that parsed part from strHostNameAndPort
   size_t iBrk = strHostNameAndPort.rfind(']');
-  if (iBrk != std::string::npos && strHostNameAndPort.find('[') == 0)
+  if (iBrk != std::string::npos && strHostNameAndPort.starts_with('['))
   {
     m_strHostName = strHostNameAndPort.substr(1, iBrk-1);
     strHostNameAndPort.erase(0, iBrk+1);
@@ -466,8 +471,11 @@ std::string CURL::GetWithoutOptions() const
   std::string strGet = GetWithoutFilename();
 
   // Prevent double slash when concatenating host part and filename part
-  if (m_strFileName.size() && (m_strFileName[0] == '/' || m_strFileName[0] == '\\') && URIUtils::HasSlashAtEnd(strGet))
+  if (!m_strFileName.empty() && (m_strFileName[0] == '/' || m_strFileName[0] == '\\') &&
+      URIUtils::HasSlashAtEnd(strGet) && !(IsProtocol("http") || IsProtocol("https")))
+  {
     URIUtils::RemoveSlashAtEnd(strGet);
+  }
 
   return strGet + m_strFileName;
 }

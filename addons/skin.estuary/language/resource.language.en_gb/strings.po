@@ -232,7 +232,10 @@ msgctxt "#31039"
 msgid "Fast forward"
 msgstr ""
 
-#empty string with id 31040
+#: /xml/SkinSettings.xml
+msgctxt "#31040"
+msgid "Edit widgets"
+msgstr ""
 
 #: /xml/Variables.xml /xml/MyPics.xml
 msgctxt "#31041"
@@ -499,7 +502,12 @@ msgctxt "#31107"
 msgid "WideList"
 msgstr ""
 
-#empty strings from id 31108 to 31109
+#empty strings from id 31108 to 31108
+
+#: /xml/VideoOSD.xml
+msgctxt "#31109"
+msgid "Video streams"
+msgstr ""
 
 #: /xml/Home.xml
 msgctxt "#31110"
@@ -513,7 +521,7 @@ msgstr ""
 
 #: /xml/VideoOSD.xml
 msgctxt "#31112"
-msgid "Toggle audio stream"
+msgid "Audio streams"
 msgstr ""
 
 #: /xml/Custom_1107_SearchDialog.xml
@@ -528,7 +536,7 @@ msgstr ""
 
 #: /xml/VideoOSD.xml
 msgctxt "#31115"
-msgid "Toggle subtitle"
+msgid "Subtitles streams"
 msgstr ""
 
 #: /xml/Includes_Home.xml
@@ -848,7 +856,25 @@ msgctxt "#31176"
 msgid "Default select action for movie sets on the home screen"
 msgstr ""
 
-#empty strings from id 31177 to 31599
+#empty strings from id 31177 to 31596
+
+#: /xml/Includes_SettingsDialog.xml
+#. Button to select Player Process Info window
+msgctxt "#31597"
+msgid "Player info"
+msgstr ""
+
+#: /xml/DialogPlayerProcessInfo.xml
+#. Label to show player cache
+msgctxt "#31598"
+msgid "Player cache"
+msgstr ""
+
+#: /xml/DialogPlayerProcessInfo.xml
+#. Label to show the video codec name
+msgctxt "#31599"
+msgid "Audio decoder"
+msgstr ""
 
 #: /xml/DialogPlayerProcessInfo.xml
 #. Label to show the video codec name
@@ -922,26 +948,8 @@ msgctxt "#31611"
 msgid "System"
 msgstr ""
 
-#: /xml/DialogVideoVersion.xml
-#. Video version dialog button
+#: /xml/Includes_DialogSelect.xml
+#. Audio channels
 msgctxt "#31612"
-msgid "Add version"
-msgstr ""
-
-#: /xml/DialogVideoVersion.xml
-#. Video version dialog button
-msgctxt "#31613"
-msgid "Add extras"
-msgstr ""
-
-#: /xml/DialogVideoVersion.xml
-#. Video version dialog button
-msgctxt "#31614"
-msgid "Set default"
-msgstr ""
-
-#: /xml/DialogVideoVersion.xml
-#. Video version dialog button
-msgctxt "#31615"
-msgid "Extras"
+msgid "channels"
 msgstr ""

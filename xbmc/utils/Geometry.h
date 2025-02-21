@@ -177,7 +177,7 @@ public:
     return {m_w, m_h};
   }
 
-  template<class U> explicit CSizeGen<T>(const CSizeGen<U>& rhs)
+  template<class U> explicit CSizeGen(const CSizeGen<U>& rhs)
   {
     CheckSet(static_cast<T> (rhs.m_w), static_cast<T> (rhs.m_h));
   }
@@ -279,6 +279,11 @@ public:
   constexpr bool PtInRect(const point_type &point) const
   {
     return (x1 <= point.x && point.x <= x2 && y1 <= point.y && point.y <= y2);
+  };
+
+  constexpr bool Intersects(const this_type& rect) const
+  {
+    return (x1 < rect.x2 && x2 > rect.x1 && y1 < rect.y2 && y2 > rect.y1);
   };
 
   this_type& operator-=(const point_type &point) XBMC_FORCE_INLINE
@@ -430,7 +435,7 @@ public:
     return newRectanglesList;
   }
 
-  std::vector<this_type> SubtractRects(std::vector<this_type> intersectionList)
+  std::vector<this_type> SubtractRects(const std::vector<this_type>& intersectionList)
   {
     std::vector<this_type> fragmentsList;
     fragmentsList.push_back(*this);

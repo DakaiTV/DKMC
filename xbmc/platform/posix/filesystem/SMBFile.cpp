@@ -27,16 +27,38 @@
 #include "utils/URIUtils.h"
 #include "utils/log.h"
 
+#include <cstring>
 #include <inttypes.h>
 #include <mutex>
+#include <regex>
 
 #include <libsmbclient.h>
 
 using namespace XFILE;
 
-void xb_smbc_log(const char* msg)
+void xb_smbc_log(void* private_ptr, int level, const char* msg)
 {
-  CLog::Log(LOGINFO, "{}{}", "smb: ", msg);
+  const int logLevel = [level]()
+  {
+    switch (level)
+    {
+      case 0:
+        return LOGWARNING;
+      case 1:
+        return LOGINFO;
+      default:
+        return LOGDEBUG;
+    }
+  }();
+
+  if (std::strchr(msg, '@'))
+  {
+    // redact User/pass in URLs
+    static const std::regex redact("(\\w+://)\\S+:\\S+@");
+    CLog::Log(logLevel, "smb: {}", std::regex_replace(msg, redact, "$1USERNAME:PASSWORD@"));
+  }
+  else
+    CLog::Log(logLevel, "smb: {}", msg);
 }
 
 void xb_smbc_auth(const char *srv, const char *shr, char *wg, int wglen,
@@ -111,21 +133,43 @@ void CSMB::Init()
         fprintf(f, "\tlock directory = %s/.smb/\n", home.c_str());
 
         // set minimum smbclient protocol version
-        if (settings->GetInt(CSettings::SETTING_SMB_MINPROTOCOL) > 0)
+        switch (settings->GetInt(CSettings::SETTING_SMB_MINPROTOCOL))
         {
-          if (settings->GetInt(CSettings::SETTING_SMB_MINPROTOCOL) == 1)
+          case 0:
+          default:
+            break;
+          case 1:
             fprintf(f, "\tclient min protocol = NT1\n");
-          else
-            fprintf(f, "\tclient min protocol = SMB%d\n", settings->GetInt(CSettings::SETTING_SMB_MINPROTOCOL));
+            break;
+          case 2:
+            fprintf(f, "\tclient min protocol = SMB2_02\n");
+            break;
+          case 21:
+            fprintf(f, "\tclient min protocol = SMB2_10\n");
+            break;
+          case 3:
+            fprintf(f, "\tclient min protocol = SMB3\n");
+            break;
         }
 
         // set maximum smbclient protocol version
-        if (settings->GetInt(CSettings::SETTING_SMB_MAXPROTOCOL) > 0)
+        switch (settings->GetInt(CSettings::SETTING_SMB_MAXPROTOCOL))
         {
-          if (settings->GetInt(CSettings::SETTING_SMB_MAXPROTOCOL) == 1)
+          case 0:
+          default:
+            break;
+          case 1:
             fprintf(f, "\tclient max protocol = NT1\n");
-          else
-            fprintf(f, "\tclient max protocol = SMB%d\n", settings->GetInt(CSettings::SETTING_SMB_MAXPROTOCOL));
+            break;
+          case 2:
+            fprintf(f, "\tclient max protocol = SMB2_02\n");
+            break;
+          case 21:
+            fprintf(f, "\tclient max protocol = SMB2_10\n");
+            break;
+          case 3:
+            fprintf(f, "\tclient max protocol = SMB3\n");
+            break;
         }
 
         // set legacy security options
@@ -175,6 +219,7 @@ void CSMB::Init()
 
 #ifdef DEPRECATED_SMBC_INTERFACE
     smbc_setDebug(m_context, CServiceBroker::GetLogging().CanLogComponent(LOGSAMBA) ? 10 : 0);
+    smbc_setLogCallback(m_context, this, xb_smbc_log);
     smbc_setFunctionAuthData(m_context, xb_smbc_auth);
     orig_cache = smbc_getFunctionGetCachedServer(m_context);
     smbc_setFunctionGetCachedServer(m_context, xb_smbc_cache);
@@ -391,7 +436,7 @@ bool CSMBFile::Open(const CURL& url)
   if (m_fd == -1)
   {
     // write error to logfile
-    CLog::Log(LOGINFO, "SMBFile->Open: Unable to open file : '{}'\nunix_err:'{:x}' error : '{}'",
+    CLog::Log(LOGERROR, "SMBFile->Open: Unable to open file : '{}'\nunix_err:'{:x}' error : '{}'",
               CURL::GetRedacted(strFileName), errno, strerror(errno));
     return false;
   }
@@ -705,12 +750,12 @@ std::string CSMBFile::GetAuthenticatedPath(const CURL &url)
   return smb.URLEncode(authURL);
 }
 
-int CSMBFile::IoControl(EIoControl request, void* param)
+int CSMBFile::IoControl(IOControl request, void* param)
 {
-  if (request == IOCTRL_SEEK_POSSIBLE)
+  if (request == IOControl::SEEK_POSSIBLE)
     return 1;
 
-  if (request == IOCTRL_SET_RETRY)
+  if (request == IOControl::SET_RETRY)
   {
     m_allowRetry = *(bool*) param;
     return 0;
@@ -723,5 +768,14 @@ int CSMBFile::GetChunkSize()
 {
   const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
 
-  return settings ? (settings->GetInt(CSettings::SETTING_SMB_CHUNKSIZE) * 1024) : (128 * 1024);
+  if (!settings)
+    return (64 * 1024);
+
+  // Only SMBv2.1 and SMBv3 supports large MTU
+  if (settings->GetInt(CSettings::SETTING_SMB_MINPROTOCOL) > 2)
+  {
+    return (settings->GetInt(CSettings::SETTING_SMB_CHUNKSIZE) * 1024);
+  }
+
+  return (64 * 1024);
 }

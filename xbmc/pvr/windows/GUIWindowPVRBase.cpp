@@ -9,8 +9,10 @@
 #include "GUIWindowPVRBase.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "GUIUserMessages.h"
 #include "ServiceBroker.h"
+#include "URL.h"
 #include "addons/AddonManager.h"
 #include "addons/addoninfo/AddonType.h"
 #include "dialogs/GUIDialogExtendedProgressBar.h"
@@ -217,7 +219,8 @@ bool CGUIWindowPVRBase::ActivatePreviousChannelGroup()
   const std::shared_ptr<const CPVRChannelGroup> channelGroup = GetChannelGroup();
   if (channelGroup)
   {
-    const CPVRChannelGroups* groups = CServiceBroker::GetPVRManager().ChannelGroups()->Get(channelGroup->IsRadio());
+    const std::shared_ptr<const CPVRChannelGroups> groups{
+        CServiceBroker::GetPVRManager().ChannelGroups()->Get(channelGroup->IsRadio())};
     if (groups)
     {
       SetChannelGroup(groups->GetPreviousGroup(*channelGroup));
@@ -232,7 +235,8 @@ bool CGUIWindowPVRBase::ActivateNextChannelGroup()
   const std::shared_ptr<const CPVRChannelGroup> channelGroup = GetChannelGroup();
   if (channelGroup)
   {
-    const CPVRChannelGroups* groups = CServiceBroker::GetPVRManager().ChannelGroups()->Get(channelGroup->IsRadio());
+    const std::shared_ptr<const CPVRChannelGroups> groups{
+        CServiceBroker::GetPVRManager().ChannelGroups()->Get(channelGroup->IsRadio())};
     if (groups)
     {
       SetChannelGroup(groups->GetNextGroup(*channelGroup));
@@ -406,24 +410,17 @@ bool CGUIWindowPVRBase::OpenChannelGroupSelectionDialog()
   dialog->Reset();
   dialog->SetHeading(CVariant{g_localizeStrings.Get(19146)});
   dialog->SetMultiSelection(false);
+  dialog->SetItems(options);
 
   auto& pvrMgr = CServiceBroker::GetPVRManager();
   const bool useDetails = pvrMgr.Clients()->CreatedClientAmount() > 1;
   dialog->SetUseDetails(useDetails);
   if (useDetails)
   {
-    std::string selectedName;
-    std::string selectedClient;
-
+    std::string selectedGroup;
     const std::shared_ptr<const CPVRChannelGroup> channelGroup = GetChannelGroup();
     if (channelGroup)
-    {
-      selectedName = channelGroup->GroupName();
-
-      auto client = pvrMgr.GetClient(channelGroup->GetClientID());
-      if (client)
-        selectedClient = client->GetFriendlyName();
-    }
+      selectedGroup = channelGroup->GetPath();
 
     CPVRThumbLoader loader;
     int idx = 0;
@@ -432,7 +429,7 @@ bool CGUIWindowPVRBase::OpenChannelGroupSelectionDialog()
       // set client name as label2
       const std::shared_ptr<const CPVRClient> client = pvrMgr.GetClient(*group);
       if (client)
-        group->SetLabel2(client->GetFriendlyName());
+        group->SetLabel2(client->GetFullClientName());
 
       // set thumbnail
       loader.LoadItem(group.get());
@@ -440,7 +437,7 @@ bool CGUIWindowPVRBase::OpenChannelGroupSelectionDialog()
       // if not yet done, find and select currently active channel group
       if (idx >= 0)
       {
-        if (group->GetLabel() == selectedName && group->GetLabel2() == selectedClient)
+        if (group->GetPath() == selectedGroup)
         {
           dialog->SetSelected(idx);
           idx = -1; // done
@@ -458,11 +455,11 @@ bool CGUIWindowPVRBase::OpenChannelGroupSelectionDialog()
     if (channelGroup)
     {
       int idx = -1;
-      const std::string selectedName = channelGroup->GroupName();
+      const std::string selectedGroup{channelGroup->GetPath()};
       for (auto& group : options)
       {
         // select currently active channel group
-        if (group->GetLabel() == selectedName)
+        if (group->GetPath() == selectedGroup)
         {
           dialog->SetSelected(idx);
           break;
@@ -471,8 +468,6 @@ bool CGUIWindowPVRBase::OpenChannelGroupSelectionDialog()
       }
     }
   }
-
-  dialog->SetItems(options);
 
   dialog->Open();
 
@@ -555,6 +550,18 @@ void CGUIWindowPVRBase::SetChannelGroup(std::shared_ptr<CPVRChannelGroup> &&grou
   {
     CServiceBroker::GetPVRManager().PlaybackState()->SetActiveChannelGroup(updateChannelGroup);
     Update(GetDirectoryPath());
+  }
+}
+
+void CGUIWindowPVRBase::SetChannelGroupPath(const std::string& path)
+{
+  const CURL url{path};
+  const std::string pathWithoutOptions{url.GetWithoutOptions()};
+
+  std::unique_lock<CCriticalSection> lock(m_critSection);
+  if (m_channelGroupPath != pathWithoutOptions)
+  {
+    m_channelGroupPath = pathWithoutOptions;
   }
 }
 

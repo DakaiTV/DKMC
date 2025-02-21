@@ -8,7 +8,9 @@
 
 #pragma once
 
+#include "pvr/PVRConstants.h" // PVR_CLIENT_INVALID_UID
 #include "threads/CriticalSection.h"
+#include "utils/ContentUtils.h"
 
 #include <memory>
 #include <string>
@@ -23,6 +25,7 @@ class CPVRChannelGroup;
 class CPVRChannelGroupMember;
 class CPVREpgInfoTag;
 class CPVRRecording;
+class CPVRStreamProperties;
 
 class CPVRPlaybackState
 {
@@ -48,6 +51,14 @@ public:
   void ReInit();
 
   /*!
+   * @brief Inform that playback of an item is going to happen.
+   * Add any info to the item that is needed for playback, e.g. add dyn path and properties
+   * @param item The item that shall be played.
+   * @return True on success, false otherwise.
+   */
+  bool OnPreparePlayback(CFileItem& item);
+
+  /*!
    * @brief Inform that playback of an item just started.
    * @param item The item that started to play.
    */
@@ -63,8 +74,16 @@ public:
   /*!
    * @brief Inform that playback of an item has stopped without user interaction.
    * @param item The item that ended to play.
+   * @return True, if the state has changed, false otherwise
    */
-  void OnPlaybackEnded(const CFileItem& item);
+  bool OnPlaybackEnded(const CFileItem& item);
+
+  /*!
+   * @brief Start playback of the given item.
+   * @param item containing a channel, a recording or an epg tag.
+   * @param mode playback mode.
+   */
+  void StartPlayback(std::unique_ptr<CFileItem>& item, ContentUtils::PlayMode mode) const;
 
   /*!
    * @brief Check if a TV channel, radio channel or recording is playing.
@@ -169,7 +188,7 @@ public:
 
   /*!
    * @brief Get the ID of the playing client, if there is one.
-   * @return The ID or -1 if no client is playing.
+   * @return The ID or PVR_CLIENT_INVALID_UID if no client is playing.
    */
   int GetPlayingClientID() const;
 
@@ -246,6 +265,13 @@ private:
   void ClearData();
 
   /*!
+   * @brief Return the next item to play automatically, if any.
+   * @param item The item which just finished playback.
+   * @return The item to play next, if any, nullptr otherwise.
+   */
+  std::unique_ptr<CFileItem> GetNextAutoplayItem(const CFileItem& item);
+
+  /*!
    * @brief Set the active group to the group of the supplied channel group member.
    * @param channel The channel group member
    */
@@ -270,7 +296,7 @@ private:
   std::shared_ptr<CPVRChannelGroupMember> m_previousToLastPlayedChannelRadio;
   std::string m_strPlayingClientName;
   int m_playingGroupId = -1;
-  int m_playingClientId = -1;
+  int m_playingClientId = PVR_CLIENT_INVALID_UID;
   int m_playingChannelUniqueId = -1;
   std::string m_strPlayingRecordingUniqueId;
   int m_playingEpgTagChannelUniqueId = -1;

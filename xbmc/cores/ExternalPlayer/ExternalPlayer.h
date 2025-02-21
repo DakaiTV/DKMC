@@ -16,6 +16,7 @@
 #include <vector>
 
 class CGUIDialogOK;
+class TiXmlElement;
 
 class CExternalPlayer : public IPlayer, public CThread
 {
@@ -44,7 +45,6 @@ public:
 
   void SeekTime(int64_t iTime) override;
   void SetSpeed(float speed) override;
-  void DoAudioWork() override {}
 
   bool SetPlayerState(const std::string& state) override;
 

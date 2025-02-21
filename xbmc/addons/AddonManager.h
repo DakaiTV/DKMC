@@ -11,11 +11,13 @@
 #include "threads/CriticalSection.h"
 #include "utils/EventStream.h"
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ADDON
@@ -37,10 +39,10 @@ using ADDON_INFO_LIST = std::map<std::string, AddonInfoPtr>;
 
 class IAddon;
 using AddonPtr = std::shared_ptr<IAddon>;
+using AddonWithUpdate = std::pair<std::shared_ptr<IAddon>, std::shared_ptr<IAddon>>;
 using VECADDONS = std::vector<AddonPtr>;
 
 struct AddonEvent;
-struct AddonWithUpdate;
 struct DependencyInfo;
 struct RepositoryDirInfo;
 
@@ -452,7 +454,7 @@ public:
      * @brief Get a list of add-on's with info's for the on system available
      * ones.
      *
-     * @param[out] addonInfos list where finded addon information becomes stored
+     * @param[out] addonInfos list where found addon information becomes stored
      * @param[in] onlyEnabled If true are only enabled ones given back,
      *                        if false all on system available. Default is true.
      * @param[in] type The requested type, with "ADDON_UNKNOWN" are all add-on
@@ -470,7 +472,7 @@ public:
      * @param[in] onlyEnabled If true are only enabled ones given back,
      *                        if false all on system available. Default is true.
      * @param[in] types List about requested types.
-     * @return List where finded addon information becomes returned.
+     * @return List where found addon information becomes returned.
      *
      * @note @ref ADDON_UNKNOWN should not used for here!
      */
@@ -480,7 +482,7 @@ public:
   /*!
      * @brief Get a list of disabled add-on's with info's
      *
-     * @param[out] addonInfos list where finded addon information becomes stored
+     * @param[out] addonInfos list where found addon information becomes stored
      * @param[in] type        The requested type, with "ADDON_UNKNOWN"
      *                        are all add-on types given back who match the case
      *                        with value before.
@@ -494,7 +496,7 @@ public:
      * @brief Get a list of disabled add-on's with info's for the on system
      * available ones with a specific disabled reason.
      *
-     * @param[out] addonInfos list where finded addon information becomes stored
+     * @param[out] addonInfos list where found addon information becomes stored
      * @param[in] type        The requested type, with "ADDON_UNKNOWN"
      *                        are all add-on types given back who match the case
      *                        with value before.

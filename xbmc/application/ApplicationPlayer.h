@@ -55,6 +55,8 @@ public:
   void FlushRenderer();
   void SetRenderViewMode(int mode, float zoom, float par, float shift, bool stretch);
   float GetRenderAspectRatio() const;
+  bool GetRects(CRect& source, CRect& dest, CRect& view) const;
+  unsigned int GetOrientation() const;
   void TriggerUpdateResolution();
   bool IsRenderingVideo() const;
   bool IsRenderingGuiLayer() const;
@@ -70,13 +72,18 @@ public:
   bool IsExternalPlaying() const;
   bool IsRemotePlaying() const;
 
+  /*!
+   * \brief Get the name of the player in use
+   * \return the player name if a player is active, otherwise it returns an empty string
+   */
+  std::string GetName() const;
+
   // proxy calls
   void AddSubtitle(const std::string& strSubPath);
   bool CanPause() const;
   bool CanSeek() const;
-  void DoAudioWork();
   int GetAudioDelay() const;
-  void GetAudioCapabilities(std::vector<int>& audioCaps) const;
+  void GetAudioCapabilities(std::vector<IPlayerAudioCaps>& caps) const;
   int GetAudioStream();
   int GetAudioStreamCount() const;
   void GetAudioStreamInfo(int index, AudioStreamInfo& info) const;
@@ -88,10 +95,10 @@ public:
   int64_t GetChapterPos(int chapterIdx = -1) const;
   float GetPercentage() const;
   std::string GetPlayerState();
-  PLAYLIST::Id GetPreferredPlaylist() const;
+  KODI::PLAYLIST::Id GetPreferredPlaylist() const;
   int GetSubtitleDelay() const;
   int GetSubtitle();
-  void GetSubtitleCapabilities(std::vector<int>& subCaps) const;
+  void GetSubtitleCapabilities(std::vector<IPlayerSubtitleCaps>& caps) const;
   int GetSubtitleCount() const;
   void GetSubtitleStreamInfo(int index, SubtitleStreamInfo& info) const;
   bool GetSubtitleVisible() const;
@@ -137,7 +144,7 @@ public:
   void Seek(bool bPlus = true, bool bLargeStep = false, bool bChapterOverride = false);
   int SeekChapter(int iChapter);
   void SeekPercentage(float fPercent = 0);
-  bool SeekScene(bool bPlus = true);
+  bool SeekScene(Direction seekDirection);
   void SeekTime(int64_t iTime = 0);
   void SeekTimeRelative(int64_t iTime = 0);
   void SetAudioStream(int iStream);

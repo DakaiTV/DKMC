@@ -8,7 +8,11 @@
 
 #include "GUISettingsSliderControl.h"
 
-#include "input/Key.h"
+#include "input/actions/Action.h"
+#include "input/actions/ActionIDs.h"
+#include "input/mouse/MouseEvent.h"
+
+using namespace KODI;
 
 CGUISettingsSliderControl::CGUISettingsSliderControl(int parentID,
                                                      int controlID,
@@ -77,6 +81,9 @@ void CGUISettingsSliderControl::Render()
 {
   m_buttonControl.Render();
   CGUISliderControl::Render();
+  if (CServiceBroker::GetWinSystem()->GetGfxContext().GetRenderOrder() ==
+      RENDER_ORDER_FRONT_TO_BACK)
+    return;
   m_label.Render();
 }
 
@@ -123,7 +130,8 @@ void CGUISettingsSliderControl::OnUnFocus()
   m_active = false;
 }
 
-EVENT_RESULT CGUISettingsSliderControl::OnMouseEvent(const CPoint &point, const CMouseEvent &event)
+EVENT_RESULT CGUISettingsSliderControl::OnMouseEvent(const CPoint& point,
+                                                     const MOUSE::CMouseEvent& event)
 {
   SetActive();
   return CGUISliderControl::OnMouseEvent(point, event);

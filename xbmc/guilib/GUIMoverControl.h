@@ -36,7 +36,7 @@ public:
                    float height,
                    const CTextureInfo& textureFocus,
                    const CTextureInfo& textureNoFocus,
-                   UTILS::MOVING_SPEED::MapEventConfig& movingSpeedCfg);
+                   KODI::UTILS::MOVING_SPEED::MapEventConfig& movingSpeedCfg);
 
   ~CGUIMoverControl(void) override = default;
   CGUIMoverControl* Clone() const override { return new CGUIMoverControl(*this); }
@@ -60,14 +60,14 @@ public:
   bool CanFocus() const override { return true; }
 
 protected:
-  EVENT_RESULT OnMouseEvent(const CPoint &point, const CMouseEvent &event) override;
+  EVENT_RESULT OnMouseEvent(const CPoint& point, const KODI::MOUSE::CMouseEvent& event) override;
   bool UpdateColors(const CGUIListItem* item) override;
   bool SetAlpha(unsigned char alpha);
   void Move(int iX, int iY);
   std::unique_ptr<CGUITexture> m_imgFocus;
   std::unique_ptr<CGUITexture> m_imgNoFocus;
   unsigned int m_frameCounter;
-  UTILS::MOVING_SPEED::CMovingSpeed m_movingSpeed;
+  KODI::UTILS::MOVING_SPEED::CMovingSpeed m_movingSpeed;
   float m_fAnalogSpeed;
   int m_iX1, m_iX2, m_iY1, m_iY2;
   int m_iLocationX, m_iLocationY;

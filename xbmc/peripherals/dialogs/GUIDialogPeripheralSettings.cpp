@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2018 Team Kodi
+ *  Copyright (C) 2005-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -13,7 +13,9 @@
 #include "addons/Skin.h"
 #include "dialogs/GUIDialogYesNo.h"
 #include "games/controllers/Controller.h"
+#include "games/controllers/ControllerLayout.h"
 #include "games/controllers/ControllerManager.h"
+#include "games/controllers/guicontrols/GUIGameController.h"
 #include "guilib/GUIMessage.h"
 #include "peripherals/Peripherals.h"
 #include "settings/SettingAddon.h"
@@ -28,8 +30,10 @@
 using namespace KODI;
 using namespace PERIPHERALS;
 
-// Settings for peripherals
-constexpr std::string_view SETTING_APPEARANCE = "appearance";
+namespace
+{
+constexpr const int CONTROL_ID_PERIPHERAL_ICON = 100;
+} // namespace
 
 CGUIDialogPeripheralSettings::CGUIDialogPeripheralSettings()
   : CGUIDialogSettingsManualBase(WINDOW_DIALOG_PERIPHERAL_SETTINGS, "DialogSettings.xml"),
@@ -55,6 +59,12 @@ bool CGUIDialogPeripheralSettings::OnMessage(CGUIMessage& message)
   }
 
   return CGUIDialogSettingsManualBase::OnMessage(message);
+}
+
+void CGUIDialogPeripheralSettings::OnDeinitWindow(int nextWindowID)
+{
+  UpdateIcon({});
+  CGUIDialogSettingsManualBase::OnDeinitWindow(nextWindowID);
 }
 
 void CGUIDialogPeripheralSettings::RegisterPeripheralManager(CPeripherals& manager)
@@ -104,24 +114,21 @@ void CGUIDialogPeripheralSettings::OnSettingChanged(const std::shared_ptr<const 
   if (!peripheral)
     return;
 
-  if (settingId == SETTING_APPEARANCE)
-  {
-    // Get the controller profile of the new appearance
-    GAME::ControllerPtr controller;
+  peripheral->SetSetting(settingId, setting->ToString());
 
-    if (setting->GetType() == SettingType::String)
-    {
-      std::shared_ptr<const CSettingString> settingString =
-          std::static_pointer_cast<const CSettingString>(setting);
-      const std::string& addonId = settingString->GetValue();
+  // Refresh peripheral icon
+  UpdateIcon(peripheral->ControllerProfile());
 
-      if (m_manager != nullptr)
-        controller = m_manager->GetControllerProfiles().GetController(addonId);
-    }
+  // Persist settings so that the new setting takes effect immediately
+  Save();
+}
 
-    if (controller)
-      peripheral->SetControllerProfile(controller);
-  }
+void CGUIDialogPeripheralSettings::UpdateIcon(const GAME::ControllerPtr& controller)
+{
+  GAME::CGUIGameController* control =
+      dynamic_cast<GAME::CGUIGameController*>(GetControl(CONTROL_ID_PERIPHERAL_ICON));
+  if (control != nullptr)
+    control->SetFileName(controller ? controller->Layout().ImagePath() : "");
 }
 
 bool CGUIDialogPeripheralSettings::Save()
@@ -155,6 +162,9 @@ void CGUIDialogPeripheralSettings::OnResetSettings()
 
   // re-create all settings and their controls
   SetupView();
+
+  // Persist settings so that resetting takes effect immediately
+  Save();
 }
 
 void CGUIDialogPeripheralSettings::SetupView()
@@ -165,6 +175,18 @@ void CGUIDialogPeripheralSettings::SetupView()
   SET_CONTROL_LABEL(CONTROL_SETTINGS_OKAY_BUTTON, 186);
   SET_CONTROL_LABEL(CONTROL_SETTINGS_CANCEL_BUTTON, 222);
   SET_CONTROL_LABEL(CONTROL_SETTINGS_CUSTOM_BUTTON, 409);
+
+  // Set peripheral icon
+  GAME::ControllerPtr controller;
+
+  if (m_item != nullptr)
+  {
+    PeripheralPtr peripheral = CServiceBroker::GetPeripherals().GetByPath(m_item->GetPath());
+    if (peripheral)
+      controller = peripheral->ControllerProfile();
+  }
+
+  UpdateIcon(controller);
 }
 
 void CGUIDialogPeripheralSettings::InitializeSettings()

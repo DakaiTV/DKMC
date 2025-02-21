@@ -14,7 +14,6 @@
 #include "guilib/GUIComponent.h"
 #include "guilib/GUIWindowManager.h"
 #include "messaging/ApplicationMessenger.h"
-#include "rendering/dx/DirectXHelper.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
 #include "utils/SystemInfo.h"
@@ -53,7 +52,7 @@ namespace winrt
 #endif
 #define LOG_HR(hr) \
   CLog::LogF(LOGERROR, "function call at line {} ends with error: {}", __LINE__, \
-             DX::GetErrorDescription(hr));
+             CWIN32Util::FormatHRESULT(hr));
 #define CHECK_ERR() if (FAILED(hr)) { LOG_HR(hr); breakOnDebug; return; }
 #define RETURN_ERR(ret) if (FAILED(hr)) { LOG_HR(hr); breakOnDebug; return (##ret); }
 
@@ -398,7 +397,7 @@ void DX::DeviceResources::CreateDeviceResources()
   if (FAILED(hr))
   {
     CLog::LogF(LOGERROR, "unable to create hardware device with video support, error {}",
-               DX::GetErrorDescription(hr));
+               CWIN32Util::FormatHRESULT(hr));
     CLog::LogF(LOGERROR, "trying to create hardware device without video support.");
 
     creationFlags &= ~D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
@@ -410,7 +409,7 @@ void DX::DeviceResources::CreateDeviceResources()
     if (FAILED(hr))
     {
       CLog::LogF(LOGERROR, "unable to create hardware device, error {}",
-                 DX::GetErrorDescription(hr));
+                 CWIN32Util::FormatHRESULT(hr));
       CLog::LogF(LOGERROR, "trying to create WARP device.");
 
       hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, creationFlags,
@@ -420,7 +419,7 @@ void DX::DeviceResources::CreateDeviceResources()
       if (FAILED(hr))
       {
         CLog::LogF(LOGFATAL, "unable to create WARP device. Rendering is not possible. Error {}",
-                   DX::GetErrorDescription(hr));
+                   CWIN32Util::FormatHRESULT(hr));
         CHECK_ERR();
       }
     }
@@ -1168,6 +1167,7 @@ void DX::DeviceResources::CheckDXVA2SharedDecoderSurfaces()
     return;
 
   VideoDriverInfo driver = GetVideoDriverVersion();
+  driver.Log();
 
   if (!m_NV12SharedTexturesSupport)
     return;
@@ -1200,18 +1200,26 @@ void DX::DeviceResources::CheckDXVA2SharedDecoderSurfaces()
     CLog::LogF(LOGINFO, "DXVA Video Super Resolution is potentially supported");
 }
 
-VideoDriverInfo DX::DeviceResources::GetVideoDriverVersion()
+VideoDriverInfo DX::DeviceResources::GetVideoDriverVersion() const
 {
+  if (!m_adapter)
+    return {};
+
+  VideoDriverInfo driver{};
   const DXGI_ADAPTER_DESC ad = GetAdapterDesc();
 
-  VideoDriverInfo driver = CWIN32Util::GetVideoDriverInfo(ad.VendorId, ad.Description);
+  // Version retrieval with DXGI is more modern but requires WDDM >= 2.3 for guarantee of same
+  // version returned by all driver components. Fallback to older method for older drivers.
+  LARGE_INTEGER rawVersion{};
+  if (SUCCEEDED(m_adapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &rawVersion)) &&
+      static_cast<uint16_t>(rawVersion.QuadPart >> 48) >= 23)
+    driver = CWIN32Util::FormatVideoDriverInfo(ad.VendorId, rawVersion.QuadPart);
 
-  if (ad.VendorId == PCIV_NVIDIA)
-    CLog::LogF(LOGINFO, "video driver version is {} {}.{} ({})", GetGFXProviderName(ad.VendorId),
-               driver.majorVersion, driver.minorVersion, driver.version);
-  else
-    CLog::LogF(LOGINFO, "video driver version is {} {}", GetGFXProviderName(ad.VendorId),
-               driver.version);
+  if (!driver.valid)
+    driver = CWIN32Util::GetVideoDriverInfo(ad.VendorId, ad.Description);
+
+  if (!driver.valid)
+    driver = CWIN32Util::GetVideoDriverInfoDX(ad.VendorId, ad.AdapterLuid);
 
   return driver;
 }
@@ -1351,9 +1359,6 @@ void DX::DeviceResources::SetHdrColorSpace(const DXGI_COLOR_SPACE_TYPE colorSpac
 
 HDR_STATUS DX::DeviceResources::ToggleHDR()
 {
-  DXGI_MODE_DESC md = {};
-  GetDisplayMode(&md);
-
   // Xbox uses only full screen windowed mode and not needs recreate swapchain.
   // Recreate swapchain causes native 4K resolution is lost and quality obtained
   // is equivalent to 1080p upscaled to 4K (TO DO: investigate root cause).
@@ -1363,7 +1368,7 @@ HDR_STATUS DX::DeviceResources::ToggleHDR()
   DX::Windowing()->SetAlteringWindow(true);
 
   // Toggle display HDR
-  HDR_STATUS hdrStatus = CWIN32Util::ToggleWindowsHDR(md);
+  HDR_STATUS hdrStatus = CWIN32Util::ToggleWindowsHDR();
 
   // Kill swapchain
   if (!isXbox && m_swapChain && hdrStatus != HDR_STATUS::HDR_TOGGLE_FAILED)
@@ -1469,7 +1474,8 @@ std::vector<DXGI_COLOR_SPACE_TYPE> DX::DeviceResources::GetSwapChainColorSpaces(
   }
   else
   {
-    CLog::LogF(LOGDEBUG, "IDXGISwapChain3 is not available. Error {}", DX::GetErrorDescription(hr));
+    CLog::LogF(LOGDEBUG, "IDXGISwapChain3 is not available. Error {}",
+               CWIN32Util::FormatHRESULT(hr));
   }
   return result;
 }
@@ -1483,4 +1489,20 @@ bool DX::DeviceResources::SetMultithreadProtected(bool enabled) const
     wasEnabled = multithread->SetMultithreadProtected(enabled ? TRUE : FALSE);
 
   return (wasEnabled == TRUE ? true : false);
+}
+
+bool DX::DeviceResources::IsGCNOrOlder() const
+{
+  if (CSysInfo::GetWindowsDeviceFamily() == CSysInfo::Xbox)
+    return false;
+
+  const VideoDriverInfo driver = GetVideoDriverVersion();
+
+  if (driver.vendorId != PCIV_AMD)
+    return false;
+
+  if (driver.valid && CWIN32Util::IsDriverVersionAtLeast(driver.version, "31.0.22000.0"))
+    return false;
+
+  return true;
 }

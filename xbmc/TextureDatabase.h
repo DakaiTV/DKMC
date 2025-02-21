@@ -35,26 +35,6 @@ protected:
                                               const std::string &type) const override;
 };
 
-class CTextureUtils
-{
-public:
-  /*! \brief retrieve a wrapped URL for a image file
-   \param image name of the file
-   \param type signifies a special type of image (eg embedded video thumb, picture folder thumb)
-   \param options which options we need (eg size=thumb)
-   \return full wrapped URL of the image file
-   */
-  static std::string GetWrappedImageURL(const std::string &image, const std::string &type = "", const std::string &options = "");
-  static std::string GetWrappedThumbURL(const std::string &image);
-
-  /*! \brief Unwrap an image://<url_encoded_path> style URL
-   Such urls are used for art over the webserver or other users of the VFS
-   \param image url of the image
-   \return the unwrapped URL, or the original URL if unwrapping is inappropriate.
-   */
-  static std::string UnwrapImageURL(const std::string &image);
-};
-
 class CTextureDatabase : public CDatabase, public IDatabaseQueryRuleFactory
 {
 public:
@@ -106,6 +86,20 @@ public:
 
   bool GetTextures(CVariant &items, const Filter &filter);
 
+  /*!
+   * @brief Get a list of the oldest cached images eligible for cleaning.
+   * @param maxImages the maximum number of images to return
+   * @return
+   */
+  std::vector<std::string> GetOldestCachedImages(unsigned int maxImages) const;
+
+  /*!
+   * @brief Set a list of images to be kept. Used to clean the image cache.
+   * @param imagesToKeep
+   * @return
+   */
+  bool SetKeepCachedImages(const std::vector<std::string>& imagesToKeep);
+
   // rule creation
   CDatabaseQueryRule *CreateRule() const override;
   CDatabaseQueryRuleCombination *CreateCombination() const override;
@@ -120,6 +114,6 @@ protected:
   void CreateTables() override;
   void CreateAnalytics() override;
   void UpdateTables(int version) override;
-  int GetSchemaVersion() const override { return 13; }
+  int GetSchemaVersion() const override { return 14; }
   const char* GetBaseDBName() const override { return "Textures"; }
 };

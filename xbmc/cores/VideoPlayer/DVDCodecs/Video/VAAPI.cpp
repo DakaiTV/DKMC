@@ -57,6 +57,7 @@ using namespace std::chrono_literals;
 
 constexpr auto SETTING_VIDEOPLAYER_USEVAAPI = "videoplayer.usevaapi";
 constexpr auto SETTING_VIDEOPLAYER_USEVAAPIAV1 = "videoplayer.usevaapiav1";
+constexpr auto SETTING_VIDEOPLAYER_USEVAAPIAVC = "videoplayer.usevaapiavc";
 constexpr auto SETTING_VIDEOPLAYER_USEVAAPIHEVC = "videoplayer.usevaapihevc";
 constexpr auto SETTING_VIDEOPLAYER_USEVAAPIMPEG2 = "videoplayer.usevaapimpeg2";
 constexpr auto SETTING_VIDEOPLAYER_USEVAAPIMPEG4 = "videoplayer.usevaapimpeg4";
@@ -542,6 +543,7 @@ bool CDecoder::Open(AVCodecContext* avctx, AVCodecContext* mainctx, const enum A
       {AV_CODEC_ID_VP9, SETTING_VIDEOPLAYER_USEVAAPIVP9},
       {AV_CODEC_ID_HEVC, SETTING_VIDEOPLAYER_USEVAAPIHEVC},
       {AV_CODEC_ID_AV1, SETTING_VIDEOPLAYER_USEVAAPIAV1},
+      {AV_CODEC_ID_H264, SETTING_VIDEOPLAYER_USEVAAPIAVC},
   };
 
   auto entry = settings_map.find(avctx->codec_id);
@@ -1277,12 +1279,12 @@ void CDecoder::Register(IVaapiWinSystem *winSystem, bool deepColor)
   if (!settings)
     return;
 
-  constexpr std::array<const char*, 9> vaapiSettings = {
+  constexpr std::array<const char*, 10> vaapiSettings = {
       SETTING_VIDEOPLAYER_USEVAAPI,     SETTING_VIDEOPLAYER_USEVAAPIMPEG4,
       SETTING_VIDEOPLAYER_USEVAAPIVC1,  SETTING_VIDEOPLAYER_USEVAAPIMPEG2,
       SETTING_VIDEOPLAYER_USEVAAPIVP8,  SETTING_VIDEOPLAYER_USEVAAPIVP9,
       SETTING_VIDEOPLAYER_USEVAAPIHEVC, SETTING_VIDEOPLAYER_PREFERVAAPIRENDER,
-      SETTING_VIDEOPLAYER_USEVAAPIAV1};
+      SETTING_VIDEOPLAYER_USEVAAPIAV1,  SETTING_VIDEOPLAYER_USEVAAPIAVC};
 
   for (const auto vaapiSetting : vaapiSettings)
   {
@@ -3068,8 +3070,10 @@ bool CFFmpegPostproc::AddPicture(CVaapiDecodedPicture &inPic)
   m_pFilterFrameIn->height = m_config.vidHeight;
   m_pFilterFrameIn->linesize[0] = image.pitches[0];
   m_pFilterFrameIn->linesize[1] = image.pitches[1];
-  m_pFilterFrameIn->interlaced_frame = (inPic.DVDPic.iFlags & DVP_FLAG_INTERLACED) ? 1 : 0;
-  m_pFilterFrameIn->top_field_first = (inPic.DVDPic.iFlags & DVP_FLAG_TOP_FIELD_FIRST) ? 1 : 0;
+  if (inPic.DVDPic.iFlags & DVP_FLAG_INTERLACED)
+    m_pFilterFrameIn->flags |= AV_FRAME_FLAG_INTERLACED;
+  if (inPic.DVDPic.iFlags & DVP_FLAG_TOP_FIELD_FIRST)
+    m_pFilterFrameIn->flags |= AV_FRAME_FLAG_TOP_FIELD_FIRST;
 
   if (inPic.DVDPic.pts == DVD_NOPTS_VALUE)
     m_pFilterFrameIn->pts = AV_NOPTS_VALUE;

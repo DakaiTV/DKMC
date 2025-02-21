@@ -24,6 +24,8 @@ class TiXmlNode;
 class TiXmlElement;
 class CVariant;
 
+enum class VideoAssetType;
+
 struct SActorInfo
 {
   bool operator<(const SActorInfo &right) const
@@ -86,10 +88,9 @@ public:
   bool HasPremiered() const;
   const CDateTime& GetPremiered() const;
   const CDateTime& GetFirstAired() const;
-  const std::string GetCast(bool bIncludeRole = false) const;
+  const std::string GetCast(const std::string& separator, bool bIncludeRole = false) const;
   bool HasStreamDetails() const;
   bool IsEmpty() const;
-  bool HasVideoVersions() const;
 
   const std::string& GetPath() const
   {
@@ -128,7 +129,7 @@ public:
   void SetPlotOutline(std::string plotOutline);
   void SetTrailer(std::string trailer);
   void SetPlot(std::string plot);
-  std::string const &GetTitle();
+  std::string const& GetTitle() const;
   void SetTitle(std::string title);
   void SetSortTitle(std::string sortTitle);
   void SetPictureURL(CScraperUrl &pictureURL);
@@ -146,7 +147,6 @@ public:
   void SetSet(std::string set);
   void SetSetOverview(std::string setOverview);
   void SetTags(std::vector<std::string> tags);
-  void SetVideoVersion(std::string typeVideoVersion);
   void SetFile(std::string file);
   void SetPath(std::string path);
   void SetMPAARating(std::string mpaaRating);
@@ -184,14 +184,14 @@ public:
   virtual bool IncrementPlayCount();
 
   /*!
-  * @brief Reset playcount
-  */
+   * @brief Reset playcount
+   */
   virtual void ResetPlayCount();
 
   /*!
-  * @brief Check if the playcount is set
-  * @return True if play count value is set
-  */
+   * @brief Check if the playcount is set
+   * @return True if play count value is set
+   */
   virtual bool IsPlayCountSet() const;
 
   /*!
@@ -207,7 +207,135 @@ public:
    */
   virtual bool SetResumePoint(const CBookmark &resumePoint);
 
-  bool IsVideoExtras() const;
+  class CAssetInfo
+  {
+  public:
+    /*!
+     * @brief Clear all data.
+     */
+    void Clear();
+
+    /*!
+     * @brief Archive all data.
+     * @param ar The archive to write the data to / to read the data from.
+     */
+    void Archive(CArchive& ar);
+
+    /*!
+     * @brief Store all data to XML.
+     * @param movie The XML element to write the data to.
+     */
+    void Save(TiXmlNode* movie);
+
+    /*!
+     * @brief Restore all data from XML.
+     * @param movie The XML element containing the data.
+     */
+    void ParseNative(const TiXmlElement* movie);
+
+    /*!
+     * @brief Merge in all valid data from another asset info.
+     * @param other The other asset info.
+     */
+    void Merge(CAssetInfo& other);
+
+    /*!
+     * @brief Serialize all data.
+     * @param value The container to write the data to.
+     */
+    void Serialize(CVariant& value) const;
+
+    /*!
+     * @brief Get the video's asset title.
+     * @return The title or an empty string if the item has no video asset.
+     */
+    const std::string& GetTitle() const { return m_title; }
+
+    /*!
+     * @brief Set this videos's asset title.
+     * @param assetTitle The title.
+     */
+    void SetTitle(const std::string& assetTitle);
+
+    /*!
+     * @brief Get the video's asset id.
+     * @return The id or -1 if the item has no video asset.
+     */
+    int GetId() const { return m_id; }
+
+    /*!
+     * @brief Set this videos's asset id.
+     * @param assetId The id.
+     */
+    void SetId(int assetId);
+
+    /*!
+     * @brief Get the video's asset type.
+     * @return The type or VideoAssetType::UNKNOWN if the item has no video asset.
+     */
+    VideoAssetType GetType() const { return m_type; }
+
+    /*!
+     * @brief Set this videos's asset type.
+     * @param assetType The type.
+     */
+    void SetType(VideoAssetType assetType);
+
+  private:
+    std::string m_title;
+    int m_id{-1};
+    VideoAssetType m_type{-1};
+  };
+
+  /*!
+   * @brief Get the video's asset info.
+   * @return The info.
+   */
+  const CAssetInfo& GetAssetInfo() const { return m_assetInfo; }
+  CAssetInfo& GetAssetInfo() { return m_assetInfo; }
+
+  /*!
+   * @brief Whether the item has multiple video versions.
+   * @return True if the item has multiple video versions, false otherwise.
+   */
+  bool HasVideoVersions() const { return m_hasVideoVersions; }
+
+  /*!
+   * @brief Set whether this video has video versions.
+   * @param hasVersion The versions flag.
+   */
+  void SetHasVideoVersions(bool hasVersions);
+
+  /*!
+   * @brief Whether the item has video extras.
+   * @return True if the item has video extras, false otherwise.
+   */
+  bool HasVideoExtras() const { return m_hasVideoExtras; }
+
+  /*!
+   * @brief Set whether this video has video extras.
+   * @param hasExtras The extras flag.
+   */
+  void SetHasVideoExtras(bool hasExtras);
+
+  /*!
+   * @brief Whether the item is the default video version.
+   * @return True if the item is the default version, false otherwise.
+   */
+  bool IsDefaultVideoVersion() const { return m_isDefaultVideoVersion; }
+
+  /*!
+   * @brief Set whether the item is the default version.
+   * @param isDefaultVideoVersion The default flag.
+   */
+  void SetIsDefaultVideoVersion(bool isDefaultVideoVersion);
+
+  /*!
+  * @brief Get whether the Set Overview should be updated. If an NFO contains a <name> but no <overview> then
+  * this allows the current Overview to be kept. Otherwise it is overwritten. Default is true - so if updated
+  * by a scraper the Overview will be overwritten.
+  */
+  bool GetUpdateSetOverview() const { return m_updateSetOverview; }
 
   /*!
    * @brief Set this videos's resume point.
@@ -242,9 +370,6 @@ public:
   };
   SetInfo m_set; //!< Assigned movie set
   std::vector<std::string> m_tags;
-  std::string m_typeVideoVersion;
-  int m_idVideoVersion{-1};
-  bool m_hasVideoVersions{false};
   std::string m_strFile;
   std::string m_strPath;
   std::string m_strMPAARating;
@@ -309,6 +434,13 @@ private:
   int m_playCount;
   CBookmark m_resumePoint;
   static const int PLAYCOUNT_NOT_SET = -1;
+
+  CAssetInfo m_assetInfo;
+  bool m_hasVideoVersions{false};
+  bool m_hasVideoExtras{false};
+  bool m_isDefaultVideoVersion{false};
+
+  bool m_updateSetOverview{true};
 };
 
 typedef std::vector<CVideoInfoTag> VECMOVIES;

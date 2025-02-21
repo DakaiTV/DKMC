@@ -69,11 +69,11 @@ void CRenderSystemBase::ShowSplash(const std::string& message)
         static_cast<float>(CServiceBroker::GetWinSystem()->GetGfxContext().GetWidth()),
         static_cast<float>(CServiceBroker::GetWinSystem()->GetGfxContext().GetHeight()),
         CTextureInfo(CUtil::GetSplashPath()));
-    m_splashImage->SetAspectRatio(CAspectRatio::AR_SCALE);
+    m_splashImage->SetAspectRatio(CAspectRatio::SCALE);
   }
 
   CServiceBroker::GetWinSystem()->GetGfxContext().lock();
-  CServiceBroker::GetWinSystem()->GetGfxContext().Clear();
+  CServiceBroker::GetWinSystem()->GetGfxContext().Clear(0xff000000);
 
   RESOLUTION_INFO res = CServiceBroker::GetWinSystem()->GetGfxContext().GetResInfo();
   CServiceBroker::GetWinSystem()->GetGfxContext().SetRenderingResolution(res, true);

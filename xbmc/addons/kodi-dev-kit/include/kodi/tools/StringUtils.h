@@ -1378,14 +1378,16 @@ public:
 
     safeUrl.reserve(str.size());
 
-    std::transform(str.begin(), str.end(), std::back_inserter(safeUrl), [](char c) {
-      if (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9') || c == '-' ||
-          c == '.' || c == '_' || c == '~')
-      {
-        return c;
-      }
-      return '_';
-    });
+    std::transform(str.begin(), str.end(), std::back_inserter(safeUrl),
+                   [](char c)
+                   {
+                     if (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') ||
+                         ('0' <= c && c <= '9') || c == '-' || c == '.' || c == '_' || c == '~')
+                     {
+                       return c;
+                     }
+                     return '_';
+                   });
 
     return safeUrl;
   }
@@ -1406,12 +1408,14 @@ public:
 
     safeString.reserve(str.size());
 
-    std::transform(str.begin(), str.end(), std::back_inserter(safeString), [](char c) {
-      if (c < 0x20)
-        return ' ';
+    std::transform(str.begin(), str.end(), std::back_inserter(safeString),
+                   [](char c)
+                   {
+                     if (c < 0x20)
+                       return ' ';
 
-      return c;
-    });
+                     return c;
+                   });
 
     return safeString;
   }
@@ -1449,7 +1453,10 @@ public:
   /// EXPECT_STREQ(refstr.c_str(), varstr.c_str());
   /// ~~~~~~~~~~~~~
   ///
-  inline static void RemoveCRLF(std::string& strLine) { StringUtils::TrimRight(strLine, "\n\r"); }
+  inline static void RemoveCRLF(std::string& strLine)
+  {
+    StringUtils::TrimRight(strLine, "\n\r");
+  }
   //----------------------------------------------------------------------------
 
   //============================================================================
@@ -2021,7 +2028,10 @@ public:
   /// @param[in] c Character to check
   /// @return true if space, false otherwise
   ///
-  inline static int IsSpace(char c) { return (c & 0x80) == 0 && ::isspace(c); }
+  inline static int IsSpace(char c)
+  {
+    return (c & 0x80) == 0 && ::isspace(c);
+  }
   //----------------------------------------------------------------------------
 
   //============================================================================
@@ -2931,24 +2941,24 @@ public:
   inline static std::string SecondsToTimeString(long seconds,
                                                 TIME_FORMAT format = TIME_FORMAT_GUESS)
   {
-    bool isNegative = seconds < 0;
+    const bool isNegative = seconds < 0;
     seconds = std::abs(seconds);
 
     std::string strHMS;
     if (format == TIME_FORMAT_SECS)
       strHMS = std::to_string(seconds);
     else if (format == TIME_FORMAT_MINS)
-      strHMS = std::to_string(lrintf(static_cast<float>(seconds) / 60.0f));
+      strHMS = std::to_string(std::lrintf(static_cast<float>(seconds) / 60.0f));
     else if (format == TIME_FORMAT_HOURS)
-      strHMS = std::to_string(lrintf(static_cast<float>(seconds) / 3600.0f));
+      strHMS = std::to_string(std::lrintf(static_cast<float>(seconds) / 3600.0f));
     else if (format & TIME_FORMAT_M)
       strHMS += std::to_string(seconds % 3600 / 60);
     else
     {
-      int hh = seconds / 3600;
+      const long hh = seconds / 3600;
       seconds = seconds % 3600;
-      int mm = seconds / 60;
-      int ss = seconds % 60;
+      const long mm = seconds / 60;
+      unsigned int ss = seconds % 60;
 
       if (format == TIME_FORMAT_GUESS)
         format = (hh >= 1) ? TIME_FORMAT_HH_MM_SS : TIME_FORMAT_MM_SS;

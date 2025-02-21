@@ -6,19 +6,21 @@
  *  See LICENSES/README.md for more information.
  */
 
-#include "network/Network.h"
 #include "URIUtils.h"
+
 #include "FileItem.h"
+#include "FileItemList.h"
+#include "ServiceBroker.h"
+#include "StringUtils.h"
+#include "URL.h"
 #include "filesystem/MultiPathDirectory.h"
 #include "filesystem/SpecialProtocol.h"
 #include "filesystem/StackDirectory.h"
 #include "network/DNSNameCache.h"
+#include "network/Network.h"
 #include "pvr/channels/PVRChannelsPath.h"
 #include "settings/AdvancedSettings.h"
-#include "URL.h"
 #include "utils/FileExtensionProvider.h"
-#include "ServiceBroker.h"
-#include "StringUtils.h"
 #include "utils/log.h"
 
 #if defined(TARGET_WINDOWS)
@@ -328,6 +330,17 @@ bool URIUtils::GetParentPath(const std::string& strPath, std::string& strParent)
     strFile = url.GetHostName();
     return GetParentPath(strFile, strParent);
   }
+  else if (url.IsProtocol("bluray"))
+  {
+    const CURL url2(url.GetHostName()); // strip bluray://
+    if (url2.IsProtocol("udf"))
+    {
+      strFile = url2.GetHostName(); // strip udf://
+      return GetParentPath(strFile, strParent);
+    }
+    strParent = url2.Get();
+    return true;
+  }
   else if (url.IsProtocol("stack"))
   {
     CStackDirectory dir;
@@ -451,6 +464,46 @@ std::string URIUtils::GetBasePath(const std::string& strPath)
       strDirectory = GetDirectory(strCheck);
   }
   return strDirectory;
+}
+
+std::string URIUtils::GetDiscBase(const std::string& file)
+{
+  std::string discFile;
+  if (IsBlurayPath(file))
+    discFile = GetBlurayFile(file);
+  else
+    discFile = file;
+
+  std::string parent{GetParentPath(discFile)};
+  std::string parentFolder{parent};
+  RemoveSlashAtEnd(parentFolder);
+  parentFolder = GetFileName(parentFolder);
+  if (StringUtils::EqualsNoCase(parentFolder, "VIDEO_TS") ||
+      StringUtils::EqualsNoCase(parentFolder, "BDMV"))
+    return GetParentPath(parent); // go back up another one
+  return parent;
+}
+
+std::string URIUtils::GetDiscBasePath(const std::string& file)
+{
+  std::string base{GetDiscBase(file)};
+  if (IsDiscImage(base))
+    return GetDirectory(base);
+  return base;
+}
+
+std::string URIUtils::GetBlurayFile(const std::string& path)
+{
+  if (IsBlurayPath(path))
+  {
+    const CURL url(path);
+    const CURL url2(url.GetHostName()); // strip bluray://
+    if (url2.IsProtocol("udf"))
+      // ISO
+      return url2.GetHostName(); // strip udf://
+    return AddFileToFolder(url2.Get(), "BDMV", "index.bdmv"); // BDMV
+  }
+  return std::string{};
 }
 
 std::string URLEncodePath(const std::string& strPath)
@@ -996,6 +1049,19 @@ bool URIUtils::IsPVRChannel(const std::string& strFile)
   return IsProtocol(strFile, "pvr") && CPVRChannelsPath(strFile).IsChannel();
 }
 
+bool URIUtils::IsPVRRadioChannel(const std::string& strFile)
+{
+  if (IsStack(strFile))
+    return IsPVRRadioChannel(CStackDirectory::GetFirstStackedFile(strFile));
+
+  if (IsProtocol(strFile, "pvr"))
+  {
+    const CPVRChannelsPath path{strFile};
+    return path.IsChannel() && path.IsRadio();
+  }
+  return false;
+}
+
 bool URIUtils::IsPVRChannelGroup(const std::string& strFile)
 {
   if (IsStack(strFile))
@@ -1168,7 +1234,7 @@ bool URIUtils::IsVideoDb(const std::string& strFile)
   return IsProtocol(strFile, "videodb");
 }
 
-bool URIUtils::IsBluray(const std::string& strFile)
+bool URIUtils::IsBlurayPath(const std::string& strFile)
 {
   return IsProtocol(strFile, "bluray");
 }

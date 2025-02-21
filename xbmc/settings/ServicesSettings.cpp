@@ -36,11 +36,11 @@ void CServicesSettings::SettingOptionsBufferModesFiller(const SettingConstPtr& s
                                                         int& current,
                                                         void* data)
 {
-  list.emplace_back(g_localizeStrings.Get(37110), CACHE_BUFFER_MODE_NONE);
-  list.emplace_back(g_localizeStrings.Get(37111), CACHE_BUFFER_MODE_TRUE_INTERNET);
-  list.emplace_back(g_localizeStrings.Get(37112), CACHE_BUFFER_MODE_INTERNET);
-  list.emplace_back(g_localizeStrings.Get(37113), CACHE_BUFFER_MODE_NETWORK);
-  list.emplace_back(g_localizeStrings.Get(37114), CACHE_BUFFER_MODE_ALL);
+  list.emplace_back(g_localizeStrings.Get(37110), static_cast<int>(CacheBufferMode::NONE));
+  list.emplace_back(g_localizeStrings.Get(37111), static_cast<int>(CacheBufferMode::TRUE_INTERNET));
+  list.emplace_back(g_localizeStrings.Get(37112), static_cast<int>(CacheBufferMode::INTERNET));
+  list.emplace_back(g_localizeStrings.Get(37113), static_cast<int>(CacheBufferMode::NETWORK));
+  list.emplace_back(g_localizeStrings.Get(37114), static_cast<int>(CacheBufferMode::ALL));
 }
 
 void CServicesSettings::SettingOptionsMemorySizesFiller(const SettingConstPtr& setting,
@@ -73,6 +73,7 @@ void CServicesSettings::SettingOptionsReadFactorsFiller(const SettingConstPtr& s
                                                         int& current,
                                                         void* data)
 {
+  list.emplace_back(g_localizeStrings.Get(37116), 0);
   list.emplace_back("1.1x", 110);
   list.emplace_back("1.25x", 125);
   list.emplace_back("1.5x", 150);
@@ -112,4 +113,16 @@ void CServicesSettings::SettingOptionsCacheChunkSizesFiller(const SettingConstPt
   list.emplace_back(StringUtils::Format(kb, 256), 256 * 1024);
   list.emplace_back(StringUtils::Format(kb, 512), 512 * 1024);
   list.emplace_back(StringUtils::Format(mb, 1), 1024 * 1024);
+}
+
+void CServicesSettings::SettingOptionsSmbVersionsFiller(const SettingConstPtr& setting,
+                                                        std::vector<IntegerSettingOption>& list,
+                                                        int& current,
+                                                        void* data)
+{
+  list.emplace_back(g_localizeStrings.Get(36623), 0);
+  list.emplace_back(g_localizeStrings.Get(36624), 1);
+  list.emplace_back(g_localizeStrings.Get(36625), 2);
+  list.emplace_back(g_localizeStrings.Get(36637), 21);
+  list.emplace_back(g_localizeStrings.Get(36626), 3);
 }

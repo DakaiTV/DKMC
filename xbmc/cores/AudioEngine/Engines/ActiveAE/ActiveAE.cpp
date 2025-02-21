@@ -153,13 +153,6 @@ void CEngineStats::GetDelay(AEDelayStatus& status, CActiveAEStream *stream)
     status.delay +=
         static_cast<double>(m_bufferedSamples) * m_sinkFormat.m_streamInfo.GetDuration() / 1000;
 
-  if (!m_pcmOutput && m_sinkNeedIecPack &&
-      m_sinkFormat.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD)
-  {
-    // take into account MAT packer latency (half duration of MAT frame)
-    status.delay += m_sinkFormat.m_streamInfo.GetDuration() / 1000 / 2;
-  }
-
   for (auto &str : m_streamStats)
   {
     if (str.m_streamId == stream->m_id)
@@ -185,13 +178,6 @@ void CEngineStats::GetSyncInfo(CAESyncInfo& info, CActiveAEStream *stream)
         static_cast<double>(m_bufferedSamples) * m_sinkFormat.m_streamInfo.GetDuration() / 1000;
 
   status.delay += static_cast<double>(m_sinkLatency);
-
-  if (!m_pcmOutput && m_sinkNeedIecPack &&
-      m_sinkFormat.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD)
-  {
-    // take into account MAT packer latency (half duration of MAT frame)
-    status.delay += m_sinkFormat.m_streamInfo.GetDuration() / 1000 / 2;
-  }
 
   for (auto &str : m_streamStats)
   {
@@ -1313,7 +1299,7 @@ void CActiveAE::Configure(AEAudioFormat *desiredFmt)
         format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_AC3;
         format.m_streamInfo.m_channels = 2;
         format.m_streamInfo.m_sampleRate = 48000;
-        format.m_streamInfo.m_ac3FrameSize = m_encoderFormat.m_frames;
+        format.m_streamInfo.m_frameSize = m_encoderFormat.m_frames;
         //! @todo implement
         if (m_encoderBuffers && initSink)
         {
@@ -1383,7 +1369,8 @@ void CActiveAE::Configure(AEAudioFormat *desiredFmt)
             (*it)->m_inputBuffers->m_format, outputFormat, m_settings.resampleQuality);
         (*it)->m_processingBuffers->ForceResampler((*it)->m_forceResampler);
 
-        (*it)->m_processingBuffers->Create(MAX_CACHE_LEVEL*1000, false, m_settings.stereoupmix, m_settings.normalizelevels);
+        (*it)->m_processingBuffers->Create(MAX_CACHE_LEVEL * 1000, false, m_settings.stereoupmix,
+                                           m_settings.normalizelevels, m_settings.mixSubLevel);
       }
       if (m_mode == MODE_TRANSCODE || m_streams.size() > 1)
         (*it)->m_processingBuffers->FillBuffer();
@@ -1655,7 +1642,9 @@ void CActiveAE::ChangeResamplers()
   std::list<CActiveAEStream*>::iterator it;
   for(it=m_streams.begin(); it!=m_streams.end(); ++it)
   {
-    (*it)->m_processingBuffers->ConfigureResampler(m_settings.normalizelevels, m_settings.stereoupmix, m_settings.resampleQuality);
+    (*it)->m_processingBuffers->ConfigureResampler(
+        m_settings.normalizelevels, m_settings.stereoupmix, m_settings.resampleQuality,
+        m_settings.mixSubLevel);
   }
 }
 
@@ -1969,10 +1958,10 @@ bool CActiveAE::RunStages()
 
   // TrueHD is very jumpy, meaning the frames don't come in equidistantly. They are only smoothed
   // at the end when the IEC packing happens. Therefore adjust earlier.
-  const bool ignoreWL =
+  const bool isTrueHDPassthrough =
       (m_mode == MODE_RAW && m_sinkFormat.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD);
 
-  if ((m_stats.GetWaterLevel() < (MAX_WATER_LEVEL + 0.0001f) || ignoreWL) &&
+  if ((m_stats.GetWaterLevel() < (MAX_WATER_LEVEL + 0.0001f) || isTrueHDPassthrough) &&
       (m_mode != MODE_TRANSCODE || (m_encoderBuffers && !m_encoderBuffers->m_freeSamples.empty())))
   {
     // calculate sync error
@@ -1994,6 +1983,12 @@ bool CActiveAE::RunStages()
         double playingPts = pts - delay;
         double maxError = ((*it)->m_syncState == CAESyncInfo::SYNC_INSYNC) ? 1000 : 5000;
         double error = playingPts - (*it)->m_pClock->GetClock();
+
+        // underestimate error for TrueHD passthrough
+        // oscillations should be less than frametime 40ms to avoid unnecessary a/v sync corrections
+        if (isTrueHDPassthrough)
+          error *= 0.45;
+
         if (error > maxError)
         {
           CLog::Log(LOGWARNING, "ActiveAE - large audio sync error: {:f}", error);
@@ -2674,6 +2669,7 @@ void CActiveAE::LoadSettings()
   m_settings.atempoThreshold = settings->GetInt(CSettings::SETTING_AUDIOOUTPUT_ATEMPOTHRESHOLD) / 100.0;
   m_settings.streamNoise = settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_STREAMNOISE);
   m_settings.silenceTimeoutMinutes = settings->GetInt(CSettings::SETTING_AUDIOOUTPUT_STREAMSILENCE);
+  m_settings.mixSubLevel = settings->GetInt(CSettings::SETTING_AUDIOOUTPUT_MIXSUBLEVEL) / 100.0;
 }
 
 void CActiveAE::ValidateOutputDevices(bool saveChanges)
@@ -3318,13 +3314,9 @@ bool CActiveAE::ResampleSound(CActiveAESound *sound)
   std::unique_ptr<IAEResample> resampler =
       CAEResampleFactory::Create(AERESAMPLEFACTORY_QUICK_RESAMPLE);
 
-  resampler->Init(dst_config, orig_config,
-                  false,
-                  true,
-                  M_SQRT1_2,
-                  outChannels.Count() > 0 ? &outChannels : nullptr,
-                  m_settings.resampleQuality,
-                  false);
+  resampler->Init(dst_config, orig_config, false, true, M_SQRT1_2,
+                  outChannels.Count() > 0 ? &outChannels : nullptr, m_settings.resampleQuality,
+                  false, 0.0f);
 
   dst_samples = resampler->CalcDstSampleCount(sound->GetSound(true)->nb_samples,
                                               m_internalFormat.m_sampleRate,

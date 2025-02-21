@@ -9,12 +9,14 @@
 #include "DirectoryNodeRecentlyAddedEpisodes.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "video/VideoDatabase.h"
 
 using namespace XFILE::VIDEODATABASEDIRECTORY;
 
-CDirectoryNodeRecentlyAddedEpisodes::CDirectoryNodeRecentlyAddedEpisodes(const std::string& strName, CDirectoryNode* pParent)
-  : CDirectoryNode(NODE_TYPE_RECENTLY_ADDED_EPISODES, strName, pParent)
+CDirectoryNodeRecentlyAddedEpisodes::CDirectoryNodeRecentlyAddedEpisodes(const std::string& strName,
+                                                                         CDirectoryNode* pParent)
+  : CDirectoryNode(NodeType::RECENTLY_ADDED_EPISODES, strName, pParent)
 {
 
 }

@@ -12,16 +12,18 @@
 #include "ServiceBroker.h"
 #include "XBDateTime.h"
 #include "cores/DataCacheCore.h"
+#include "messaging/ApplicationMessenger.h"
 #include "pvr/PVRManager.h"
+#include "pvr/PVRStreamProperties.h"
 #include "pvr/addons/PVRClient.h"
 #include "pvr/channels/PVRChannel.h"
-#include "pvr/channels/PVRChannelGroup.h"
 #include "pvr/channels/PVRChannelGroupMember.h"
 #include "pvr/channels/PVRChannelGroups.h"
 #include "pvr/channels/PVRChannelGroupsContainer.h"
 #include "pvr/epg/Epg.h"
 #include "pvr/epg/EpgContainer.h"
 #include "pvr/epg/EpgInfoTag.h"
+#include "pvr/guilib/PVRGUIActionsChannels.h"
 #include "pvr/recordings/PVRRecording.h"
 #include "pvr/recordings/PVRRecordings.h"
 #include "pvr/timers/PVRTimers.h"
@@ -67,7 +69,7 @@ void CPVRPlaybackState::ReInit()
 
   Clear();
 
-  if (m_playingClientId != -1)
+  if (m_playingClientId != PVR_CLIENT_INVALID_UID)
   {
     if (m_playingChannelUniqueId != -1)
     {
@@ -95,8 +97,8 @@ void CPVRPlaybackState::ReInit()
 
   const std::shared_ptr<const CPVRChannelGroupsContainer> groups =
       CServiceBroker::GetPVRManager().ChannelGroups();
-  const CPVRChannelGroups* groupsTV = groups->GetTV();
-  const CPVRChannelGroups* groupsRadio = groups->GetRadio();
+  const std::shared_ptr<const CPVRChannelGroups> groupsTV{groups->GetTV()};
+  const std::shared_ptr<const CPVRChannelGroups> groupsRadio{groups->GetRadio()};
 
   m_activeGroupTV = groupsTV->GetLastOpenedGroup();
   m_activeGroupRadio = groupsRadio->GetLastOpenedGroup();
@@ -121,7 +123,7 @@ void CPVRPlaybackState::ClearData()
   m_strPlayingRecordingUniqueId.clear();
   m_playingEpgTagChannelUniqueId = -1;
   m_playingEpgTagUniqueId = 0;
-  m_playingClientId = -1;
+  m_playingClientId = PVR_CLIENT_INVALID_UID;
   m_strPlayingClientName.clear();
 }
 
@@ -139,6 +141,104 @@ void CPVRPlaybackState::Clear()
   m_lastWatchedUpdateTimer.reset();
   m_activeGroupTV.reset();
   m_activeGroupRadio.reset();
+}
+
+namespace
+{
+bool ResolveChannel(CFileItem& item,
+                    CPVRStreamProperties& props,
+                    const std::shared_ptr<const CPVRClient>& client,
+                    PVR_SOURCE source)
+{
+  if (source == PVR_SOURCE::DEFAULT)
+  {
+    const PVR_ERROR retVal{client->StreamClosed()};
+    if (retVal != PVR_ERROR_NO_ERROR)
+      CLog::LogFC(LOGERROR, LOGPVR, "Client error on call to StreamClosed(): {}",
+                  CPVRClient::ToString(retVal));
+  }
+
+  client->GetChannelStreamProperties(item.GetPVRChannelInfoTag(), source, props);
+
+  if (props.LivePlaybackAsEPG())
+  {
+    const std::shared_ptr<CPVREpgInfoTag> epgTag{item.GetPVRChannelInfoTag()->GetEPGNow()};
+    if (epgTag)
+      item = CFileItem{epgTag}; // no resolve needed
+  }
+  return true;
+}
+
+bool ResolveEPG(CFileItem& item,
+                CPVRStreamProperties& props,
+                const std::shared_ptr<const CPVRClient>& client)
+{
+  const PVR_ERROR retVal{client->StreamClosed()};
+  if (retVal != PVR_ERROR_NO_ERROR)
+    CLog::LogFC(LOGERROR, LOGPVR, "Client error on call to StreamClosed(): {}",
+                CPVRClient::ToString(retVal));
+
+  client->GetEpgTagStreamProperties(item.GetEPGInfoTag(), props);
+
+  if (props.EPGPlaybackAsLive())
+  {
+    const std::shared_ptr<CPVRChannelGroupMember> groupMember{
+        CServiceBroker::GetPVRManager().Get<PVR::GUI::Channels>().GetChannelGroupMember(item)};
+    if (!groupMember)
+    {
+      CLog::LogFC(LOGERROR, LOGPVR, "Unable to get channel for EPG tag");
+      return false;
+    }
+
+    item = CFileItem{groupMember};
+    props.clear();
+    return ResolveChannel(item, props, client, PVR_SOURCE_EPG_AS_LIVE);
+  }
+  return true;
+}
+
+bool ResolveRecording(CFileItem& item,
+                      CPVRStreamProperties& props,
+                      const std::shared_ptr<const CPVRClient>& client)
+{
+  client->GetRecordingStreamProperties(item.GetPVRRecordingInfoTag(), props);
+  return true;
+}
+} // unnamed namespace
+
+bool CPVRPlaybackState::OnPreparePlayback(CFileItem& item)
+{
+  // Obtain dynamic playback url and properties from the respective pvr client
+  const std::shared_ptr<const CPVRClient> client = CServiceBroker::GetPVRManager().GetClient(item);
+  if (!client)
+    return false;
+
+  CPVRStreamProperties props;
+  if (item.IsPVRChannel() && !ResolveChannel(item, props, client, PVR_SOURCE::DEFAULT))
+    return false;
+  else if (item.IsPVRRecording() && !ResolveRecording(item, props, client))
+    return false;
+  else if (item.IsEPG() && !ResolveEPG(item, props, client))
+    return false;
+
+  if (props.size())
+  {
+    const std::string url{props.GetStreamURL()};
+    if (!url.empty())
+      item.SetDynPath(url);
+
+    const std::string mime{props.GetStreamMimeType()};
+    if (!mime.empty())
+    {
+      item.SetMimeType(mime);
+      item.SetContentLookup(false);
+    }
+
+    for (const auto& prop : props)
+      item.SetProperty(prop.first, prop.second);
+  }
+
+  return true;
 }
 
 void CPVRPlaybackState::OnPlaybackStarted(const CFileItem& item)
@@ -215,12 +315,12 @@ void CPVRPlaybackState::OnPlaybackStarted(const CFileItem& item)
     CLog::LogFC(LOGERROR, LOGPVR, "Channel item without channel group member!");
   }
 
-  if (m_playingClientId != -1)
+  if (m_playingClientId != PVR_CLIENT_INVALID_UID)
   {
     const std::shared_ptr<const CPVRClient> client =
         CServiceBroker::GetPVRManager().GetClient(m_playingClientId);
     if (client)
-      m_strPlayingClientName = client->GetFriendlyName();
+      m_strPlayingClientName = client->GetFullClientName();
   }
 }
 
@@ -283,10 +383,86 @@ bool CPVRPlaybackState::OnPlaybackStopped(const CFileItem& item)
   return bChanged;
 }
 
-void CPVRPlaybackState::OnPlaybackEnded(const CFileItem& item)
+std::unique_ptr<CFileItem> CPVRPlaybackState::GetNextAutoplayItem(const CFileItem& item)
+{
+  if (!item.GetProperty("epg_playlist_item").asBoolean(false))
+    return {};
+
+  std::unique_lock<CCriticalSection> lock(m_critSection);
+
+  if (item.HasEPGInfoTag() && item.GetEPGInfoTag()->ClientID() == m_playingClientId &&
+      item.GetEPGInfoTag()->UniqueChannelID() == m_playingEpgTagChannelUniqueId &&
+      item.GetEPGInfoTag()->UniqueBroadcastID() == m_playingEpgTagUniqueId)
+  {
+    auto& pvrMgr{CServiceBroker::GetPVRManager()};
+    const std::shared_ptr<const CPVREpg> epg{
+        pvrMgr.EpgContainer().GetByChannelUid(m_playingClientId, m_playingEpgTagChannelUniqueId)};
+    const std::shared_ptr<const CPVRClient> client{pvrMgr.GetClient(m_playingClientId)};
+    if (epg && client)
+    {
+      const std::vector<std::shared_ptr<CPVREpgInfoTag>> tags{epg->GetTags()};
+      bool nextIsMatch{false};
+      for (const auto& tag : tags)
+      {
+        if (nextIsMatch)
+        {
+          // Next to play is successor of given item in channel's timeline.
+          return std::make_unique<CFileItem>(tag);
+        }
+
+        if (tag != tags.back() && tag->StartAsUTC() == m_playingEpgTag->StartAsUTC() &&
+            tag->EndAsUTC() == m_playingEpgTag->EndAsUTC())
+          nextIsMatch = true;
+      }
+
+      if (!nextIsMatch)
+      {
+        // No more non-live epg items in channel's timeline. Next to play is the live channel.
+        const std::shared_ptr<CPVRChannelGroup> group{
+            pvrMgr.ChannelGroups()->Get(m_playingEpgTag->IsRadio())->GetGroupAll()};
+        if (group)
+        {
+          const std::shared_ptr<CPVRChannelGroupMember> groupMember{
+              group->GetByUniqueID({m_playingClientId, m_playingEpgTagChannelUniqueId})};
+          if (groupMember)
+            return std::make_unique<CFileItem>(groupMember);
+        }
+      }
+    }
+  }
+  return {};
+}
+
+bool CPVRPlaybackState::OnPlaybackEnded(const CFileItem& item)
 {
   // Playback ended, but not due to user interaction
-  OnPlaybackStopped(item);
+
+  std::unique_ptr<CFileItem> nextToPlay{GetNextAutoplayItem(item)};
+  if (nextToPlay)
+    StartPlayback(nextToPlay, ContentUtils::PlayMode::CHECK_AUTO_PLAY_NEXT_ITEM);
+
+  return OnPlaybackStopped(item);
+}
+
+void CPVRPlaybackState::StartPlayback(std::unique_ptr<CFileItem>& item,
+                                      ContentUtils::PlayMode mode) const
+{
+  if (item->IsEPG())
+  {
+    if (mode == ContentUtils::PlayMode::CHECK_AUTO_PLAY_NEXT_ITEM)
+    {
+      if (CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
+              CSettings::SETTING_PVRPLAYBACK_AUTOPLAYNEXTPROGRAMME))
+        item->SetProperty("epg_playlist_item", true);
+    }
+    else if (mode == ContentUtils::PlayMode::PLAY_FROM_HERE)
+    {
+      item->SetProperty("epg_playlist_item", true);
+    }
+  }
+
+  CServiceBroker::GetAppMessenger()->PostMsg(TMSG_MEDIA_PLAY, 0, 0,
+                                             static_cast<void*>(item.release()));
 }
 
 bool CPVRPlaybackState::IsPlaying() const
@@ -443,7 +619,7 @@ namespace
 std::shared_ptr<CPVRChannelGroup> GetFirstNonDeletedAndNonHiddenChannelGroup(
     const std::shared_ptr<CPVRChannelGroupMember>& groupMember)
 {
-  CPVRChannelGroups* groups{
+  const std::shared_ptr<const CPVRChannelGroups> groups{
       CServiceBroker::GetPVRManager().ChannelGroups()->Get(groupMember->IsRadio())};
   if (groups)
   {
@@ -518,7 +694,8 @@ CDateTime CPVRPlaybackState::GetPlaybackTime(int iClientID, int iUniqueChannelID
   {
     // playing an epg tag on requested channel
     return epgTag->StartAsUTC() +
-           CDateTimeSpan(0, 0, 0, CServiceBroker::GetDataCacheCore().GetPlayTime() / 1000);
+           CDateTimeSpan(0, 0, 0,
+                         static_cast<int>(CServiceBroker::GetDataCacheCore().GetPlayTime()) / 1000);
   }
 
   // not playing / playing live / playing timeshifted

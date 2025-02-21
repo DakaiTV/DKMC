@@ -50,7 +50,7 @@
       <volumeplus>VolumeUp</volumeplus>
       <volumeminus>VolumeDown</volumeminus>
       <mute>Mute</mute>
-      <power>ActivateWindow(ShutdownMenu)</power>
+      <power>ShutDown()</power>
       <myvideo>ActivateWindow(Videos)</myvideo>
       <mymusic>ActivateWindow(Music)</mymusic>
       <mypictures>ActivateWindow(Pictures)</mypictures>
@@ -198,9 +198,9 @@
       <info>Info</info>
       <guide>ActivateWindow(TVGuide)</guide>
       <teletext>ActivateWindow(Teletext)</teletext>
-      <subtitle>NextSubtitle</subtitle>
+      <subtitle>DialogSelectSubtitle</subtitle>
       <star>NextSubtitle</star>
-      <language>AudioNextLanguage</language>
+      <language>DialogSelectAudio</language>
       <playlist>Playlist</playlist>
       <hash>AudioNextLanguage</hash>
       <pageplus>SkipNext</pageplus>

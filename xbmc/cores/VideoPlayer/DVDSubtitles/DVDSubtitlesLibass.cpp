@@ -9,6 +9,7 @@
 #include "DVDSubtitlesLibass.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "cores/VideoPlayer/Interface/TimingConstants.h"
 #include "filesystem/Directory.h"
@@ -27,7 +28,7 @@
 #include <mutex>
 
 using namespace KODI::SUBTITLES::STYLE;
-using namespace UTILS;
+using namespace KODI::UTILS;
 
 namespace
 {
@@ -93,26 +94,27 @@ void CDVDSubtitlesLibass::Configure()
 
   // Libass uses system font provider (like fontconfig) by default in some
   // platforms (e.g. linux/windows), on some other systems like android the
-  // font provider is currenlty not supported, then an user can add his
-  // additionals fonts only by using the user fonts folder.
-  ass_set_fonts_dir(m_library,
-                    CSpecialProtocol::TranslatePath(UTILS::FONT::FONTPATH::USER).c_str());
+  // font provider is currently not supported, then an user can add his
+  // additional fonts only by using the user fonts folder.
+  ass_set_fonts_dir(m_library, CSpecialProtocol::TranslatePath(FONT::FONTPATH::USER).c_str());
 
   // Load additional fonts into Libass memory
   CFileItemList items;
   // Get fonts from system directory
-  if (XFILE::CDirectory::Exists(UTILS::FONT::FONTPATH::SYSTEM))
+  if (XFILE::CDirectory::Exists(FONT::FONTPATH::SYSTEM))
   {
-    XFILE::CDirectory::GetDirectory(UTILS::FONT::FONTPATH::SYSTEM, items,
-                                    UTILS::FONT::SUPPORTED_EXTENSIONS_MASK,
+    XFILE::CDirectory::GetDirectory(FONT::FONTPATH::SYSTEM, items, FONT::SUPPORTED_EXTENSIONS_MASK,
                                     XFILE::DIR_FLAG_NO_FILE_DIRS | XFILE::DIR_FLAG_NO_FILE_INFO);
   }
+
+  const std::shared_ptr<CSettings> settings = CServiceBroker::GetSettingsComponent()->GetSettings();
+  const bool overrideFont = settings->GetBool(CSettings::SETTING_SUBTITLES_OVERRIDEFONTS);
   // Get temporary fonts
-  if (XFILE::CDirectory::Exists(UTILS::FONT::FONTPATH::TEMP, false))
+  if (!overrideFont && XFILE::CDirectory::Exists(FONT::FONTPATH::TEMP, false))
   {
-    XFILE::CDirectory::GetDirectory(
-        UTILS::FONT::FONTPATH::TEMP, items, UTILS::FONT::SUPPORTED_EXTENSIONS_MASK,
-        XFILE::DIR_FLAG_BYPASS_CACHE | XFILE::DIR_FLAG_NO_FILE_DIRS | XFILE::DIR_FLAG_NO_FILE_INFO);
+    XFILE::CDirectory::GetDirectory(FONT::FONTPATH::TEMP, items, FONT::SUPPORTED_EXTENSIONS_MASK,
+                                    XFILE::DIR_FLAG_BYPASS_CACHE | XFILE::DIR_FLAG_NO_FILE_DIRS |
+                                        XFILE::DIR_FLAG_NO_FILE_INFO);
   }
   for (const auto& item : items)
   {
@@ -145,14 +147,11 @@ void CDVDSubtitlesLibass::Configure()
                FONT::FONT_DEFAULT_FILENAME);
   }
 
-  ass_set_fonts(m_renderer,
-                UTILS::FONT::FONTPATH::GetSystemFontPath(FONT::FONT_DEFAULT_FILENAME).c_str(),
+  ass_set_fonts(m_renderer, FONT::FONTPATH::GetSystemFontPath(FONT::FONT_DEFAULT_FILENAME).c_str(),
                 m_defaultFontFamilyName.c_str(), ASS_FONTPROVIDER_AUTODETECT, nullptr, 1);
 
   // Extract font must be set before loading ASS/SSA data,
   // after that cannot be changed
-  const std::shared_ptr<CSettings> settings = CServiceBroker::GetSettingsComponent()->GetSettings();
-  bool overrideFont = settings->GetBool(CSettings::SETTING_SUBTITLES_OVERRIDEFONTS);
   ass_set_extract_fonts(m_library, overrideFont ? 0 : 1);
 }
 
@@ -367,12 +366,31 @@ void CDVDSubtitlesLibass::ApplyStyle(const std::shared_ptr<struct style>& subSty
     free(style->Name);
     style->Name = strdup("KodiDefault");
 
+    // PlayResY and PlayResX are mandatory but some out-of-spec files do not specify them
+    // if both PlayRes are not specified libass fallback to 288x384
+    double playResY = static_cast<double>(m_track->PlayResY);
+    if (m_track->PlayResY == 0 && m_track->PlayResX == 0)
+    {
+      CLog::LogF(LOGWARNING, "PlayResX and PlayResY are not defined in subtitle file. This may "
+                             "cause unexpected rendering issues.");
+      playResY = 288.0;
+    }
+    else if (m_track->PlayResY == 0 && m_track->PlayResX > 0)
+    {
+      // This use case depend strictly on library implementation anyway
+      // the common behavior of the library is to calculate with an aspect ratio of 4/3
+      CLog::LogF(
+          LOGWARNING,
+          "PlayResY is not defined in subtitle file. This may cause unexpected rendering issues.");
+      playResY = std::max(1.0, static_cast<double>(m_track->PlayResX) * 3 / 4);
+    }
+
     // Calculate the scale
     // Font size, borders, etc... are specified in pixel unit in scaled
     // for a window height of 720, so we need to rescale to our PlayResY
-    double playResY{static_cast<double>(m_track->PlayResY)};
     double scaleDefault{playResY / 720};
     double scale{scaleDefault};
+
     if (m_subtitleType == NATIVE &&
         (subStyle->assOverrideStyles == OverrideStyles::STYLES ||
          subStyle->assOverrideStyles == OverrideStyles::STYLES_POSITIONS ||
@@ -422,7 +440,6 @@ void CDVDSubtitlesLibass::ApplyStyle(const std::shared_ptr<struct style>& subSty
     style->SecondaryColour = ConvColor(COLOR::BLACK);
 
     // Configure the effects
-    double lineSpacing = 0.0;
     if (subStyle->borderStyle == BorderType::OUTLINE ||
         subStyle->borderStyle == BorderType::OUTLINE_NO_SHADOW)
     {
@@ -452,8 +469,6 @@ void CDVDSubtitlesLibass::ApplyStyle(const std::shared_ptr<struct style>& subSty
       style->BackColour =
           ConvColor(subStyle->shadowColor, subStyle->shadowOpacity); // Set the box shadow color
       style->Shadow = (10.00 / 100 * subStyle->shadowSize) * scale; // Set the box shadow size
-      // By default a box overlaps the other, then we increase a bit the line spacing
-      lineSpacing = 8.0 * scaleDefault;
     }
     else if (subStyle->borderStyle == BorderType::SQUARE_BOX)
     {
@@ -465,9 +480,14 @@ void CDVDSubtitlesLibass::ApplyStyle(const std::shared_ptr<struct style>& subSty
       style->Shadow = 4 * scale; // Space between the text and the box edges
     }
 
+    double lineSpacing = (static_cast<double>(subStyle->lineSpacing) * (playResY / 4)) / 100;
+    if (subStyle->assOverrideFont)
+      lineSpacing *= scaleDefault;
+    else
+      lineSpacing *= scale;
     // ass_set_line_spacing do not scale, so we have to scale to frame size
     ass_set_line_spacing(m_renderer,
-                         lineSpacing / playResY * static_cast<double>(opts.frameHeight));
+                         lineSpacing / playResY * static_cast<double>(opts.frameHeight / 4));
 
     style->Blur = (10.00 / 100 * subStyle->blur);
 

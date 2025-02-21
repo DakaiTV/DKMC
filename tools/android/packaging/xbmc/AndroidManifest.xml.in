@@ -4,14 +4,9 @@
     android:versionCode="@APP_VERSION_CODE_ANDROID@"
     android:versionName="@APP_VERSION@">
 
-    <uses-sdk
-        android:minSdkVersion="@TARGET_MINSDK@"
-        android:targetSdkVersion="@TARGET_SDK@" />
-
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.GET_TASKS" />
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
@@ -47,11 +42,11 @@
         android:required="false" />
 
     <application
-        android:banner="@drawable/banner"
+        android:banner="@mipmap/banner"
         android:hasCode="true"
-        android:icon="@drawable/ic_launcher"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:logo="@drawable/banner"
+        android:logo="@mipmap/banner"
         android:requestLegacyExternalStorage="true">
         <activity
             android:name=".Splash"
@@ -100,9 +95,8 @@
         -->
         <activity
             android:name=".Main"
-            android:configChanges="orientation|keyboard|keyboardHidden|navigation|touchscreen|screenLayout|screenSize"
+            android:configChanges="orientation|keyboard|keyboardHidden|navigation|touchscreen|screenLayout|screenSize|colorMode"
             android:finishOnTaskLaunch="true"
-            android:label="@string/app_name"
             android:launchMode="singleInstance"
             android:exported="true"
             android:screenOrientation="sensorLandscape"
@@ -128,15 +122,19 @@
             android:name=".content.XBMCMediaContentProvider"
             android:authorities="@APP_PACKAGE@.media"
             android:exported="true" />
-
         <provider
             android:name=".content.XBMCFileContentProvider"
             android:authorities="@APP_PACKAGE@.file"
             android:exported="true" />
         <provider
-            android:name=".content.XBMCYTDLContentProvider"
-            android:authorities="@APP_PACKAGE@.ytdl"
-            android:exported="true" />
+            android:name=".content.XBMCFileProvider"
+            android:authorities="@APP_PACKAGE@.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <activity android:name=".XBMCSearchableActivity" 
                   android:exported="true">

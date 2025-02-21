@@ -9,6 +9,7 @@
 #include "guilib/guiinfo/SystemGUIInfo.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "GUIPassword.h"
 #include "LangInfo.h"
 #include "ServiceBroker.h"
@@ -143,6 +144,7 @@ bool CSystemGUIInfo::GetLabel(std::string& value, const CFileItem *item, int con
     case NETWORK_GATEWAY_ADDRESS:
     case NETWORK_DNS1_ADDRESS:
     case NETWORK_DNS2_ADDRESS:
+    case NETWORK_LINK_STATE:
     case SYSTEM_OS_VERSION_INFO:
     case SYSTEM_CPUFREQUENCY:
     case SYSTEM_INTERNET_STATE:
@@ -327,20 +329,6 @@ bool CSystemGUIInfo::GetLabel(std::string& value, const CFileItem *item, int con
       return true;
     }
 
-    case SYSTEM_LOCALE_TIMEZONECOUNTRY:
-    {
-      value = CServiceBroker::GetSettingsComponent()->GetSettings()->GetString(
-          CSettings::SETTING_LOCALE_TIMEZONECOUNTRY);
-      return true;
-    }
-
-    case SYSTEM_LOCALE_TIMEZONE:
-    {
-      value = CServiceBroker::GetSettingsComponent()->GetSettings()->GetString(
-          CSettings::SETTING_LOCALE_TIMEZONE);
-      return true;
-    }
-
     case SYSTEM_LOCALE_REGION:
     {
       value = g_langInfo.GetCurrentRegion();
@@ -465,6 +453,13 @@ bool CSystemGUIInfo::GetBool(bool& value, const CGUIListItem *gitem, int context
       value = false;
 #endif
       return true;
+    case SYSTEM_PLATFORM_WEBOS:
+#if defined(TARGET_WEBOS)
+      value = true;
+#else
+      value = false;
+#endif
+      return true;
     case SYSTEM_MEDIA_DVD:
       value = CServiceBroker::GetMediaManager().IsDiscInDrive();
       return true;
@@ -531,7 +526,10 @@ bool CSystemGUIInfo::GetBool(bool& value, const CGUIListItem *gitem, int context
       }
     }
     case SYSTEM_HASLOCKS:
-      value = CServiceBroker::GetSettingsComponent()->GetProfileManager()->GetMasterProfile().getLockMode() != LOCK_MODE_EVERYONE;
+      value = CServiceBroker::GetSettingsComponent()
+                  ->GetProfileManager()
+                  ->GetMasterProfile()
+                  .getLockMode() != LockMode::EVERYONE;
       return true;
     case SYSTEM_HAS_PVR:
       value = true;
@@ -547,7 +545,11 @@ bool CSystemGUIInfo::GetBool(bool& value, const CGUIListItem *gitem, int context
 #endif
       return true;
     case SYSTEM_ISMASTER:
-      value = CServiceBroker::GetSettingsComponent()->GetProfileManager()->GetMasterProfile().getLockMode() != LOCK_MODE_EVERYONE && g_passwordManager.bMasterUser;
+      value = CServiceBroker::GetSettingsComponent()
+                      ->GetProfileManager()
+                      ->GetMasterProfile()
+                      .getLockMode() != LockMode::EVERYONE &&
+              g_passwordManager.bMasterUser;
       return true;
     case SYSTEM_ISFULLSCREEN:
       value = CServiceBroker::GetWinSystem()->IsFullScreen();

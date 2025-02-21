@@ -12,20 +12,26 @@
 #include "ServiceBroker.h"
 #include "guilib/LocalizeStrings.h"
 #include "music/MusicDatabase.h"
+#include "settings/AdvancedSettings.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
 
 using namespace XFILE::MUSICDATABASEDIRECTORY;
 
 CDirectoryNodeArtist::CDirectoryNodeArtist(const std::string& strName, CDirectoryNode* pParent)
-  : CDirectoryNode(NODE_TYPE_ARTIST, strName, pParent)
+  : CDirectoryNode(NodeType::ARTIST, strName, pParent)
 {
 
 }
 
-NODE_TYPE CDirectoryNodeArtist::GetChildType() const
+NodeType CDirectoryNodeArtist::GetChildType() const
 {
-  return NODE_TYPE_ALBUM;
+  if (!CServiceBroker::GetSettingsComponent()
+           ->GetAdvancedSettings()
+           ->m_bMusicLibraryArtistNavigatesToSongs)
+    return NodeType::ALBUM;
+  else
+    return NodeType::SONG;
 }
 
 std::string CDirectoryNodeArtist::GetLocalizedName() const

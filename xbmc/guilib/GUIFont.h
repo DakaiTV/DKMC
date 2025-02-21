@@ -35,12 +35,15 @@ class CGraphicContext;
 ///
 /// Flags are used as bits to have several together, e.g. `XBFONT_LEFT | XBFONT_CENTER_Y`
 ///
+// clang-format off
 constexpr int XBFONT_LEFT = 0; ///< Align X left
 constexpr int XBFONT_RIGHT = (1 << 0); ///< Align X right
 constexpr int XBFONT_CENTER_X = (1 << 1); ///< Align X center
 constexpr int XBFONT_CENTER_Y = (1 << 2); ///< Align Y center
-constexpr int XBFONT_TRUNCATED = (1 << 3); ///< Truncated text
+constexpr int XBFONT_TRUNCATED = (1 << 3); ///< Truncated text from right (text end with ellipses)
 constexpr int XBFONT_JUSTIFIED = (1 << 4); ///< Justify text
+constexpr int XBFONT_TRUNCATED_LEFT = (1 << 5); ///< Truncated text from left (text start with ellipses)
+// clang-format on
 /// @}
 
 // flags for font style. lower 16 bits are the unicode code
@@ -109,8 +112,8 @@ class CGUIFont
 public:
   CGUIFont(const std::string& strFontName,
            uint32_t style,
-           UTILS::COLOR::Color textColor,
-           UTILS::COLOR::Color shadowColor,
+           KODI::UTILS::COLOR::Color textColor,
+           KODI::UTILS::COLOR::Color shadowColor,
            float lineSpacing,
            float origHeight,
            CGUIFontTTF* font);
@@ -120,29 +123,29 @@ public:
 
   void DrawText(float x,
                 float y,
-                UTILS::COLOR::Color color,
-                UTILS::COLOR::Color shadowColor,
+                KODI::UTILS::COLOR::Color color,
+                KODI::UTILS::COLOR::Color shadowColor,
                 const vecText& text,
                 uint32_t alignment,
                 float maxPixelWidth)
   {
-    std::vector<UTILS::COLOR::Color> colors;
+    std::vector<KODI::UTILS::COLOR::Color> colors;
     colors.push_back(color);
     DrawText(x, y, colors, shadowColor, text, alignment, maxPixelWidth);
   };
 
   void DrawText(float x,
                 float y,
-                const std::vector<UTILS::COLOR::Color>& colors,
-                UTILS::COLOR::Color shadowColor,
+                const std::vector<KODI::UTILS::COLOR::Color>& colors,
+                KODI::UTILS::COLOR::Color shadowColor,
                 const vecText& text,
                 uint32_t alignment,
                 float maxPixelWidth);
 
   void DrawScrollingText(float x,
                          float y,
-                         const std::vector<UTILS::COLOR::Color>& colors,
-                         UTILS::COLOR::Color shadowColor,
+                         const std::vector<KODI::UTILS::COLOR::Color>& colors,
+                         KODI::UTILS::COLOR::Color shadowColor,
                          const vecText& text,
                          uint32_t alignment,
                          float maxPixelWidth,
@@ -171,8 +174,8 @@ public:
 protected:
   std::string m_strFontName;
   uint32_t m_style;
-  UTILS::COLOR::Color m_shadowColor;
-  UTILS::COLOR::Color m_textColor;
+  KODI::UTILS::COLOR::Color m_shadowColor;
+  KODI::UTILS::COLOR::Color m_textColor;
   float m_lineSpacing;
   float m_origHeight;
   CGUIFontTTF* m_font; // the font object has the size information

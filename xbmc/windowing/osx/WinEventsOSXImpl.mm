@@ -22,7 +22,6 @@
 
 #import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
-#import <IOKit/hidsystem/ev_keymap.h>
 
 #pragma mark - objc implementation
 
@@ -30,7 +29,6 @@
 {
   std::queue<XBMC_Event> events;
   CCriticalSection m_inputlock;
-  id m_mediaKeysTap;
   bool m_inputEnabled;
 
   //! macOS requires the calls the NSCursor hide/unhide to be balanced
@@ -110,6 +108,48 @@
     case NSCarriageReturnCharacter:
     case NSEnterCharacter:
       return XBMCK_RETURN;
+    case NSF1FunctionKey:
+      return XBMCK_F1;
+    case NSF2FunctionKey:
+      return XBMCK_F2;
+    case NSF3FunctionKey:
+      return XBMCK_F3;
+    case NSF4FunctionKey:
+      return XBMCK_F4;
+    case NSF5FunctionKey:
+      return XBMCK_F5;
+    case NSF6FunctionKey:
+      return XBMCK_F6;
+    case NSF7FunctionKey:
+      return XBMCK_F7;
+    case NSF8FunctionKey:
+      return XBMCK_F8;
+    case NSF9FunctionKey:
+      return XBMCK_F9;
+    case NSF10FunctionKey:
+      return XBMCK_F10;
+    case NSF11FunctionKey:
+      return XBMCK_F11;
+    case NSF12FunctionKey:
+      return XBMCK_F12;
+    case NSF13FunctionKey:
+      return XBMCK_F13;
+    case NSF14FunctionKey:
+      return XBMCK_F14;
+    case NSF15FunctionKey:
+      return XBMCK_F15;
+    case NSHomeFunctionKey:
+      return XBMCK_HOME;
+    case NSEndFunctionKey:
+      return XBMCK_END;
+    case NSPageDownFunctionKey:
+      return XBMCK_PAGEDOWN;
+    case NSPageUpFunctionKey:
+      return XBMCK_PAGEUP;
+    case NSPauseFunctionKey:
+      return XBMCK_PAUSE;
+    case NSInsertCharFunctionKey:
+      return XBMCK_INSERT;
     default:
       return character;
   }
@@ -159,16 +199,11 @@
 
 - (void)enableInputEvents
 {
-  m_mediaKeysTap = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskSystemDefined
-                                                         handler:^(NSEvent* event) {
-                                                           return [self InputEventHandler:event];
-                                                         }];
   m_inputEnabled = true;
 }
 
 - (void)disableInputEvents
 {
-  m_mediaKeysTap = nil;
   m_inputEnabled = false;
 }
 
@@ -313,21 +348,6 @@
 
       break;
     }
-    // media keys
-    case NSEventTypeSystemDefined:
-    {
-      if (nsEvent.subtype == NX_SUBTYPE_AUX_CONTROL_BUTTONS)
-      {
-        const int keyCode = (([nsEvent data1] & 0xFFFF0000) >> 16);
-        const int keyFlags = ([nsEvent data1] & 0x0000FFFF);
-        const int keyState = (((keyFlags & 0xFF00) >> 8)) == 0xA;
-        if (keyState == 1) // if pressed
-        {
-          passEvent = [self HandleMediaKey:keyCode];
-        }
-      }
-      break;
-    }
     default:
       return nsEvent;
   }
@@ -408,52 +428,6 @@
   // cocoa world is upside down ...
   location.y = frame.size.height - location.y;
   return location;
-}
-
-- (void)SendPlayerAction:(int)actionId
-{
-  CAction* action = new CAction(actionId);
-  CServiceBroker::GetAppMessenger()->PostMsg(TMSG_GUI_ACTION, WINDOW_INVALID, -1,
-                                             static_cast<void*>(action));
-}
-
-- (bool)HandleMediaKey:(int)keyCode
-{
-  bool passEvent = false;
-  switch (keyCode)
-  {
-    case NX_KEYTYPE_PLAY:
-    {
-      [self SendPlayerAction:ACTION_PLAYER_PLAYPAUSE];
-      break;
-    }
-    case NX_KEYTYPE_NEXT:
-    {
-      [self SendPlayerAction:ACTION_NEXT_ITEM];
-      break;
-    }
-    case NX_KEYTYPE_PREVIOUS:
-    {
-      [self SendPlayerAction:ACTION_PREV_ITEM];
-      break;
-    }
-    case NX_KEYTYPE_FAST:
-    {
-      [self SendPlayerAction:ACTION_PLAYER_FORWARD];
-      break;
-    }
-    case NX_KEYTYPE_REWIND:
-    {
-      [self SendPlayerAction:ACTION_PLAYER_REWIND];
-      break;
-    }
-    default:
-    {
-      passEvent = true;
-      break;
-    }
-  }
-  return passEvent;
 }
 
 @end

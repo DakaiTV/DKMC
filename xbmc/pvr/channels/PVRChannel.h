@@ -8,9 +8,11 @@
 
 #pragma once
 
+#include "XBDateTime.h"
 #include "addons/kodi-dev-kit/include/kodi/c-api/addon-instance/pvr/pvr_channels.h"
 #include "addons/kodi-dev-kit/include/kodi/c-api/addon-instance/pvr/pvr_providers.h"
 #include "pvr/PVRCachedImage.h"
+#include "pvr/PVRConstants.h" // PVR_CLIENT_INVALID_UID
 #include "pvr/channels/PVRChannelNumber.h"
 #include "threads/CriticalSection.h"
 #include "utils/ISerializable.h"
@@ -47,12 +49,6 @@ public:
 
   bool operator==(const CPVRChannel& right) const;
   bool operator!=(const CPVRChannel& right) const;
-
-  /*!
-   * @brief Copy over data to the given PVR_CHANNEL instance.
-   * @param channel The channel instance to fill.
-   */
-  void FillAddonData(PVR_CHANNEL& channel) const;
 
   void Serialize(CVariant& value) const override;
 
@@ -92,7 +88,7 @@ public:
   /*!
    * @brief Set the identifier for this channel.
    * @param iDatabaseId The new channel ID
-   * @return True if the something changed, false otherwise.
+   * @return True if something changed, false otherwise.
    */
   bool SetChannelID(int iDatabaseId);
 
@@ -113,7 +109,7 @@ public:
    * The EPG of hidden channels won't be updated.
    * @param bIsHidden The new setting.
    * @param bIsUserSetIcon true if user changed the hidden flag via GUI, false otherwise.
-   * @return True if the something changed, false otherwise.
+   * @return True if something changed, false otherwise.
    */
   bool SetHidden(bool bIsHidden, bool bIsUserSetHidden = false);
 
@@ -128,7 +124,7 @@ public:
    * Set to true to lock this channel. Set to false to unlock it.
    * Locked channels need can only be viewed if parental PIN entered.
    * @param bIsLocked The new setting.
-   * @return True if the something changed, false otherwise.
+   * @return True if something changed, false otherwise.
    */
   bool SetLocked(bool bIsLocked);
 
@@ -190,7 +186,7 @@ public:
    * @brief Set the path to the icon for this channel.
    * @param strIconPath The new path.
    * @param bIsUserSetIcon true if user changed the icon via GUI, false otherwise.
-   * @return True if the something changed, false otherwise.
+   * @return True if something changed, false otherwise.
    */
   bool SetIconPath(const std::string& strIconPath, bool bIsUserSetIcon = false);
 
@@ -203,7 +199,7 @@ public:
    * @brief Set the name for this channel used by XBMC.
    * @param strChannelName The new channel name.
    * @param bIsUserSetName whether the change was triggered by the user directly
-   * @return True if the something changed, false otherwise.
+   * @return True if something changed, false otherwise.
    */
   bool SetChannelName(const std::string& strChannelName, bool bIsUserSetName = false);
 
@@ -216,9 +212,21 @@ public:
    * @brief Set the last time the channel has been watched and the channel group used to watch.
    * @param lastWatched The new last watched time value.
    * @param groupId the id of the group used to watch the channel.
-   * @return True if the something changed, false otherwise.
+   * @return True if something changed, false otherwise.
    */
   bool SetLastWatched(time_t lastWatched, int groupId);
+
+  /*!
+   * @return the date and time this channel was added to the TV database.
+   */
+  CDateTime DateTimeAdded() const;
+
+  /*!
+   * @brief Set the date and time the channel was added to the TV database.
+   * @param dateTimeAdded The date and time.
+   * @return True if something changed, false otherwise.
+   */
+  bool SetDateTimeAdded(const CDateTime& dateTimeAdded);
 
   /*!
    * @brief Check whether this channel has unpersisted data changes.
@@ -254,7 +262,7 @@ public:
   /*!
    * @brief Set the identifier of the client that serves this channel.
    * @param iClientId The new ID.
-   * @return True if the something changed, false otherwise.
+   * @return True if something changed, false otherwise.
    */
   bool SetClientID(int iClientId);
 
@@ -402,7 +410,7 @@ public:
   /*!
    * @brief Set to true if an EPG should be used for this channel. Set to false otherwise.
    * @param bEPGEnabled The new value.
-   * @return True if the something changed, false otherwise.
+   * @return True if something changed, false otherwise.
    */
   bool SetEPGEnabled(bool bEPGEnabled);
 
@@ -423,7 +431,7 @@ public:
    * Set to "client" to load the EPG from the backend
    *
    * @param strScraper The new scraper name.
-   * @return True if the something changed, false otherwise.
+   * @return True if something changed, false otherwise.
    */
   bool SetEPGScraper(const std::string& strScraper);
 
@@ -438,8 +446,8 @@ public:
   int ClientOrder() const { return m_iClientOrder; }
 
   /*!
-   * @brief Get the client provider Uid for this channel
-   * @return m_iClientProviderUid The provider Uid for this channel
+   * @brief Get the uid of the provider on the client which this channel is from
+   * @return the client uid of the provider or PVR_PROVIDER_INVALID_UID
    */
   int ClientProviderUid() const { return m_iClientProviderUid; }
 
@@ -499,7 +507,7 @@ private:
   /*!
    * @brief Set the client provider Uid for this channel
    * @param iClientProviderUid The provider Uid for this channel
-   * @return True if the something changed, false otherwise.
+   * @return True if something changed, false otherwise.
    */
   bool SetClientProviderUid(int iClientProviderUid);
 
@@ -537,7 +545,8 @@ private:
    */
   //@{
   int m_iUniqueId = -1; /*!< the unique identifier for this channel */
-  int m_iClientId = -1; /*!< the identifier of the client that serves this channel */
+  int m_iClientId =
+      PVR_CLIENT_INVALID_UID; /*!< the identifier of the client that serves this channel */
   CPVRChannelNumber m_clientChannelNumber; /*!< the channel number on the client */
   std::string m_strClientChannelName; /*!< the name of this channel on the client */
   std::string
@@ -551,6 +560,7 @@ private:
       PVR_PROVIDER_INVALID_UID; /*!< the unique id for this provider from the client */
   int m_lastWatchedGroupId{
       -1}; /*!< the id of the channel group the channel was watched from the last time */
+  CDateTime m_dateTimeAdded; /*!< the date and time the channel was added to the TV database */
   //@}
 
   mutable CCriticalSection m_critSection;

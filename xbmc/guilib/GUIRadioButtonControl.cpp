@@ -10,7 +10,8 @@
 
 #include "GUIInfoManager.h"
 #include "LocalizeStrings.h"
-#include "input/Key.h"
+#include "input/actions/Action.h"
+#include "input/actions/ActionIDs.h"
 
 CGUIRadioButtonControl::CGUIRadioButtonControl(int parentID,
                                                int controlID,
@@ -38,12 +39,12 @@ CGUIRadioButtonControl::CGUIRadioButtonControl(int parentID,
 {
   m_radioPosX = 0;
   m_radioPosY = 0;
-  m_imgRadioOnFocus->SetAspectRatio(CAspectRatio::AR_KEEP);
-  m_imgRadioOnNoFocus->SetAspectRatio(CAspectRatio::AR_KEEP);
-  m_imgRadioOffFocus->SetAspectRatio(CAspectRatio::AR_KEEP);
-  m_imgRadioOffNoFocus->SetAspectRatio(CAspectRatio::AR_KEEP);
-  m_imgRadioOnDisabled->SetAspectRatio(CAspectRatio::AR_KEEP);
-  m_imgRadioOffDisabled->SetAspectRatio(CAspectRatio::AR_KEEP);
+  m_imgRadioOnFocus->SetAspectRatio(CAspectRatio::KEEP);
+  m_imgRadioOnNoFocus->SetAspectRatio(CAspectRatio::KEEP);
+  m_imgRadioOffFocus->SetAspectRatio(CAspectRatio::KEEP);
+  m_imgRadioOffNoFocus->SetAspectRatio(CAspectRatio::KEEP);
+  m_imgRadioOnDisabled->SetAspectRatio(CAspectRatio::KEEP);
+  m_imgRadioOffDisabled->SetAspectRatio(CAspectRatio::KEEP);
   ControlType = GUICONTROL_RADIO;
   m_useLabel2 = false;
 }

@@ -9,6 +9,7 @@
 #include "VideoLibraryMarkWatchedJob.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "Util.h"
 #include "filesystem/Directory.h"
@@ -17,7 +18,7 @@
 #endif
 #include "profiles/ProfileManager.h"
 #include "pvr/PVRManager.h"
-#include "pvr/recordings/PVRRecordings.h"
+#include "pvr/guilib/PVRGUIActionsRecordings.h"
 #include "settings/SettingsComponent.h"
 #include "utils/URIUtils.h"
 #include "video/VideoDatabase.h"
@@ -69,8 +70,8 @@ bool CVideoLibraryMarkWatchedJob::Work(CVideoDatabase &db)
       continue;
 #endif
 
-    if (item->HasPVRRecordingInfoTag() &&
-        CServiceBroker::GetPVRManager().Recordings()->MarkWatched(item->GetPVRRecordingInfoTag(), m_mark))
+    if (item->IsPVRRecording() &&
+        CServiceBroker::GetPVRManager().Get<PVR::GUI::Recordings>().MarkWatched(*item, m_mark))
     {
       CDateTime newLastPlayed;
       if (m_mark)

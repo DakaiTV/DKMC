@@ -22,25 +22,24 @@ if(NOT TARGET flatbuffers::flatc)
     string(REGEX REPLACE ".* version (.*)" "\\1" FLATBUFFERS_FLATC_VERSION "${FLATBUFFERS_FLATC_VERSION}")
   endif()
 
-  set(MODULE_LC flatbuffers)
-  set(LIB_TYPE native)
-  # Duplicate URL may exist from FindFlatbuffers.cmake
-  # unset otherwise it thinks we are providing a local file location and incorrect concatenation happens
-  unset(FLATBUFFERS_URL)
+  set(${CMAKE_FIND_PACKAGE_NAME}_MODULE_LC flatc)
+  set(${${CMAKE_FIND_PACKAGE_NAME}_MODULE_LC}_MODULE_LOCATION flatbuffers)
+  set(${${CMAKE_FIND_PACKAGE_NAME}_MODULE_LC}_LIB_TYPE native)
+
   SETUP_BUILD_VARS()
 
   if(NOT FLATBUFFERS_FLATC_EXECUTABLE OR
-      (ENABLE_INTERNAL_FLATBUFFERS AND NOT "${FLATBUFFERS_FLATC_VERSION}" VERSION_EQUAL "${FLATBUFFERS_VER}"))
+      (ENABLE_INTERNAL_FLATBUFFERS AND NOT "${FLATBUFFERS_FLATC_VERSION}" VERSION_EQUAL "${${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_VER}"))
 
     # Override build type detection and always build as release
-    set(FLATBUFFERS_BUILD_TYPE Release)
+    set(${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_BUILD_TYPE Release)
 
     if(NATIVEPREFIX)
       set(INSTALL_DIR "${NATIVEPREFIX}/bin")
-      set(FLATBUFFERS_INSTALL_PREFIX ${NATIVEPREFIX})
+      set(${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_INSTALL_PREFIX ${NATIVEPREFIX})
     else()
       set(INSTALL_DIR "${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR}/bin")
-      set(FLATBUFFERS_INSTALL_PREFIX ${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR})
+      set(${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_INSTALL_PREFIX ${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR})
     endif()
 
     set(CMAKE_ARGS -DFLATBUFFERS_CODE_COVERAGE=OFF
@@ -54,20 +53,18 @@ if(NOT TARGET flatbuffers::flatc)
 
     # Set host build info for buildtool
     if(EXISTS "${NATIVEPREFIX}/share/Toolchain-Native.cmake")
-      set(FLATBUFFERS_TOOLCHAIN_FILE "${NATIVEPREFIX}/share/Toolchain-Native.cmake")
+      set(${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_TOOLCHAIN_FILE "${NATIVEPREFIX}/share/Toolchain-Native.cmake")
     endif()
 
     if(WIN32 OR WINDOWS_STORE)
       # Make sure we generate for host arch, not target
-      set(FLATBUFFERS_GENERATOR_PLATFORM CMAKE_GENERATOR_PLATFORM ${HOSTTOOLSET})
-      set(WIN_DISABLE_PROJECT_FLAGS 1)
+      set(${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_GENERATOR_PLATFORM CMAKE_GENERATOR_PLATFORM ${HOSTTOOLSET})
     endif()
 
     set(FLATBUFFERS_FLATC_EXECUTABLE ${INSTALL_DIR}/flatc)
 
-    set(BUILD_NAME flatc)
     set(BUILD_BYPRODUCTS ${FLATBUFFERS_FLATC_EXECUTABLE})
-    set(FLATBUFFERS_FLATC_VERSION ${FLATBUFFERS_VER})
+    set(FLATBUFFERS_FLATC_VERSION ${${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_VER})
 
     BUILD_DEP_TARGET()
   endif()

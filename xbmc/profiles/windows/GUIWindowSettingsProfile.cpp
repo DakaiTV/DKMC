@@ -9,6 +9,7 @@
 #include "GUIWindowSettingsProfile.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "dialogs/GUIDialogContextMenu.h"
 #include "dialogs/GUIDialogSelect.h"
@@ -17,7 +18,7 @@
 #include "guilib/GUIMessage.h"
 #include "guilib/GUIWindowManager.h"
 #include "guilib/LocalizeStrings.h"
-#include "input/Key.h"
+#include "input/actions/ActionIDs.h"
 #include "messaging/ApplicationMessenger.h"
 #include "profiles/Profile.h"
 #include "profiles/ProfileManager.h"
@@ -191,7 +192,9 @@ void CGUIWindowSettingsProfile::LoadList()
     CFileItemPtr item(new CFileItem(profile->getName()));
     item->SetLabel2(profile->getDate());
     item->SetArt("thumb", profile->getThumb());
-    item->SetOverlayImage(profile->getLockMode() == LOCK_MODE_EVERYONE ? CGUIListItem::ICON_OVERLAY_NONE : CGUIListItem::ICON_OVERLAY_LOCKED);
+    item->SetOverlayImage(profile->getLockMode() == LockMode::EVERYONE
+                              ? CGUIListItem::ICON_OVERLAY_NONE
+                              : CGUIListItem::ICON_OVERLAY_LOCKED);
     m_listItems->Add(item);
   }
   {
@@ -244,7 +247,8 @@ bool CGUIWindowSettingsProfile::GetAutoLoginProfileChoice(int &iProfile)
   for (unsigned int i = 0; i < profileManager->GetNumberOfProfiles(); i++)
   {
     const CProfile *profile = profileManager->GetProfile(i);
-    const std::string& locked = g_localizeStrings.Get(profile->getLockMode() > 0 ? 20166 : 20165);
+    const std::string& locked =
+        g_localizeStrings.Get(static_cast<int>(profile->getLockMode()) > 0 ? 20166 : 20165);
     CFileItemPtr item(new CFileItem(profile->getName()));
     item->SetLabel2(locked); // lock setting
     std::string thumb = profile->getThumb();

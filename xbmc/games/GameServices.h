@@ -10,6 +10,7 @@
 
 #include "controllers/ControllerTypes.h"
 
+#include <future>
 #include <memory>
 #include <string>
 
@@ -30,7 +31,7 @@ class CGUIGameRenderManager;
 
 namespace GAME
 {
-class CGameAgentManager;
+class CAgentInput;
 class CControllerManager;
 class CGameSettings;
 
@@ -70,7 +71,15 @@ public:
 
   RETRO::CGUIGameRenderManager& GameRenderManager() { return m_gameRenderManager; }
 
-  CGameAgentManager& GameAgentManager() { return *m_gameAgentManager; }
+  CAgentInput& AgentInput() { return *m_agentInput; }
+
+  /*!
+   * \brief Called when an add-on repo is installed
+   *
+   * If the repo contains game add-ons, it can introduce new file extensions
+   * to the list of known game extensions.
+   */
+  void OnAddonRepoInstalled();
 
 private:
   // Construction parameters
@@ -80,7 +89,10 @@ private:
 
   // Game services
   std::unique_ptr<CGameSettings> m_gameSettings;
-  std::unique_ptr<CGameAgentManager> m_gameAgentManager;
+  std::unique_ptr<CAgentInput> m_agentInput;
+
+  // Game threads
+  std::future<void> m_initializationTask;
 };
 } // namespace GAME
 } // namespace KODI

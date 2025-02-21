@@ -9,6 +9,7 @@
 
 #include "File.h"
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "LangInfo.h"
 #include "URL.h"
 #include "filesystem/BlurayCallback.h"
@@ -234,6 +235,22 @@ bool CBlurayDirectory::GetDirectory(const CURL& url, CFileItemList &items)
     hints.flags = m_flags;
     if (!CDirectory::GetDirectory(url2, items, hints))
       return false;
+
+    // Found items will have underlying protocol (eg. udf:// or smb://)
+    // in path so add back bluray://
+    // (so properly recognised in cache as bluray:// files for CFile:Exists() etc..)
+    CURL url3{url};
+    for (const auto& item : items)
+    {
+      const CURL url4{item->GetPath()};
+      url3.SetFileName(url4.GetFileName());
+      item->SetPath(url3.Get());
+    }
+
+    url3.SetFileName("menu");
+    const std::shared_ptr<CFileItem> item{std::make_shared<CFileItem>()};
+    item->SetPath(url3.Get());
+    items.Add(item);
   }
 
   items.AddSortMethod(SortByTrackNumber,  554, LABEL_MASKS("%L", "%D", "%L", ""));    // FileName, Duration | Foldername, empty
@@ -296,7 +313,8 @@ std::vector<BLURAY_TITLE_INFO*> CBlurayDirectory::GetUserPlaylists()
   std::string discInfPath = URIUtils::AddFileToFolder(root, "disc.inf");
   std::vector<BLURAY_TITLE_INFO*> userTitles;
   CFile file;
-  char buffer[1025];
+  std::string line;
+  line.reserve(1024);
 
   if (file.Open(discInfPath))
   {
@@ -310,13 +328,13 @@ std::vector<BLURAY_TITLE_INFO*> CBlurayDirectory::GetUserPlaylists()
     }
 
     uint8_t maxLines = 100;
-    while ((maxLines > 0) && file.ReadString(buffer, 1024))
+    while ((maxLines > 0) && file.ReadLine(line))
     {
       maxLines--;
-      if (StringUtils::StartsWithNoCase(buffer, "playlists"))
+      if (StringUtils::StartsWithNoCase(line, "playlists"))
       {
         int pos = 0;
-        while ((pos = pl.RegFind(buffer, static_cast<unsigned int>(pos))) >= 0)
+        while ((pos = pl.RegFind(line, static_cast<unsigned int>(pos))) >= 0)
         {
           std::string playlist = pl.GetMatch(0);
           uint32_t len = static_cast<uint32_t>(playlist.length());

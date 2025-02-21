@@ -26,6 +26,7 @@
 #include "messaging/ApplicationMessenger.h"
 #include "playlists/PlayListTypes.h"
 #include "settings/SkinSettings.h"
+#include "utils/ArtUtils.h"
 #include "utils/CharsetConverter.h"
 #include "utils/FileUtils.h"
 #include "utils/StringUtils.h"
@@ -41,6 +42,7 @@
 #include <memory>
 #include <mutex>
 
+using namespace KODI;
 using namespace KODI::GUILIB;
 using namespace KODI::GUILIB::GUIINFO;
 using namespace INFO;
@@ -380,7 +382,6 @@ const infomap integer_bools[] =  {{ "isequal",          INTEGER_IS_EQUAL },
                                   { "islessorequal",    INTEGER_LESS_OR_EQUAL },
                                   { "iseven",           INTEGER_EVEN },
                                   { "isodd",            INTEGER_ODD }};
-
 
 /// \page modules__infolabels_boolean_conditions
 /// \subsection modules__infolabels_boolean_conditions_Player Player
@@ -794,18 +795,6 @@ const infomap integer_bools[] =  {{ "isequal",          INTEGER_IS_EQUAL },
 ///     @skinning_v18 **[New Infolabel]** \link Player_Icon `Player.Icon`\endlink
 ///     <p>
 ///   }
-///   \table_row3{   <b>`Player.Cutlist`</b>,
-///                  \anchor Player_Cutlist
-///                  _string_,
-///     @return The cutlist of the currently playing item as csv in the format start1\,end1\,start2\,end2\,...
-///     Tokens must have values in the range from 0.0 to 100.0. end token must be less or equal than start token.
-///     <p>
-///     @deprecated \link Player_Cutlist `Player.Cutlist`\endlink is deprecated and will be removed in the next version.
-///     <p><hr>
-///     @skinning_v19 **[New Infolabel]** \link Player_Cutlist `Player.Cutlist`\endlink
-///     @skinning_v20 \link Player_Cutlist `Player.Cutlist`\endlink is deprecated\, use \link Player_Editlist `Player.Editlist`\endlink instead
-///     <p>
-///   }
 ///   \table_row3{   <b>`Player.Editlist`</b>,
 ///                  \anchor Player_Editlist
 ///                  _string_,
@@ -852,10 +841,28 @@ const infomap integer_bools[] =  {{ "isequal",          INTEGER_IS_EQUAL },
 ///     @skinning_v19 **[New Infolabel]** \link Player_Chapters `Player.Chapters`\endlink
 ///     <p>
 ///   }
+///   \table_row3{   <b>`Player.IsExternal`</b>,
+///                  \anchor Player_IsExternal
+///                  _boolean_,
+///     @return **True** if the playing player is an external player\, **False** otherwise
+///     <p><hr>
+///     @skinning_v21 **[New Boolean Condition]** \link Player_IsExternal `Player.IsExternal`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`Player.IsRemote`</b>,
+///                  \anchor Player_IsRemote
+///                  _boolean_,
+///     @return **True** if the playing player is a remote player (e.g. UPnP)\, **False** otherwise
+///     <p><hr>
+///     @skinning_v21 **[New Boolean Condition]** \link Player_IsRemote `Player.IsRemote`\endlink
+///     <p>
+///   }
 const infomap player_labels[] = {{"hasmedia", PLAYER_HAS_MEDIA},
                                  {"hasaudio", PLAYER_HAS_AUDIO},
                                  {"hasvideo", PLAYER_HAS_VIDEO},
                                  {"hasgame", PLAYER_HAS_GAME},
+                                 {"isexternal", PLAYER_IS_EXTERNAL},
+                                 {"isremote", PLAYER_IS_REMOTE},
                                  {"playing", PLAYER_PLAYING},
                                  {"paused", PLAYER_PAUSED},
                                  {"rewinding", PLAYER_REWINDING},
@@ -902,7 +909,6 @@ const infomap player_labels[] = {{"hasmedia", PLAYER_HAS_MEDIA},
                                  {"hasresolutions", PLAYER_HAS_RESOLUTIONS},
                                  {"frameadvance", PLAYER_FRAMEADVANCE},
                                  {"icon", PLAYER_ICON},
-                                 {"cutlist", PLAYER_CUTLIST},
                                  {"editlist", PLAYER_EDITLIST},
                                  {"cuts", PLAYER_CUTS},
                                  {"scenemarkers", PLAYER_SCENE_MARKERS},
@@ -1407,6 +1413,14 @@ const infomap weather[] =        {{ "isfetched",        WEATHER_IS_FETCHED },
 ///     @return **True** if Kodi is running on an android device.
 ///     <p>
 ///   }
+///   \table_row3{   <b>`System.Platform.WebOS`</b>,
+///                  \anchor System_PlatformWebOS
+///                  _boolean_,
+///     @return **True** if Kodi is running on a WebOS device.
+///     <p><hr>
+///     @skinning_v21 **[New Boolean Condition]** \link System_PlatformWebOS
+///     `System.Platform.WebOS`\endlink <p>
+///   }
 ///   \table_row3{   <b>`System.CanPowerDown`</b>,
 ///                  \anchor System_CanPowerDown
 ///                  _boolean_,
@@ -1746,12 +1760,13 @@ const infomap weather[] =        {{ "isfetched",        WEATHER_IS_FETCHED },
 ///                  _string_,
 ///     @return Locale-specific information depending on the requested type.
 ///     @param type - Can be one of the following:
-///       - <b>timezonecountry</b> The country name for the current time zone.
-///       - <b>timezone</b> The full timezone name with country and optional region.
 ///       - <b>region</b> The currently selected region name within the selected language ( \link System_Language `System.Language` \endlink).
 ///       - <b>iso</b> The country code of the currently selected region as specified in <a href="https://kodi.wiki/view/Language_support#What_is_langinfo.xml">langinfo.xml</a>.
 ///     <p><hr>
 ///     @skinning_v21 **[New Infolabel]** \link System_Locale
+///     `System.Locale(type)`\endlink
+///     <p>
+///     @skinning_v22 **[Removed options]** `timezonecountry` and `timezone` from \link System_Locale
 ///     `System.Locale(type)`\endlink
 ///     <p>
 ///   }
@@ -2478,6 +2493,16 @@ const infomap musicpartymode[] = {{ "enabled",           MUSICPM_ENABLED },
 ///     @return The genre(s) of current song.
 ///     <p>
 ///   }
+///   \table_row3{   <b>`MusicPlayer.Genre(separator)`</b>,
+///                  \anchor MusicPlayer_Genre_separator
+///                  _string_,
+///     @return A list of genres of current song\, separated by given separator\, or if no
+///     separator was given separated by the advanced settings value \“itemseparator\” for music.
+///     Possible values for separator: comma\, pipe\, slash\, cr\, dash\, colon\, semicolon\, fullstop
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link MusicPlayer_Genre_separator `MusicPlayer.Genre(separator)`\endlink
+///     <p>
+///   }
 ///   \table_row3{   <b>`MusicPlayer.offset(number).Genre`</b>,
 ///                  \anchor MusicPlayer_OffSet_Genre
 ///                  _string_,
@@ -2775,6 +2800,14 @@ const infomap musicpartymode[] = {{ "enabled",           MUSICPM_ENABLED },
 ///     @return The channel name of the radio programme that's currently playing (PVR).
 ///     <p>
 ///   }
+///   \table_row3{   <b>`MusicPlayer.ChannelLogo`</b>,
+///                  \anchor MusicPlayer_ChannelLogo
+///                  _string_,
+///     @return The path for the logo of the currently playing radio channel\, if available (PVR).
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link MusicPlayer_ChannelLogo `MusicPlayer.ChannelLogo`\endlink
+///     <p>
+///   }
 ///   \table_row3{   <b>`MusicPlayer.ChannelNumberLabel`</b>,
 ///                  \anchor MusicPlayer_ChannelNumberLabel
 ///                  _string_,
@@ -2861,9 +2894,18 @@ const infomap musicpartymode[] = {{ "enabled",           MUSICPM_ENABLED },
 ///     @skinning_v19 **[New Infolabel]** \link MusicPlayer_Station `MusicPlayer.Station`\endlink
 ///     <p>
 ///   }
+///   \table_row3{   <b>`MusicPlayer.MediaProviders`</b>,
+///                  \anchor MusicPlayer_MediaProviders
+///                  _string_,
+///     @return string containing the names of the providers of the currently playing media\, separated by commas if muliple are present.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link MusicPlayer_MediaProviders `MusicPlayer.MediaProviders`\endlink
+///     <p>
+///   }
 /// \table_end
 ///
 /// -----------------------------------------------------------------------------
+// clang-format off
 const infomap musicplayer[] =    {{ "title",            MUSICPLAYER_TITLE },
                                   { "album",            MUSICPLAYER_ALBUM },
                                   { "artist",           MUSICPLAYER_ARTIST },
@@ -2898,6 +2940,7 @@ const infomap musicplayer[] =    {{ "title",            MUSICPLAYER_TITLE },
                                   { "playcount",        MUSICPLAYER_PLAYCOUNT },
                                   { "lastplayed",       MUSICPLAYER_LASTPLAYED },
                                   { "channelname",      MUSICPLAYER_CHANNEL_NAME },
+                                  { "channellogo",      MUSICPLAYER_CHANNEL_LOGO },
                                   { "channelnumberlabel", MUSICPLAYER_CHANNEL_NUMBER },
                                   { "channelgroup",     MUSICPLAYER_CHANNEL_GROUP },
                                   { "dbid",             MUSICPLAYER_DBID },
@@ -2907,8 +2950,10 @@ const infomap musicplayer[] =    {{ "title",            MUSICPLAYER_TITLE },
                                   { "bpm",              MUSICPLAYER_BPM },
                                   { "ismultidisc",      MUSICPLAYER_ISMULTIDISC },
                                   { "totaldiscs",       MUSICPLAYER_TOTALDISCS },
-                                  { "station",          MUSICPLAYER_STATIONNAME }
+                                  { "station",          MUSICPLAYER_STATIONNAME },
+                                  { "mediaproviders",   MUSICPLAYER_MEDIAPROVIDERS },
 };
+// clang-format on
 
 /// \page modules__infolabels_boolean_conditions
 /// \subsection modules__infolabels_boolean_conditions_Videoplayer Video player
@@ -2941,6 +2986,13 @@ const infomap musicplayer[] =    {{ "title",            MUSICPLAYER_TITLE },
 ///     @return **True** if the current playing video has information from the
 ///     library or from a plugin (eg director/plot etc.)
 ///     <p>
+///   }
+///   \table_row3{   <b>`VideoPlayer.HasVideoVersions`</b>,
+///                  \anchor VideoPlayer_HasVideoVersions
+///                  _boolean_,
+///     @return **True** when the played item has multiple video versions.
+///     <p><hr>
+///     @skinning_v21 **[New Infolabel]** \link VideoPlayer_HasVideoVersions `VideoPlayer.HasVideoVersions`\endlink
 ///   }
 ///   \table_row3{   <b>`VideoPlayer.Content(parameter)`</b>,
 ///                  \anchor VideoPlayer_Content
@@ -3120,6 +3172,16 @@ const infomap musicplayer[] =    {{ "title",            MUSICPLAYER_TITLE },
 ///     @return The genre(s) of current movie\, if it's in the database.
 ///     <p>
 ///   }
+///   \table_row3{   <b>`VideoPlayer.Genre(separator)`</b>,
+///                  \anchor VideoPlayer_Genre_separator
+///                  _string_,
+///     @return A list of genres of current movie\, separated by given separator\, or if no
+///     separator was given separated by the advanced settings value \“itemseparator\” for videos.
+///     Possible values for separator: comma\, pipe\, slash\, cr\, dash\, colon\, semicolon\, fullstop
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link VideoPlayer_Genre_separator `VideoPlayer.Genre(separator)`\endlink
+///     <p>
+///   }
 ///   \table_row3{   <b>`VideoPlayer.offset(number).Genre`</b>,
 ///                  \anchor VideoPlayer_Offset_Genre
 ///                  _string_,
@@ -3143,6 +3205,17 @@ const infomap musicplayer[] =    {{ "title",            MUSICPLAYER_TITLE },
 ///     <p><hr>
 ///     @skinning_v15 **[Infolabel Updated]** \link VideoPlayer_Director `VideoPlayer.Director`\endlink
 ///     also supports EPG.
+///     <p>
+///   }
+///   \table_row3{   <b>`VideoPlayer.Director(separator)`</b>,
+///                  \anchor VideoPlayer_Director_separator
+///                  _string_,
+///     @return A list of directors of the currently playing video\, separated by given separator\,
+///     or if no separator was given separated by the advanced settings value \“itemseparator\” for
+///     video items.
+///     Possible values for separator: comma\, pipe\, slash\, cr\, dash\, colon\, semicolon\, fullstop
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link VideoPlayer_Director_separator `VideoPlayer.Director(separator)`\endlink
 ///     <p>
 ///   }
 ///   \table_row3{   <b>`VideoPlayer.offset(number).Director`</b>,
@@ -3440,18 +3513,37 @@ const infomap musicplayer[] =    {{ "title",            MUSICPLAYER_TITLE },
 ///   \table_row3{   <b>`VideoPlayer.Cast`</b>,
 ///                  \anchor VideoPlayer_Cast
 ///                  _string_,
-///     @return A concatenated string of cast members of the current movie\, if it's in
-///     the database.
+///     @return A list of cast members\, separated by carriage returns.
 ///     <p><hr>
 ///     @skinning_v15 **[Infolabel Updated]** \link VideoPlayer_Cast `VideoPlayer.Cast`\endlink
 ///     also supports EPG.
 ///     <p>
 ///   }
+///   \table_row3{   <b>`VideoPlayer.Cast(separator)`</b>,
+///                  \anchor VideoPlayer_Cast_separator
+///                  _string_,
+///     @return A list of cast members of the currently playing video\, separated by given
+///     separator\, or if no separator was given separated by carriage returns.
+///     Possible values for separator: comma\, pipe\, slash\, cr\, dash\, colon\, semicolon\, fullstop
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link VideoPlayer_Cast_separator `VideoPlayer.Cast(separator)`\endlink
+///     <p>
+///   }
 ///   \table_row3{   <b>`VideoPlayer.CastAndRole`</b>,
 ///                  \anchor VideoPlayer_CastAndRole
 ///                  _string_,
-///     @return A concatenated string of cast members and roles of the current movie\,
-///     if it's in the database.
+///     @return A list of cast members and roles\, separated by carriage
+///     returns. Every cast/role combination is formatted 'cast' as 'role' where 'as' is localised.
+///     <p>
+///   }
+///   \table_row3{   <b>`VideoPlayer.CastAndRole(separator)`</b>,
+///                  \anchor VideoPlayer_CastAndRole_separator
+///                  _string_,
+///     @return A list of cast members and roles of the currently playing video\, pairs separated by
+///     given separator\, or if no separator was given separated by carriage returns.
+///     Possible values for separator: comma\, pipe\, slash\, cr\, dash\, colon\, semicolon\, fullstop
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link VideoPlayer_CastAndRole_separator `VideoPlayer.CastAndRole(separator)`\endlink
 ///     <p>
 ///   }
 ///   \table_row3{   <b>`VideoPlayer.Album`</b>,
@@ -3527,6 +3619,17 @@ const infomap musicplayer[] =    {{ "title",            MUSICPLAYER_TITLE },
 ///     <p><hr>
 ///     @skinning_v15 **[Infolabel Updated]** \link VideoPlayer_Writer `VideoPlayer.Writer`\endlink
 ///     also supports EPG.
+///     <p>
+///   }
+///   \table_row3{   <b>`VideoPlayer.Writer(separator)`</b>,
+///                  \anchor VideoPlayer_Writer_separator
+///                  _string_,
+///     @return A list of writers of the currently playing video\, separated by given separator\,
+///     or if no separator was given separated by the advanced settings value \“itemseparator\” for
+///     video items.
+///     Possible values for separator: comma\, pipe\, slash\, cr\, dash\, colon\, semicolon\, fullstop
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link VideoPlayer_Writer_separator `VideoPlayer.Writer(separator)`\endlink
 ///     <p>
 ///   }
 ///   \table_row3{   <b>`VideoPlayer.offset(number).Writer`</b>,
@@ -3794,6 +3897,17 @@ const infomap musicplayer[] =    {{ "title",            MUSICPLAYER_TITLE },
 ///     @return The genre of the programme that will be played next (PVR).
 ///     <p>
 ///   }
+///   \table_row3{   <b>`VideoPlayer.NextGenre(separator)`</b>,
+///                  \anchor VideoPlayer_NextGenre_separator
+///                  _string_,
+///     @return A list of genres of the programme that will be played next (PVR)\, separated by
+///     given separator\, or if no separator was given separated by the advanced settings value
+///     \“itemseparator\” for videos.
+///     Possible values for separator: comma\, pipe\, slash\, cr\, dash\, colon\, semicolon\, fullstop
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link VideoPlayer_NextGenre_separator `VideoPlayer.NextGenre(separator)`\endlink
+///     <p>
+///   }
 ///   \table_row3{   <b>`VideoPlayer.NextPlot`</b>,
 ///                  \anchor VideoPlayer_NextPlot
 ///                  _string_,
@@ -3830,6 +3944,14 @@ const infomap musicplayer[] =    {{ "title",            MUSICPLAYER_TITLE },
 ///     @return The name of the currently tuned channel (PVR).
 ///     <p>
 ///   }
+///   \table_row3{   <b>`VideoPlayer.ChannelLogo`</b>,
+///                  \anchor VideoPlayer_ChannelLogo
+///                  _string_,
+///     @return The path for the logo of the currently playing TV channel\, if available (PVR).
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link VideoPlayer_ChannelLogo `VideoPlayer.ChannelLogo`\endlink
+///     <p>
+///   }
 ///   \table_row3{   <b>`VideoPlayer.ChannelNumberLabel`</b>,
 ///                  \anchor VideoPlayer_ChannelNumberLabel
 ///                  _string_,
@@ -3848,6 +3970,33 @@ const infomap musicplayer[] =    {{ "title",            MUSICPLAYER_TITLE },
 ///                  \anchor VideoPlayer_ParentalRating
 ///                  _string_,
 ///     @return The parental rating of the currently playing programme (PVR).
+///     <p>
+///   }
+///   \table_row3{   <b>`VideoPlayer.ParentalRatingCode`</b>,
+///                  \anchor VideoPlayer_ParentalRatingCode
+///                  _string_,
+///     @return The parental rating code (eg: 'PG'\, etc) of the currently playing programme (PVR).
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link VideoPlayer_ParentalRatingCode `VideoPlayer.ParentalRatingCode`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`VideoPlayer.ParentalRatingIcon`</b>,
+///                  \anchor VideoPlayer_ParentalRatingIcon
+///                  _string_,
+///     @return The parental rating icon path of the currently playing programme (PVR).
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link VideoPlayer_ParentalRatingIcon `VideoPlayer.ParentalRatingIcon`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`VideoPlayer.ParentalRatingSource`</b>,
+///                  \anchor VideoPlayer_ParentalRatingSource
+///                  _string_,
+///     @return The source used to determine the parental rating of the currently playing programme (PVR).
+///     Values could include the Country alpha-3 code or the name/abbreviation
+///     of the authority issuing the rating code.  Can be used with
+///     the \link VideoPlayer_ParentalRatingCode `ParentalRatingCode`\endlink for skin-derived icons if required.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link VideoPlayer_ParentalRatingSource `VideoPlayer.ParentalRatingSource`\endlink
 ///     <p>
 ///   }
 ///   \table_row3{   <b>`VideoPlayer.DBID`</b>,
@@ -3900,12 +4049,52 @@ const infomap musicplayer[] =    {{ "title",            MUSICPLAYER_TITLE },
 ///     @skinning_v20 **[New Infolabel]** \link VideoPlayer_AudioStreamCount `VideoPlayer.AudioStreamCount`\endlink
 ///     <p>
 ///   }
+///   \table_row3{   <b>`VideoPlayer.VideoStreamCount`</b>,
+///                  \anchor VideoPlayer_VideoStreamCount
+///                  _integer_,
+///     @return The number of video streams of the currently playing video.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link VideoPlayer_VideoStreamCount `VideoPlayer.VideoStreamCount`\endlink
+///     <p>
+///   }
 ///   \table_row3{   <b>`VideoPlayer.HdrType`</b>,
 ///                  \anchor VideoPlayer_HdrType
 ///                  _string_,
 ///     @return String containing the name of the detected HDR type or empty if not HDR. See \ref StreamHdrType for the list of possible values.
 ///     <p><hr>
 ///     @skinning_v20 **[New Infolabel]** \link VideoPlayer_HdrType `VideoPlayer.HdrType`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`VideoPlayer.VideoVersionName`</b>,
+///                  \anchor VideoPlayer_VideoVersionName
+///                  _string_,
+///     @return String containing the version name of the currently playing video (movie) - empty if not a movie\, version name is not set or not a version
+///     <p><hr>
+///     @skinning_v21 **[New Infolabel]** \link VideoPlayer_VideoVersionName `VideoPlayer.VideoVersionName`\endlink
+///   }
+///   \table_row3{   <b>`VideoPlayer.EpisodePart`</b>,
+///                  \anchor VideoPlayer_EpisodePart
+///                  _string_,
+///     @return string containing the number of parts of a single episode - empty if no data provided
+///     <p><hr>
+///     @skinning_v22 **[Infolabel Updated]** \link VideoPlayer_EpisodePart `VideoPlayer.EpisodePart`\endlink
+///     also supports EPG.
+///     <p>
+///   }
+///   \table_row3{   <b>`VideoPlayer.MediaProviders`</b>,
+///                  \anchor VideoPlayer_MediaProviders
+///                  _string_,
+///     @return string containing the names of the providers of the currently playing media\, separated by commas if muliple are present.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link VideoPlayer_MediaProviders `VideoPlayer.MediaProviders`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`VideoPlayer.TitleExtraInfo`</b>,
+///                  \anchor VideoPlayer_TitleExtraInfo
+///                  _string_,
+///     @return string containing extra information\, enriching the title of the currently playing media\, if any.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link VideoPlayer_TitleExtraInfo `VideoPlayer.TitleExtraInfo`\endlink
 ///     <p>
 ///   }
 /// \table_end
@@ -3969,10 +4158,14 @@ const infomap videoplayer[] =    {{ "title",            VIDEOPLAYER_TITLE },
                                   { "nextendtime",      VIDEOPLAYER_NEXT_ENDTIME },
                                   { "nextduration",     VIDEOPLAYER_NEXT_DURATION },
                                   { "channelname",      VIDEOPLAYER_CHANNEL_NAME },
+                                  { "channellogo",      VIDEOPLAYER_CHANNEL_LOGO },
                                   { "channelnumberlabel", VIDEOPLAYER_CHANNEL_NUMBER },
                                   { "channelgroup",     VIDEOPLAYER_CHANNEL_GROUP },
                                   { "hasepg",           VIDEOPLAYER_HAS_EPG },
                                   { "parentalrating",   VIDEOPLAYER_PARENTAL_RATING },
+                                  { "parentalratingcode",   VIDEOPLAYER_PARENTAL_RATING_CODE },
+                                  { "parentalratingicon",   VIDEOPLAYER_PARENTAL_RATING_ICON },
+                                  { "parentalratingsource", VIDEOPLAYER_PARENTAL_RATING_SOURCE },
                                   { "isstereoscopic",   VIDEOPLAYER_IS_STEREOSCOPIC },
                                   { "stereoscopicmode", VIDEOPLAYER_STEREOSCOPIC_MODE },
                                   { "canresumelivetv",  VIDEOPLAYER_CAN_RESUME_LIVE_TV },
@@ -3982,8 +4175,14 @@ const infomap videoplayer[] =    {{ "title",            VIDEOPLAYER_TITLE },
                                   { "uniqueid",         VIDEOPLAYER_UNIQUEID },
                                   { "tvshowdbid",       VIDEOPLAYER_TVSHOWDBID },
                                   { "audiostreamcount", VIDEOPLAYER_AUDIOSTREAMCOUNT },
+                                  { "videostreamcount", VIDEOPLAYER_VIDEOSTREAMCOUNT },
                                   { "hdrtype",          VIDEOPLAYER_HDR_TYPE },
                                   { "art",              VIDEOPLAYER_ART},
+                                  { "videoversionname", VIDEOPLAYER_VIDEOVERSION_NAME},
+                                  { "hasvideoversions", VIDEOPLAYER_HAS_VIDEOVERSIONS},
+                                  { "episodepart",      VIDEOPLAYER_EPISODEPART},
+                                  { "mediaproviders",   VIDEOPLAYER_MEDIAPROVIDERS },
+                                  { "titleextrainfo",   VIDEOPLAYER_TITLE_EXTRAINFO },
 };
 // clang-format on
 
@@ -4981,6 +5180,16 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
 ///     container.
 ///     <p>
 ///   }
+///   \table_row3{   <b>`ListItem.Genre(separator)`</b>,
+///                  \anchor ListItem_Genre_separator
+///                  _string_,
+///     @return A list of genres\, separated by given separator\, or if no separator was given
+///     separated by the advanced settings value \“itemseparator\” for videos or music.
+///     Possible values for separator: comma\, pipe\, slash\, cr\, dash\, colon\, semicolon\, fullstop
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link ListItem_Genre_separator `ListItem.Genre(separator)`\endlink
+///     <p>
+///   }
 ///   \table_row3{   <b>`ListItem.Contributors`</b>,
 ///                  \anchor ListItem_Contributors
 ///                  _string_,
@@ -5004,6 +5213,16 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
 ///     <p><hr>
 ///     @skinning_v15 **[Infolabel Updated]** \link ListItem_Director `ListItem.Director`\endlink
 ///     also supports EPG.
+///     <p>
+///   }
+///   \table_row3{   <b>`ListItem.Director(separator)`</b>,
+///                  \anchor ListItem_Director_separator
+///                  _string_,
+///     @return A list of directors\, separated by given separator\, or if no separator was given
+///     separated by the advanced settings value \“itemseparator\” for video items.
+///     Possible values for separator: comma\, pipe\, slash\, cr\, dash\, colon\, semicolon\, fullstop
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link ListItem_Director_separator `ListItem.Director(separator)`\endlink
 ///     <p>
 ///   }
 ///   \table_row3{   <b>`ListItem.Country`</b>,
@@ -5171,6 +5390,8 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
 ///                  \anchor ListItem_PictureColour
 ///                  _string_,
 ///     @return Whether the selected picture is "Colour" or "Black and White".
+///     <p>
+///     @deprecated \link ListItem_PictureColour `ListItem.PictureColour`\endlink is deprecated and will be removed in future Kodi versions
 ///     <p><hr>
 ///     @skinning_v13 **[New Infolabel]** \link ListItem_PictureColour `ListItem.PictureColour`\endlink
 ///     <p>
@@ -5489,6 +5710,8 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
 ///                  \anchor ListItem_PictureProcess
 ///                  _string_,
 ///     @return The process used to compress the selected picture.
+///     <p>
+///     @deprecated \link ListItem_PictureProcess `ListItem.PictureProcess`\endlink is deprecated and will be removed in future Kodi versions
 ///     <p><hr>
 ///     @skinning_v13 **[New Infolabel]** \link ListItem_PictureProcess `ListItem.PictureProcess`\endlink
 ///     <p>
@@ -5831,18 +6054,37 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
 ///   \table_row3{   <b>`ListItem.Cast`</b>,
 ///                  \anchor ListItem_Cast
 ///                  _string_,
-///     @return A concatenated string of cast members of the currently selected
-///     movie\, for use in dialogvideoinfo.xml.
+///     @return A list of cast members\, separated by carriage returns.
 ///     <p><hr>
 ///     @skinning_v15 **[Infolabel Updated]** \link ListItem_Cast `ListItem.Cast`\endlink
 ///     also supports EPG.
 ///     <p>
 ///   }
+///   \table_row3{   <b>`ListItem.Cast(separator)`</b>,
+///                  \anchor ListItem_Cast_separator
+///                  _string_,
+///     @return A list of cast members\, separated by given separator\, or if no separator was
+///     given separated by carriage returns.
+///     Possible values for separator: comma\, pipe\, slash\, cr\, dash\, colon\, semicolon\, fullstop
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link ListItem_Cast_separator `ListItem.Cast(separator)`\endlink
+///     <p>
+///   }
 ///   \table_row3{   <b>`ListItem.CastAndRole`</b>,
 ///                  \anchor ListItem_CastAndRole
 ///                  _string_,
-///     @return A concatenated string of cast members and roles of the currently
-///     selected movie\, for use in dialogvideoinfo.xml.
+///     @return A list of cast members and roles\, separated by carriage
+///     returns. Every cast/role combination is formatted 'cast' as 'role' where 'as' is localised.
+///     <p>
+///   }
+///   \table_row3{   <b>`ListItem.CastAndRole(separator)`</b>,
+///                  \anchor ListItem_CastAndRole_separator
+///                  _string_,
+///     @return A list of cast members and roles\, separated by given separator\, or if no separator
+///     was given separated by carriage returns.
+///     Possible values for separator: comma\, pipe\, slash\, cr\, dash\, colon\, semicolon\, fullstop
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link ListItem_CastAndRole_separator `ListItem.CastAndRole(separator)`\endlink
 ///     <p>
 ///   }
 ///   \table_row3{   <b>`ListItem.Studio`</b>,
@@ -5872,6 +6114,16 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
 ///     <p><hr>
 ///     @skinning_v15 **[Infolabel Updated]** \link ListItem_Writer `ListItem.Writer`\endlink
 ///     also supports EPG.
+///     <p>
+///   }
+///   \table_row3{   <b>`ListItem.Writer(separator)`</b>,
+///                  \anchor ListItem_Writer_separator
+///                  _string_,
+///     @return A list of writers\, separated by given separator\, or if no separator was given
+///     separated by the advanced settings value \“itemseparator\” for video items.
+///     Possible values for separator: comma\, pipe\, slash\, cr\, dash\, colon\, semicolon\, fullstop
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link ListItem_Writer_separator `ListItem.Writer(separator)`\endlink
 ///     <p>
 ///   }
 ///   \table_row3{   <b>`ListItem.Tag`</b>,
@@ -5939,6 +6191,14 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
 ///                  \anchor ListItem_ChannelName
 ///                  _string_,
 ///     @return The name of current selected TV channel in a container.
+///     <p>
+///   }
+///   \table_row3{   <b>`ListItem.ChannelLogo`</b>,
+///                  \anchor ListItem_ChannelLogo
+///                  _string_,
+///     @return The path for the logo of the currently selected radio or TV channel\, if available (PVR).
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link ListItem_ChannelLogo `ListItem.ChannelLogo`\endlink
 ///     <p>
 ///   }
 ///   \table_row3{   <b>`ListItem.VideoCodec`</b>,
@@ -6177,6 +6437,17 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
 ///                  \anchor ListItem_NextGenre
 ///                  _string_,
 ///     @return The genre of the next item (PVR).
+///     <p>
+///   }
+///   \table_row3{   <b>`ListItem.NextGenre(separator)`</b>,
+///                  \anchor ListItem_NextGenre_separator
+///                  _string_,
+///     @return A list of genres of the the next item (PVR)\, separated by given separator\, or if
+///     no separator was given separated by the advanced settings value \“itemseparator\” for
+///     videos.
+///     Possible values for separator: comma\, pipe\, slash\, cr\, dash\, colon\, semicolon\, fullstop
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link ListItem_NextGenre_separator `ListItem.NextGenre(separator)`\endlink
 ///     <p>
 ///   }
 ///   \table_row3{   <b>`ListItem.NextPlot`</b>,
@@ -6445,11 +6716,10 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
 ///                  _string_,
 ///     @return From addon defined message text when it is marked as special condition inside repository.
 ///     <p><hr>
-///     @skinning_v19 **[New Infolabel]** \link ListItem_AddonLifecycleDesc `ListItem.AddonLifecycleDesc``\endlink
+///     @skinning_v19 **[New Infolabel]** \link ListItem_AddonLifecycleDesc `ListItem.AddonLifecycleDesc`\endlink
 ///     replaces `ListItem.AddonBroken`.
 ///     <p>
 ///   }
-
 ///   \table_row3{   <b>`ListItem.AddonType`</b>,
 ///                  \anchor ListItem_AddonType
 ///                  _string_,
@@ -6735,6 +7005,25 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
 ///     @skinning_v21 **[New Infolabel]** \link ListItem_ParentalRatingCode `ListItem.ParentalRatingCode`\endlink
 ///     <p>
 ///   }
+///   \table_row3{   <b>`ListItem.ParentalRatingIcon`</b>,
+///                  \anchor ListItem_ParentalRatingIcon
+///                  _string_,
+///     @return The parental rating icon path of the list item (PVR).
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link ListItem_ParentalRatingIcon `ListItem.ParentalRatingIcon`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`ListItem.ParentalRatingSource`</b>,
+///                  \anchor ListItem_ParentalRatingSource
+///                  _string_,
+///     @return The source used to determine the parental rating of the list item (PVR).
+///     Values could include the Country alpha-3 code or the name/abbreviation
+///     of the authority issuing the rating code.  Can be used with
+///     the \link ListItem_ParentalRatingCode `ParentalRatingCode`\endlink for skin-derived icons if required.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link ListItem_ParentalRatingSource `ListItem.ParentalRatingSource`\endlink
+///     <p>
+///   }
 ///   \table_row3{   <b>`ListItem.CurrentItem`</b>,
 ///                  \anchor ListItem_CurrentItem
 ///                  _string_,
@@ -6868,7 +7157,7 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
 ///   \table_row3{   <b>`ListItem.AlbumStatus`</b>,
 ///                  \anchor ListItem_AlbumStatus
 ///                  _string_,
-///     @return The Musicbrainz release status of the album (official, bootleg, promotion etc)
+///     @return The Musicbrainz release status of the album (official\, bootleg\, promotion etc)
 ///     <p><hr>
 ///     @skinning_v19 **[New Infolabel]** \link ListItem_AlbumStatus `ListItem.AlbumStatus`\endlink
 ///   }
@@ -6907,12 +7196,78 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
 ///     <p><hr>
 ///     @skinning_v21 **[New Infolabel]** \link ListItem_HasVideoVersions `ListItem.HasVideoVersions`\endlink
 ///   }
-///   \table_row3{   <b>`ListItem.IsVideoExtras`</b>,
-///                  \anchor ListItem_IsVideoExtras
+///   \table_row3{   <b>`ListItem.IsVideoExtra`</b>,
+///                  \anchor ListItem_IsVideoExtra
 ///                  _boolean_,
-///     @return **True** when the selected item is video extras.
+///     @return **True** when the selected item is a video extra.
 ///     <p><hr>
-///     @skinning_v21 **[New Infolabel]** \link ListItem_IsVideoExtras `ListItem.IsVideoExtras`\endlink
+///     @skinning_v21 **[New Infolabel]** \link ListItem_IsVideoExtra `ListItem.IsVideoExtra`\endlink
+///   }
+///   \table_row3{   <b>`ListItem.VideoVersionName`</b>,
+///                  \anchor ListItem_VideoVersionName
+///                  _string_,
+///     @return String containing the name of the version of a video - empty for extras or if no version available
+///     <p><hr>
+///     @skinning_v21 **[New Infolabel]** \link ListItem_VideoVersionName `ListItem.VideoVersionName`\endlink
+///   }
+///   \table_row3{   <b>`ListItem.HasVideoExtras`</b>,
+///                  \anchor ListItem_HasVideoExtras
+///                  _boolean_,
+///     @return **True** when the selected item has video extras.
+///     <p><hr>
+///     @skinning_v21 **[New Infolabel]** \link ListItem_HasVideoExtras `ListItem.HasVideoExtras`\endlink
+///   }
+///   \table_row3{   <b>`ListItem.PVRClientName`</b>,
+///                  \anchor ListItem_PVRClientName
+///                  _string_,
+///     @return If selected item is of type PVR (recording\, timer\, EPG)\, the name of the PVR client
+///     add-on\, as specified by the add-on developer. Empty if the item is not of type PVR.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link ListItem_PVRClientName `ListItem.PVRClientName`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`ListItem.PVRInstanceName`</b>,
+///                  \anchor ListItem_PVRInstanceName
+///                  _string_,
+///     @return If selected item is of type PVR (recording\, timer\, EPG)\, the name of the instance
+///     of the PVR client add-on\, as specified by the user in the add-on settings. Empty if the
+///     PVR client add-on does not support multiple instances or item is not of type PVR.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link ListItem_PVRInstanceName `ListItem.PVRInstanceName`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`ListItem.PVRGroupOrigin`</b>,
+///                  \anchor ListItem_PVRGroupOrigin
+///                  _string_,
+///     @return If selected item is of type PVR channel group\, the creator (user\, system\, client) of
+///     the group.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link ListItem_PVRGroupOrigin `ListItem.PVRGroupOrigin`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`ListItem.EpisodePart`</b>,
+///                  \anchor ListItem_EpisodePart
+///                  _string_,
+///     @return string containing the number of parts of a single episode - empty if no data provided
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link ListItem_EpisodePart `ListItem.EpisodePart`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`ListItem.MediaProviders`</b>,
+///                  \anchor ListItem_MediaProviders
+///                  _string_,
+///     @return string containing the names of the media providers of the item\, separated by commas if muliple are present.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link ListItem_MediaProviders `ListItem.MediaProviders`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`ListItem.TitleExtraInfo`</b>,
+///                  \anchor ListItem_TitleExtraInfo
+///                  _string_,
+///     @return string containing extra information\, enriching the title of the item.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link ListItem_TitleExtraInfo `ListItem.TitleExtraInfo`\endlink
+///     <p>
 ///   }
 /// \table_end
 ///
@@ -7062,6 +7417,7 @@ const infomap listitem_labels[]= {{ "thumb",            LISTITEM_THUMB },
                                   { "nextenddate",      LISTITEM_NEXT_ENDDATE },
                                   { "nextduration",     LISTITEM_NEXT_DURATION },
                                   { "channelname",      LISTITEM_CHANNEL_NAME },
+                                  { "channellogo",      LISTITEM_CHANNEL_LOGO },
                                   { "channelnumberlabel", LISTITEM_CHANNEL_NUMBER },
                                   { "channelgroup",     LISTITEM_CHANNEL_GROUP },
                                   { "hasepg",           LISTITEM_HAS_EPG },
@@ -7112,6 +7468,8 @@ const infomap listitem_labels[]= {{ "thumb",            LISTITEM_THUMB },
                                   { "property",         LISTITEM_PROPERTY },
                                   { "parentalrating",   LISTITEM_PARENTAL_RATING },
                                   { "parentalratingcode", LISTITEM_PARENTAL_RATING_CODE },
+                                  { "parentalratingicon", LISTITEM_PARENTAL_RATING_ICON },
+                                  { "parentalratingsource", LISTITEM_PARENTAL_RATING_SOURCE },
                                   { "currentitem",      LISTITEM_CURRENTITEM },
                                   { "isnew",            LISTITEM_IS_NEW },
                                   { "isboxset",         LISTITEM_IS_BOXSET },
@@ -7132,7 +7490,15 @@ const infomap listitem_labels[]= {{ "thumb",            LISTITEM_THUMB },
                                   { "hdrtype",          LISTITEM_VIDEO_HDR_TYPE },
                                   { "songvideourl",     LISTITEM_SONG_VIDEO_URL },
                                   { "hasvideoversions", LISTITEM_HASVIDEOVERSIONS },
-                                  { "isvideoextras",    LISTITEM_ISVIDEOEXTRAS },
+                                  { "isvideoextra",     LISTITEM_ISVIDEOEXTRA },
+                                  { "videoversionname", LISTITEM_VIDEOVERSION_NAME },
+                                  { "hasvideoextras",   LISTITEM_HASVIDEOEXTRAS },
+                                  { "pvrclientname",    LISTITEM_PVR_CLIENT_NAME },
+                                  { "pvrinstancename",  LISTITEM_PVR_INSTANCE_NAME },
+                                  { "pvrgrouporigin",   LISTITEM_PVR_GROUP_ORIGIN },
+                                  { "episodepart",      LISTITEM_EPISODEPART },
+                                  { "mediaproviders",   LISTITEM_MEDIAPROVIDERS },
+                                  { "titleextrainfo",   LISTITEM_TITLE_EXTRAINFO },
 };
 // clang-format on
 
@@ -8141,10 +8507,38 @@ const infomap playlist[] =       {{ "length",           PLAYLIST_LENGTH },
 ///                  _string_,
 ///     @return The icon of the currently playing epg event\, if any.
 ///     <p><hr>
-///     @skinning_v18 **[New Infolabel]** \link PVR_EpgEventIcon `PVR_EpgEventIcon`\endlink
+///     @skinning_v18 **[New Infolabel]** \link PVR_EpgEventIcon `PVR.EpgEventIcon`\endlink
 ///     <p>
 ///   }
+///   \table_row3{   <b>`PVR.ClientCount`</b>,
+///                  \anchor PVR_ClientCount
+///                  _integer_,
+///     @return Number of PVR clients enabled.
+///     <p><hr>
+///     @skinning_v22 **[New Integer Value]** \link PVR_ClientCount `PVR.ClientCount`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`PVR.ClientName`</b>,
+///                  \anchor PVR_ClientName
+///                  _string_,
+///     @return The name of the PVR client add-on\, as specified by the add-on developer.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link PVR_ClientName `PVR.ClientName`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`PVR.InstanceName`</b>,
+///                  \anchor PVR_InstanceName
+///                  _string_,
+///     @return The name of the instance of the PVR client add-on\, as specified by the user in
+///     the add-on settings. Empty if the PVR client add-on does not support multiple instances.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link PVR_InstanceName `PVR.InstanceName`\endlink
+///     <p>
+///   }
+/// \table_end
 ///
+/// -----------------------------------------------------------------------------
+// clang-format off
 const infomap pvr[] =            {{ "isrecording",              PVR_IS_RECORDING },
                                   { "hastimer",                 PVR_HAS_TIMER },
                                   { "hastvchannels",            PVR_HAS_TV_CHANNELS },
@@ -8223,7 +8617,11 @@ const infomap pvr[] =            {{ "isrecording",              PVR_IS_RECORDING
                                   { "timeshiftprogressepgend",    PVR_TIMESHIFT_PROGRESS_EPG_END },
                                   { "timeshiftprogressbufferstart", PVR_TIMESHIFT_PROGRESS_BUFFER_START },
                                   { "timeshiftprogressbufferend", PVR_TIMESHIFT_PROGRESS_BUFFER_END },
-                                  { "epgeventicon",               PVR_EPG_EVENT_ICON }};
+                                  { "epgeventicon",               PVR_EPG_EVENT_ICON },
+                                  { "clientcount",                PVR_CLIENT_COUNT },
+                                  { "clientname",                 PVR_CLIENT_NAME },
+                                  { "instancename",               PVR_INSTANCE_NAME }};
+// clang-format on
 
 /// \page modules__infolabels_boolean_conditions
 ///   \table_row3{   <b>`PVR.EpgEventDuration`</b>,
@@ -9076,6 +9474,8 @@ const infomap rds[] =            {{ "hasrds",                   RDS_HAS_RDS },
 ///     @return the colour of the picture. It can have one of the following values:
 ///       - <b>"Colour"</b>
 ///       - <b>"Black and White"</b>
+///     <p>
+///     @deprecated Slideshow_Colour `Slideshow.Colour`\endlink is deprecated and will be removed in future Kodi versions
 ///     <p><hr>
 ///     @skinning_v13 **[New Infolabel]** \link Slideshow_Colour `Slideshow.Colour`\endlink
 ///     <p>
@@ -9153,14 +9553,6 @@ const infomap rds[] =            {{ "hasrds",                   RDS_HAS_RDS },
 ///     @return A short description of the current picture. The SlideComment\,
 ///     EXIFComment or Caption values might contain a longer description.
 ///     @note This is the value of the EXIF ImageDescription tag (hex code 0x010E).
-///     <p>
-///   }
-///   \table_row3{   <b>`Slideshow.EXIFSoftware`</b>,
-///                  \anchor Slideshow_EXIFSoftware
-///                  _string_,
-///     @return The name and version of the firmware used by the camera that took
-///     the current picture.
-///     @note This is the value of the EXIF Software tag (hex code 0x0131).
 ///     <p>
 ///   }
 ///   \table_row3{   <b>`Slideshow.EXIFTime`</b>,
@@ -9405,6 +9797,8 @@ const infomap rds[] =            {{ "hasrds",                   RDS_HAS_RDS },
 ///                  \anchor Slideshow_Process
 ///                  _string_,
 ///     @return The process used to compress the current picture.
+///     <p>
+///     @deprecated \link Slideshow_Process `Slideshow.Process`\endlink is deprecated and will be removed in future Kodi versions
 ///     <p><hr>
 ///     @skinning_v13 **[New Infolabel]** \link Slideshow_Process `Slideshow.Process`\endlink
 ///     <p>
@@ -9538,70 +9932,70 @@ const infomap rds[] =            {{ "hasrds",                   RDS_HAS_RDS },
 /// \table_end
 ///
 /// -----------------------------------------------------------------------------
-const infomap slideshow[] =      {{ "ispaused",               SLIDESHOW_ISPAUSED },
-                                  { "isactive",               SLIDESHOW_ISACTIVE },
-                                  { "isvideo",                SLIDESHOW_ISVIDEO },
-                                  { "israndom",               SLIDESHOW_ISRANDOM },
-                                  { "filename",               SLIDESHOW_FILE_NAME },
-                                  { "path",                   SLIDESHOW_FILE_PATH },
-                                  { "filesize",               SLIDESHOW_FILE_SIZE },
-                                  { "filedate",               SLIDESHOW_FILE_DATE },
-                                  { "slideindex",             SLIDESHOW_INDEX },
-                                  { "resolution",             SLIDESHOW_RESOLUTION },
-                                  { "slidecomment",           SLIDESHOW_COMMENT },
-                                  { "colour",                 SLIDESHOW_COLOUR },
-                                  { "process",                SLIDESHOW_PROCESS },
-                                  { "exiftime",               SLIDESHOW_EXIF_DATE_TIME },
-                                  { "exifdate",               SLIDESHOW_EXIF_DATE },
-                                  { "longexiftime",           SLIDESHOW_EXIF_LONG_DATE_TIME },
-                                  { "longexifdate",           SLIDESHOW_EXIF_LONG_DATE },
-                                  { "exifdescription",        SLIDESHOW_EXIF_DESCRIPTION },
-                                  { "cameramake",             SLIDESHOW_EXIF_CAMERA_MAKE },
-                                  { "cameramodel",            SLIDESHOW_EXIF_CAMERA_MODEL },
-                                  { "exifcomment",            SLIDESHOW_EXIF_COMMENT },
-                                  { "exifsoftware",           SLIDESHOW_EXIF_SOFTWARE },
-                                  { "aperture",               SLIDESHOW_EXIF_APERTURE },
-                                  { "focallength",            SLIDESHOW_EXIF_FOCAL_LENGTH },
-                                  { "focusdistance",          SLIDESHOW_EXIF_FOCUS_DIST },
-                                  { "exposure",               SLIDESHOW_EXIF_EXPOSURE },
-                                  { "exposuretime",           SLIDESHOW_EXIF_EXPOSURE_TIME },
-                                  { "exposurebias",           SLIDESHOW_EXIF_EXPOSURE_BIAS },
-                                  { "exposuremode",           SLIDESHOW_EXIF_EXPOSURE_MODE },
-                                  { "flashused",              SLIDESHOW_EXIF_FLASH_USED },
-                                  { "whitebalance",           SLIDESHOW_EXIF_WHITE_BALANCE },
-                                  { "lightsource",            SLIDESHOW_EXIF_LIGHT_SOURCE },
-                                  { "meteringmode",           SLIDESHOW_EXIF_METERING_MODE },
-                                  { "isoequivalence",         SLIDESHOW_EXIF_ISO_EQUIV },
-                                  { "digitalzoom",            SLIDESHOW_EXIF_DIGITAL_ZOOM },
-                                  { "ccdwidth",               SLIDESHOW_EXIF_CCD_WIDTH },
-                                  { "orientation",            SLIDESHOW_EXIF_ORIENTATION },
-                                  { "supplementalcategories", SLIDESHOW_IPTC_SUP_CATEGORIES },
-                                  { "keywords",               SLIDESHOW_IPTC_KEYWORDS },
-                                  { "caption",                SLIDESHOW_IPTC_CAPTION },
-                                  { "author",                 SLIDESHOW_IPTC_AUTHOR },
-                                  { "headline",               SLIDESHOW_IPTC_HEADLINE },
-                                  { "specialinstructions",    SLIDESHOW_IPTC_SPEC_INSTR },
-                                  { "category",               SLIDESHOW_IPTC_CATEGORY },
-                                  { "byline",                 SLIDESHOW_IPTC_BYLINE },
-                                  { "bylinetitle",            SLIDESHOW_IPTC_BYLINE_TITLE },
-                                  { "credit",                 SLIDESHOW_IPTC_CREDIT },
-                                  { "source",                 SLIDESHOW_IPTC_SOURCE },
-                                  { "copyrightnotice",        SLIDESHOW_IPTC_COPYRIGHT_NOTICE },
-                                  { "objectname",             SLIDESHOW_IPTC_OBJECT_NAME },
-                                  { "city",                   SLIDESHOW_IPTC_CITY },
-                                  { "state",                  SLIDESHOW_IPTC_STATE },
-                                  { "country",                SLIDESHOW_IPTC_COUNTRY },
-                                  { "transmissionreference",  SLIDESHOW_IPTC_TX_REFERENCE },
-                                  { "iptcdate",               SLIDESHOW_IPTC_DATE },
-                                  { "urgency",                SLIDESHOW_IPTC_URGENCY },
-                                  { "countrycode",            SLIDESHOW_IPTC_COUNTRY_CODE },
-                                  { "referenceservice",       SLIDESHOW_IPTC_REF_SERVICE },
-                                  { "latitude",               SLIDESHOW_EXIF_GPS_LATITUDE },
-                                  { "longitude",              SLIDESHOW_EXIF_GPS_LONGITUDE },
-                                  { "altitude",               SLIDESHOW_EXIF_GPS_ALTITUDE },
-                                  { "timecreated",            SLIDESHOW_IPTC_TIMECREATED },
-                                  { "sublocation",            SLIDESHOW_IPTC_SUBLOCATION },
-                                  { "imagetype",              SLIDESHOW_IPTC_IMAGETYPE },
+const infomap slideshow[] = {
+    {"ispaused", SLIDESHOW_ISPAUSED},
+    {"isactive", SLIDESHOW_ISACTIVE},
+    {"isvideo", SLIDESHOW_ISVIDEO},
+    {"israndom", SLIDESHOW_ISRANDOM},
+    {"filename", SLIDESHOW_FILE_NAME},
+    {"path", SLIDESHOW_FILE_PATH},
+    {"filesize", SLIDESHOW_FILE_SIZE},
+    {"filedate", SLIDESHOW_FILE_DATE},
+    {"slideindex", SLIDESHOW_INDEX},
+    {"resolution", SLIDESHOW_RESOLUTION},
+    {"slidecomment", SLIDESHOW_COMMENT},
+    {"colour", SLIDESHOW_COLOUR},
+    {"process", SLIDESHOW_PROCESS},
+    {"exiftime", SLIDESHOW_EXIF_DATE_TIME},
+    {"exifdate", SLIDESHOW_EXIF_DATE},
+    {"longexiftime", SLIDESHOW_EXIF_LONG_DATE_TIME},
+    {"longexifdate", SLIDESHOW_EXIF_LONG_DATE},
+    {"exifdescription", SLIDESHOW_EXIF_DESCRIPTION},
+    {"cameramake", SLIDESHOW_EXIF_CAMERA_MAKE},
+    {"cameramodel", SLIDESHOW_EXIF_CAMERA_MODEL},
+    {"exifcomment", SLIDESHOW_EXIF_COMMENT},
+    {"aperture", SLIDESHOW_EXIF_APERTURE},
+    {"focallength", SLIDESHOW_EXIF_FOCAL_LENGTH},
+    {"focusdistance", SLIDESHOW_EXIF_FOCUS_DIST},
+    {"exposure", SLIDESHOW_EXIF_EXPOSURE},
+    {"exposuretime", SLIDESHOW_EXIF_EXPOSURE_TIME},
+    {"exposurebias", SLIDESHOW_EXIF_EXPOSURE_BIAS},
+    {"exposuremode", SLIDESHOW_EXIF_EXPOSURE_MODE},
+    {"flashused", SLIDESHOW_EXIF_FLASH_USED},
+    {"whitebalance", SLIDESHOW_EXIF_WHITE_BALANCE},
+    {"lightsource", SLIDESHOW_EXIF_LIGHT_SOURCE},
+    {"meteringmode", SLIDESHOW_EXIF_METERING_MODE},
+    {"isoequivalence", SLIDESHOW_EXIF_ISO_EQUIV},
+    {"digitalzoom", SLIDESHOW_EXIF_DIGITAL_ZOOM},
+    {"ccdwidth", SLIDESHOW_EXIF_CCD_WIDTH},
+    {"orientation", SLIDESHOW_EXIF_ORIENTATION},
+    {"supplementalcategories", SLIDESHOW_IPTC_SUP_CATEGORIES},
+    {"keywords", SLIDESHOW_IPTC_KEYWORDS},
+    {"caption", SLIDESHOW_IPTC_CAPTION},
+    {"author", SLIDESHOW_IPTC_AUTHOR},
+    {"headline", SLIDESHOW_IPTC_HEADLINE},
+    {"specialinstructions", SLIDESHOW_IPTC_SPEC_INSTR},
+    {"category", SLIDESHOW_IPTC_CATEGORY},
+    {"byline", SLIDESHOW_IPTC_BYLINE},
+    {"bylinetitle", SLIDESHOW_IPTC_BYLINE_TITLE},
+    {"credit", SLIDESHOW_IPTC_CREDIT},
+    {"source", SLIDESHOW_IPTC_SOURCE},
+    {"copyrightnotice", SLIDESHOW_IPTC_COPYRIGHT_NOTICE},
+    {"objectname", SLIDESHOW_IPTC_OBJECT_NAME},
+    {"city", SLIDESHOW_IPTC_CITY},
+    {"state", SLIDESHOW_IPTC_STATE},
+    {"country", SLIDESHOW_IPTC_COUNTRY},
+    {"transmissionreference", SLIDESHOW_IPTC_TX_REFERENCE},
+    {"iptcdate", SLIDESHOW_IPTC_DATE},
+    {"urgency", SLIDESHOW_IPTC_URGENCY},
+    {"countrycode", SLIDESHOW_IPTC_COUNTRY_CODE},
+    {"referenceservice", SLIDESHOW_IPTC_REF_SERVICE},
+    {"latitude", SLIDESHOW_EXIF_GPS_LATITUDE},
+    {"longitude", SLIDESHOW_EXIF_GPS_LONGITUDE},
+    {"altitude", SLIDESHOW_EXIF_GPS_ALTITUDE},
+    {"timecreated", SLIDESHOW_IPTC_TIMECREATED},
+    {"sublocation", SLIDESHOW_IPTC_SUBLOCATION},
+    {"imagetype", SLIDESHOW_IPTC_IMAGETYPE},
 };
 
 /// \page modules__infolabels_boolean_conditions
@@ -9778,6 +10172,12 @@ const infomap slideshow[] =      {{ "ispaused",               SLIDESHOW_ISPAUSED
 /// \page modules__infolabels_boolean_conditions
 /// \section modules_rm_infolabels_booleans Additional revision history for Infolabels and Boolean Conditions
 /// <hr>
+/// \subsection modules_rm_infolabels_booleans_v22 Kodi v22
+/// @skinning_v22 **[Removed Infolabels]** The following infolabels have been removed:
+///   - `Player.Cutlist` - Please use \link Player_Editlist `Player.EditList`\endlink for the EDL list and \link Player_Cuts `Player.Cuts`\endlink for the cut markers
+///   - `Slideshow.EXIFSoftware`- This infolabel was broken (did nothing) in previous versions. It might be re-added later.
+///
+/// <hr>
 /// \subsection modules_rm_infolabels_booleans_v21 Kodi v21 (Omega)
 /// @skinning_v21 **[Removed Infolabels]** The following infolabels have been removed:
 ///   - `Network.DHCPAddress` - this info did not return any meaningful value (always an empty string)
@@ -9953,6 +10353,34 @@ int CGUIInfoManager::TranslateSingleString(const std::string &strCondition)
   bool listItemDependent;
   return TranslateSingleString(strCondition, listItemDependent);
 }
+
+namespace
+{
+std::string TranslateListSeparator(const std::string& param)
+{
+  if (StringUtils::EqualsNoCase(param, "comma"))
+    return ",";
+  else if (StringUtils::EqualsNoCase(param, "pipe"))
+    return "|";
+  else if (StringUtils::EqualsNoCase(param, "slash"))
+    return "/";
+  else if (StringUtils::EqualsNoCase(param, "cr"))
+    return "\n";
+  else if (StringUtils::EqualsNoCase(param, "dash"))
+    return "-";
+  else if (StringUtils::EqualsNoCase(param, "colon"))
+    return ":";
+  else if (StringUtils::EqualsNoCase(param, "semicolon"))
+    return ";";
+  else if (StringUtils::EqualsNoCase(param, "fullstop"))
+    return ".";
+  else
+  {
+    CLog::Log(LOGERROR, "unhandled separator param {}", param);
+    return {};
+  }
+}
+} // unnamed namespace
 
 int CGUIInfoManager::TranslateSingleString(const std::string &strCondition, bool &listItemDependent)
 {
@@ -10170,15 +10598,7 @@ int CGUIInfoManager::TranslateSingleString(const std::string &strCondition, bool
           return AddMultiInfo(CGUIInfo(SYSTEM_IDLE_TIME, atoi(param.c_str())));
         else if (prop.name == "locale")
         {
-          if (param == "timezonecountry")
-          {
-            return SYSTEM_LOCALE_TIMEZONECOUNTRY;
-          }
-          else if (param == "timezone")
-          {
-            return SYSTEM_LOCALE_TIMEZONE;
-          }
-          else if (param == "region")
+          if (param == "region")
           {
             return SYSTEM_LOCALE_REGION;
           }
@@ -10267,7 +10687,13 @@ int CGUIInfoManager::TranslateSingleString(const std::string &strCondition, bool
           return AddMultiInfo(CGUIInfo(player_time.val, TranslateTimeFormat(prop.param())));
       }
       if (prop.name == "content" && prop.num_params())
+      {
         return AddMultiInfo(CGUIInfo(MUSICPLAYER_CONTENT, prop.param(), 0));
+      }
+      else if (prop.name == "genre" && prop.num_params() > 0)
+      {
+        return AddMultiInfo(CGUIInfo(MUSICPLAYER_GENRE, TranslateListSeparator(prop.param()), 0));
+      }
       else if (prop.name == "property")
       {
         if (StringUtils::EqualsNoCase(prop.param(), "fanart_image"))
@@ -10298,6 +10724,33 @@ int CGUIInfoManager::TranslateSingleString(const std::string &strCondition, bool
       if (prop.name == "art" && prop.num_params() > 0)
       {
         return AddMultiInfo(CGUIInfo(VIDEOPLAYER_ART, prop.param(), 0));
+      }
+      if (prop.name == "cast" && prop.num_params() > 0)
+      {
+        return AddMultiInfo(CGUIInfo(VIDEOPLAYER_CAST, TranslateListSeparator(prop.param()), 0));
+      }
+      if (prop.name == "castandrole" && prop.num_params() > 0)
+      {
+        return AddMultiInfo(
+            CGUIInfo(VIDEOPLAYER_CAST_AND_ROLE, TranslateListSeparator(prop.param()), 0));
+      }
+      if (prop.name == "writer" && prop.num_params() > 0)
+      {
+        return AddMultiInfo(CGUIInfo(VIDEOPLAYER_WRITER, TranslateListSeparator(prop.param()), 0));
+      }
+      if (prop.name == "director" && prop.num_params() > 0)
+      {
+        return AddMultiInfo(
+            CGUIInfo(VIDEOPLAYER_DIRECTOR, TranslateListSeparator(prop.param()), 0));
+      }
+      if (prop.name == "genre" && prop.num_params() > 0)
+      {
+        return AddMultiInfo(CGUIInfo(VIDEOPLAYER_GENRE, TranslateListSeparator(prop.param()), 0));
+      }
+      if (prop.name == "nextgenre" && prop.num_params() > 0)
+      {
+        return AddMultiInfo(
+            CGUIInfo(VIDEOPLAYER_NEXT_GENRE, TranslateListSeparator(prop.param()), 0));
       }
       return TranslateVideoPlayerString(prop.name);
     }
@@ -10462,14 +10915,14 @@ int CGUIInfoManager::TranslateSingleString(const std::string &strCondition, bool
           return ret;
         else
         {
-          PLAYLIST::Id playlistid = PLAYLIST::TYPE_NONE;
+          PLAYLIST::Id playlistid = PLAYLIST::Id::TYPE_NONE;
           if (StringUtils::EqualsNoCase(prop.param(), "video"))
-            playlistid = PLAYLIST::TYPE_VIDEO;
+            playlistid = PLAYLIST::Id::TYPE_VIDEO;
           else if (StringUtils::EqualsNoCase(prop.param(), "music"))
-            playlistid = PLAYLIST::TYPE_MUSIC;
+            playlistid = PLAYLIST::Id::TYPE_MUSIC;
 
-          if (playlistid != PLAYLIST::TYPE_NONE)
-            return AddMultiInfo(CGUIInfo(ret, playlistid, 1));
+          if (playlistid != PLAYLIST::Id::TYPE_NONE)
+            return AddMultiInfo(CGUIInfo(ret, static_cast<int>(playlistid), 1));
         }
       }
     }
@@ -10519,6 +10972,8 @@ int CGUIInfoManager::TranslateSingleString(const std::string &strCondition, bool
         return SYSTEM_PLATFORM_DARWIN_TVOS;
       else if (platform == "android")
         return SYSTEM_PLATFORM_ANDROID;
+      else if (platform == "webos")
+        return SYSTEM_PLATFORM_WEBOS;
     }
     if (info[0].name == "musicplayer")
     { //! @todo these two don't allow duration(foo) and also don't allow more than this number of levels...
@@ -10624,6 +11079,11 @@ int CGUIInfoManager::TranslateListItem(const Property& cat, const Property& prop
              prop.name == "uniqueid")
     {
       data3 = prop.param();
+    }
+    else if (prop.name == "cast" || prop.name == "castandrole" || prop.name == "director" ||
+             prop.name == "writer" || prop.name == "genre" || prop.name == "nextgenre")
+    {
+      data3 = TranslateListSeparator(prop.param());
     }
     else if (prop.name == "duration" || prop.name == "nextduration")
     {
@@ -10745,7 +11205,7 @@ std::string CGUIInfoManager::GetLabel(int info, int contextWindow, std::string *
   }
   else if (info >= LISTITEM_START && info <= LISTITEM_END)
   {
-    const CGUIListItemPtr item = GUIINFO::GetCurrentListItem(contextWindow);
+    const std::shared_ptr<CGUIListItem> item = GUIINFO::GetCurrentListItem(contextWindow);
     if (item && item->IsFileItem())
       return GetItemLabel(static_cast<CFileItem*>(item.get()), contextWindow, info, fallback);
   }
@@ -10763,7 +11223,7 @@ bool CGUIInfoManager::GetInt(int &value, int info, int contextWindow, const CGUI
   }
   else if (info >= LISTITEM_START && info <= LISTITEM_END)
   {
-    CGUIListItemPtr itemPtr;
+    std::shared_ptr<CGUIListItem> itemPtr;
     if (!item)
     {
       itemPtr = GUIINFO::GetCurrentListItem(contextWindow);
@@ -10804,7 +11264,9 @@ void CGUIInfoManager::UnRegister(const INFO::InfoPtr& expression)
   m_bools.erase(expression);
 }
 
-bool CGUIInfoManager::EvaluateBool(const std::string &expression, int contextWindow /* = 0 */, const CGUIListItemPtr &item /* = nullptr */)
+bool CGUIInfoManager::EvaluateBool(const std::string& expression,
+                                   int contextWindow /* = 0 */,
+                                   const std::shared_ptr<CGUIListItem>& item /* = nullptr */)
 {
   INFO::InfoPtr info = Register(expression, contextWindow);
   if (info)
@@ -10819,7 +11281,7 @@ bool CGUIInfoManager::GetBool(int condition1, int contextWindow, const CGUIListI
 
   if (condition >= LISTITEM_START && condition < LISTITEM_END)
   {
-    CGUIListItemPtr itemPtr;
+    std::shared_ptr<CGUIListItem> itemPtr;
     if (!item)
     {
       itemPtr = GUIINFO::GetCurrentListItem(contextWindow);
@@ -10848,7 +11310,7 @@ bool CGUIInfoManager::GetMultiInfoBool(const CGUIInfo &info, int contextWindow, 
 
   if (condition >= LISTITEM_START && condition <= LISTITEM_END)
   {
-    CGUIListItemPtr itemPtr;
+    std::shared_ptr<CGUIListItem> itemPtr;
     if (!item)
     {
       itemPtr = GUIINFO::GetCurrentListItem(contextWindow, info.GetData1(), info.GetData2(), info.GetInfoFlag());
@@ -10889,7 +11351,7 @@ bool CGUIInfoManager::GetMultiInfoBool(const CGUIInfo &info, int contextWindow, 
           if (info.GetData2() < 0) // info labels are stored with negative numbers
           {
             int info2 = -info.GetData2();
-            CGUIListItemPtr item2;
+            std::shared_ptr<CGUIListItem> item2;
 
             if (IsListItemInfo(info2))
             {
@@ -10994,7 +11456,7 @@ bool CGUIInfoManager::GetMultiInfoInt(int &value, const CGUIInfo &info, int cont
   }
   else if (info.m_info >= LISTITEM_START && info.m_info <= LISTITEM_END)
   {
-    CGUIListItemPtr itemPtr;
+    std::shared_ptr<CGUIListItem> itemPtr;
     if (!item)
     {
       itemPtr = GUIINFO::GetCurrentListItem(contextWindow, info.GetData1(), info.GetData2(), info.GetInfoFlag());
@@ -11029,7 +11491,8 @@ std::string CGUIInfoManager::GetMultiInfoLabel(const CGUIInfo &constinfo, int co
 
   if (info.m_info >= LISTITEM_START && info.m_info <= LISTITEM_END)
   {
-    const CGUIListItemPtr item = GUIINFO::GetCurrentListItem(contextWindow, info.GetData1(), info.GetData2(), info.GetInfoFlag());
+    const std::shared_ptr<CGUIListItem> item = GUIINFO::GetCurrentListItem(
+        contextWindow, info.GetData1(), info.GetData2(), info.GetInfoFlag());
     if (item)
     {
       // Image prioritizes images over labels (in the case of music item ratings for instance)
@@ -11074,7 +11537,7 @@ std::string CGUIInfoManager::GetImage(int info, int contextWindow, std::string *
            info == LISTITEM_OVERLAY ||
            info == LISTITEM_ART)
   {
-    const CGUIListItemPtr item = GUIINFO::GetCurrentListItem(contextWindow);
+    const std::shared_ptr<CGUIListItem> item = GUIINFO::GetCurrentListItem(contextWindow);
     if (item && item->IsFileItem())
       return GetItemImage(item.get(), contextWindow, info, fallback);
   }
@@ -11096,7 +11559,7 @@ void CGUIInfoManager::UpdateCurrentItem(const CFileItem &item)
 void CGUIInfoManager::SetCurrentItem(const CFileItem &item)
 {
   *m_currentFile = item;
-  m_currentFile->FillInDefaultIcon();
+  ART::FillInDefaultIcon(*m_currentFile);
 
   m_infoProviders.InitCurrentItem(m_currentFile);
 
@@ -11110,7 +11573,7 @@ void CGUIInfoManager::SetCurrentAlbumThumb(const std::string &thumbFileName)
   else
   {
     m_currentFile->SetArt("thumb", "");
-    m_currentFile->FillInDefaultIcon();
+    ART::FillInDefaultIcon(*m_currentFile);
   }
 }
 
@@ -11129,7 +11592,7 @@ void CGUIInfoManager::Clear()
   {
     swapList.clear();
     for (auto &item : m_bools)
-      if (!item.unique())
+      if (item.use_count() > 1)
         swapList.insert(item);
     m_bools.swap(swapList);
   } while (swapList.size() != m_bools.size());

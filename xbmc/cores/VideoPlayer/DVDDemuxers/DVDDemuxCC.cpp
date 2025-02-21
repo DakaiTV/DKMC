@@ -9,12 +9,17 @@
 #include "DVDDemuxCC.h"
 
 #include "DVDDemuxUtils.h"
+#include "ServiceBroker.h"
 #include "cores/VideoPlayer/DVDCodecs/Overlay/contrib/cc_decoder708.h"
 #include "cores/VideoPlayer/Interface/TimingConstants.h"
+#include "settings/Settings.h"
+#include "settings/SettingsComponent.h"
 #include "utils/ColorUtils.h"
 #include "utils/StringUtils.h"
 
 #include <algorithm>
+
+namespace COLOR = KODI::UTILS::COLOR;
 
 namespace
 {
@@ -35,34 +40,34 @@ enum class ColorFormat
  * \param[in] format - the color format
  * \return the corresponding Color in rgb
  */
-constexpr UTILS::COLOR::Color CCColorConversion(const uint8_t ccColor, ColorFormat format)
+constexpr COLOR::Color CCColorConversion(const uint8_t ccColor, ColorFormat format)
 {
-  UTILS::COLOR::Color color = UTILS::COLOR::NONE;
+  COLOR::Color color = COLOR::NONE;
   switch (ccColor)
   {
     case WHITE:
-      color = UTILS::COLOR::WHITE;
+      color = COLOR::WHITE;
       break;
     case GREEN:
-      color = UTILS::COLOR::GREEN;
+      color = COLOR::GREEN;
       break;
     case BLUE:
-      color = UTILS::COLOR::BLUE;
+      color = COLOR::BLUE;
       break;
     case CYAN:
-      color = UTILS::COLOR::CYAN;
+      color = COLOR::CYAN;
       break;
     case RED:
-      color = UTILS::COLOR::RED;
+      color = COLOR::RED;
       break;
     case YELLOW:
-      color = UTILS::COLOR::YELLOW;
+      color = COLOR::YELLOW;
       break;
     case MAGENTA:
-      color = UTILS::COLOR::MAGENTA;
+      color = COLOR::MAGENTA;
       break;
     case BLACK:
-      color = UTILS::COLOR::BLACK;
+      color = COLOR::BLACK;
       break;
     default:
       break;
@@ -94,7 +99,7 @@ void ApplyStyleModifiers(std::string& ccText, const cc_attribute_t& ccAttributes
   {
     ccText = StringUtils::Format(
         "<font color=#{}>{}</u>",
-        UTILS::COLOR::ConvertToHexRGB(CCColorConversion(ccAttributes.foreground, ColorFormat::RGB)),
+        COLOR::ConvertToHexRGB(CCColorConversion(ccAttributes.foreground, ColorFormat::RGB)),
         ccText);
   }
 }
@@ -400,8 +405,13 @@ void CDVDDemuxCC::Handler(int service, void *userdata)
   {
     CDemuxStreamSubtitle stream;
     stream.source = STREAM_SOURCE_VIDEOMUX;
-    stream.language = "cc";
-    stream.flags = FLAG_HEARING_IMPAIRED;
+    stream.name = "CC";
+    stream.language = "und";
+
+    auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
+    if (settings->GetBool(CSettings::SETTING_SUBTITLES_CAPTIONSIMPAIRED))
+      stream.flags = FLAG_HEARING_IMPAIRED;
+
     stream.codec = AV_CODEC_ID_TEXT;
     stream.uniqueId = service;
     ctx->m_streams.push_back(std::move(stream));
@@ -483,7 +493,8 @@ DemuxPacket* CDVDDemuxCC::Decode()
 
         pPacket = CDVDDemuxUtils::AllocateDemuxPacket(data.size());
         pPacket->iSize = data.size();
-        memcpy(pPacket->pData, data.c_str(), pPacket->iSize);
+        if (pPacket->iSize)
+          memcpy(pPacket->pData, data.c_str(), pPacket->iSize);
 
         pPacket->iStreamId = service;
         pPacket->pts = m_streamdata[i].pts;

@@ -17,9 +17,11 @@
 #include "guilib/GUIWindowManager.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/SettingsComponent.h"
+#include "video/VideoFileItemClassify.h"
 
 #include <mutex>
 
+using namespace KODI;
 using namespace std::chrono_literals;
 
 std::shared_ptr<const IPlayer> CApplicationPlayer::GetInternal() const
@@ -99,13 +101,13 @@ bool CApplicationPlayer::OpenFile(const CFileItem& item, const CPlayerOptions& o
   {
     bool needToClose = false;
 
-    if (item.IsDiscImage() || item.IsDVDFile())
+    if (item.IsDiscImage() || VIDEO::IsDVDFile(item))
       needToClose = true;
 
     if (player->m_name != newPlayer)
       needToClose = true;
 
-    if (player->m_type != "video")
+    if (player->m_type != "video" && player->m_type != "remote")
       needToClose = true;
 
     if (needToClose)
@@ -226,12 +228,12 @@ bool CApplicationPlayer::HasGame() const
 PLAYLIST::Id CApplicationPlayer::GetPreferredPlaylist() const
 {
   if (IsPlayingVideo())
-    return PLAYLIST::TYPE_VIDEO;
+    return PLAYLIST::Id::TYPE_VIDEO;
 
   if (IsPlayingAudio())
-    return PLAYLIST::TYPE_MUSIC;
+    return PLAYLIST::Id::TYPE_MUSIC;
 
-  return PLAYLIST::TYPE_NONE;
+  return PLAYLIST::Id::TYPE_NONE;
 }
 
 bool CApplicationPlayer::HasRDS() const
@@ -325,10 +327,10 @@ bool CApplicationPlayer::CanSeek() const
   return (player && player->CanSeek());
 }
 
-bool CApplicationPlayer::SeekScene(bool bPlus)
+bool CApplicationPlayer::SeekScene(Direction seekDirection)
 {
   std::shared_ptr<IPlayer> player = GetInternal();
-  return (player && player->SeekScene(bPlus));
+  return (player && player->SeekScene(seekDirection));
 }
 
 void CApplicationPlayer::SeekTime(int64_t iTime)
@@ -542,13 +544,6 @@ void CApplicationPlayer::FrameAdvance(int frames)
   std::shared_ptr<IPlayer> player = GetInternal();
   if (player)
     player->FrameAdvance(frames);
-}
-
-void CApplicationPlayer::DoAudioWork()
-{
-  std::shared_ptr<IPlayer> player = GetInternal();
-  if (player)
-    player->DoAudioWork();
 }
 
 std::string CApplicationPlayer::GetPlayerState()
@@ -765,18 +760,18 @@ void CApplicationPlayer::LoadPage(int p, int sp, unsigned char* buffer)
     player->LoadPage(p, sp, buffer);
 }
 
-void CApplicationPlayer::GetAudioCapabilities(std::vector<int>& audioCaps) const
+void CApplicationPlayer::GetAudioCapabilities(std::vector<IPlayerAudioCaps>& caps) const
 {
   const std::shared_ptr<const IPlayer> player = GetInternal();
   if (player)
-    player->GetAudioCapabilities(audioCaps);
+    player->GetAudioCapabilities(caps);
 }
 
-void CApplicationPlayer::GetSubtitleCapabilities(std::vector<int>& subCaps) const
+void CApplicationPlayer::GetSubtitleCapabilities(std::vector<IPlayerSubtitleCaps>& caps) const
 {
   const std::shared_ptr<const IPlayer> player = GetInternal();
   if (player)
-    player->GetSubtitleCapabilities(subCaps);
+    player->GetSubtitleCapabilities(caps);
 }
 
 int  CApplicationPlayer::SeekChapter(int iChapter)
@@ -870,6 +865,27 @@ float CApplicationPlayer::GetRenderAspectRatio() const
     return player->GetRenderAspectRatio();
   else
     return 1.0;
+}
+
+bool CApplicationPlayer::GetRects(CRect& source, CRect& dest, CRect& view) const
+{
+  const std::shared_ptr<const IPlayer> player{GetInternal()};
+  if (player)
+  {
+    player->GetRects(source, dest, view);
+    return true;
+  }
+  else
+    return false;
+}
+
+unsigned int CApplicationPlayer::GetOrientation() const
+{
+  const std::shared_ptr<const IPlayer> player{GetInternal()};
+  if (player)
+    return player->GetOrientation();
+  else
+    return 0;
 }
 
 void CApplicationPlayer::TriggerUpdateResolution()
@@ -994,6 +1010,16 @@ bool CApplicationPlayer::IsRemotePlaying() const
       return true;
   }
   return false;
+}
+
+std::string CApplicationPlayer::GetName() const
+{
+  const std::shared_ptr<const IPlayer> player = GetInternal();
+  if (player)
+  {
+    return player->m_name;
+  }
+  return {};
 }
 
 CVideoSettings CApplicationPlayer::GetVideoSettings() const

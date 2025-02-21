@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2018 Team Kodi
+ *  Copyright (C) 2005-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -11,6 +11,7 @@
 #include "ServiceBroker.h"
 #include "URL.h"
 #include "guilib/GUITextureGL.h"
+#include "platform/MessagePrinter.h"
 #include "rendering/MatrixGL.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/SettingsComponent.h"
@@ -20,6 +21,8 @@
 #include "utils/XTimeUtils.h"
 #include "utils/log.h"
 #include "windowing/WinSystem.h"
+
+#include <exception>
 
 #if defined(TARGET_LINUX)
 #include "utils/EGLUtils.h"
@@ -42,17 +45,18 @@ bool CRenderSystemGL::InitRenderSystem()
   // Get the GL version number
   m_RenderVersionMajor = 0;
   m_RenderVersionMinor = 0;
-  const char* ver = (const char*)glGetString(GL_VERSION);
-  if (ver != 0)
+  m_RenderVersion = "<none>";
+  const char* ver = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+  if (ver)
   {
     sscanf(ver, "%d.%d", &m_RenderVersionMajor, &m_RenderVersionMinor);
     m_RenderVersion = ver;
   }
 
-  CLog::Log(LOGINFO, "CRenderSystemGL::{} - Version: {}, Major: {}, Minor: {}", __FUNCTION__, ver,
-            m_RenderVersionMajor, m_RenderVersionMinor);
+  CLog::Log(LOGINFO, "CRenderSystemGL::{} - Version: {}, Major: {}, Minor: {}", __FUNCTION__,
+            m_RenderVersion, m_RenderVersionMajor, m_RenderVersionMinor);
 
-  m_RenderExtensions  = " ";
+  m_RenderExtensions = "";
   if (m_RenderVersionMajor > 3 ||
       (m_RenderVersionMajor == 3 && m_RenderVersionMinor >= 2))
   {
@@ -63,22 +67,26 @@ bool CRenderSystemGL::InitRenderSystem()
       GLint i;
       for (i = 0; i < n; i++)
       {
-        m_RenderExtensions += (const char*) glGetStringi(GL_EXTENSIONS, i);
-        m_RenderExtensions += " ";
+        const char* extension = reinterpret_cast<const char*>(glGetStringi(GL_EXTENSIONS, i));
+        if (extension)
+        {
+          m_RenderExtensions += extension;
+          m_RenderExtensions += " ";
+        }
       }
     }
   }
   else
   {
-    auto extensions = (const char*) glGetString(GL_EXTENSIONS);
+    const char* extensions = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
     if (extensions)
     {
       m_RenderExtensions += extensions;
+      m_RenderExtensions += " ";
     }
   }
-  m_RenderExtensions += " ";
 
-  ver = (const char*)glGetString(GL_SHADING_LANGUAGE_VERSION);
+  ver = reinterpret_cast<const char*>(glGetString(GL_SHADING_LANGUAGE_VERSION));
   if (ver)
   {
     sscanf(ver, "%d.%d", &m_glslMajor, &m_glslMinor);
@@ -117,17 +125,25 @@ bool CRenderSystemGL::InitRenderSystem()
   }
 #endif
 
+  // Shut down gracefully if OpenGL context could not be allocated
+  if (m_RenderVersionMajor == 0)
+  {
+    CLog::Log(LOGFATAL, "Can not initialize OpenGL context. Exiting");
+    CMessagePrinter::DisplayError("ERROR: Can not initialize OpenGL context. Exiting");
+    return false;
+  }
+
   LogGraphicsInfo();
 
   // Get our driver vendor and renderer
-  const char* tmpVendor = (const char*) glGetString(GL_VENDOR);
+  const char* tmpVendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
   m_RenderVendor.clear();
-  if (tmpVendor != NULL)
+  if (tmpVendor)
     m_RenderVendor = tmpVendor;
 
-  const char* tmpRenderer = (const char*) glGetString(GL_RENDERER);
+  const char* tmpRenderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
   m_RenderRenderer.clear();
-  if (tmpRenderer != NULL)
+  if (tmpRenderer)
     m_RenderRenderer = tmpRenderer;
 
   m_bRenderCreated = true;
@@ -222,8 +238,7 @@ bool CRenderSystemGL::ResetRenderSystem(int width, int height)
   }
 
   glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-  glEnable(GL_BLEND);          // Turn Blending On
-  glDisable(GL_DEPTH_TEST);
+  glEnable(GL_BLEND); // Turn Blending On
 
   return true;
 }
@@ -266,7 +281,31 @@ bool CRenderSystemGL::EndRender()
   return true;
 }
 
-bool CRenderSystemGL::ClearBuffers(UTILS::COLOR::Color color)
+void CRenderSystemGL::InvalidateColorBuffer()
+{
+  if (!m_bRenderCreated)
+    return;
+
+  /* clear is not affected by stipple pattern, so we can only clear on first frame */
+  if (m_stereoMode == RENDER_STEREO_MODE_INTERLACED && m_stereoView == RENDER_STEREO_VIEW_RIGHT)
+    return;
+
+  // some platforms prefer a clear, instead of rendering over
+  if (!CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_guiGeometryClear)
+  {
+    ClearBuffers(0);
+    return;
+  }
+
+  if (!CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_guiFrontToBackRendering)
+    return;
+
+  glClearDepthf(0);
+  glDepthMask(GL_TRUE);
+  glClear(GL_DEPTH_BUFFER_BIT);
+}
+
+bool CRenderSystemGL::ClearBuffers(KODI::UTILS::COLOR::Color color)
 {
   if (!m_bRenderCreated)
     return false;
@@ -283,6 +322,14 @@ bool CRenderSystemGL::ClearBuffers(UTILS::COLOR::Color color)
   glClearColor(r, g, b, a);
 
   GLbitfield flags = GL_COLOR_BUFFER_BIT;
+
+  if (CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_guiFrontToBackRendering)
+  {
+    glClearDepthf(0);
+    glDepthMask(GL_TRUE);
+    flags |= GL_DEPTH_BUFFER_BIT;
+  }
+
   glClear(flags);
 
   return true;
@@ -505,6 +552,27 @@ void CRenderSystemGL::ResetScissors()
   SetScissors(CRect(0, 0, (float)m_width, (float)m_height));
 }
 
+void CRenderSystemGL::SetDepthCulling(DEPTH_CULLING culling)
+{
+  if (culling == DEPTH_CULLING_OFF)
+  {
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+  }
+  else if (culling == DEPTH_CULLING_BACK_TO_FRONT)
+  {
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDepthFunc(GL_GEQUAL);
+  }
+  else if (culling == DEPTH_CULLING_FRONT_TO_BACK)
+  {
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDepthFunc(GL_GREATER);
+  }
+}
+
 void CRenderSystemGL::GetGLSLVersion(int& major, int& minor)
 {
   major = m_glslMajor;
@@ -682,13 +750,24 @@ void CRenderSystemGL::InitialiseShaders()
     CLog::Log(LOGERROR, "GUI Shader gl_shader_frag_multi.glsl - compile and link failed");
   }
 
-  m_pShader[ShaderMethodGL::SM_FONTS] =
-      std::make_unique<CGLShader>("gl_shader_frag_fonts.glsl", defines);
+  m_pShader[ShaderMethodGL::SM_FONTS] = std::make_unique<CGLShader>(
+      "gl_shader_vert_simple.glsl", "gl_shader_frag_fonts.glsl", defines);
   if (!m_pShader[ShaderMethodGL::SM_FONTS]->CompileAndLink())
   {
     m_pShader[ShaderMethodGL::SM_FONTS]->Free();
     m_pShader[ShaderMethodGL::SM_FONTS].reset();
-    CLog::Log(LOGERROR, "GUI Shader gl_shader_frag_fonts.glsl - compile and link failed");
+    CLog::Log(LOGERROR, "GUI Shader gl_shader_vert_simple.glsl + gl_shader_frag_fonts.glsl - "
+                        "compile and link failed");
+  }
+
+  m_pShader[ShaderMethodGL::SM_FONTS_SHADER_CLIP] =
+      std::make_unique<CGLShader>("gl_shader_vert_clip.glsl", "gl_shader_frag_fonts.glsl", defines);
+  if (!m_pShader[ShaderMethodGL::SM_FONTS_SHADER_CLIP]->CompileAndLink())
+  {
+    m_pShader[ShaderMethodGL::SM_FONTS_SHADER_CLIP]->Free();
+    m_pShader[ShaderMethodGL::SM_FONTS_SHADER_CLIP].reset();
+    CLog::Log(LOGERROR, "GUI Shader gl_shader_vert_clip.glsl + gl_shader_frag_fonts.glsl - compile "
+                        "and link failed");
   }
 
   m_pShader[ShaderMethodGL::SM_TEXTURE_NOBLEND] =
@@ -731,6 +810,10 @@ void CRenderSystemGL::ReleaseShaders()
   if (m_pShader[ShaderMethodGL::SM_FONTS])
     m_pShader[ShaderMethodGL::SM_FONTS]->Free();
   m_pShader[ShaderMethodGL::SM_FONTS].reset();
+
+  if (m_pShader[ShaderMethodGL::SM_FONTS_SHADER_CLIP])
+    m_pShader[ShaderMethodGL::SM_FONTS_SHADER_CLIP]->Free();
+  m_pShader[ShaderMethodGL::SM_FONTS_SHADER_CLIP].reset();
 
   if (m_pShader[ShaderMethodGL::SM_TEXTURE_NOBLEND])
     m_pShader[ShaderMethodGL::SM_TEXTURE_NOBLEND]->Free();
@@ -795,6 +878,14 @@ GLint CRenderSystemGL::ShaderGetCoord1()
   return -1;
 }
 
+GLint CRenderSystemGL::ShaderGetDepth()
+{
+  if (m_pShader[m_method])
+    return m_pShader[m_method]->GetDepthLoc();
+
+  return -1;
+}
+
 GLint CRenderSystemGL::ShaderGetUniCol()
 {
   if (m_pShader[m_method])
@@ -807,6 +898,30 @@ GLint CRenderSystemGL::ShaderGetModel()
 {
   if (m_pShader[m_method])
     return m_pShader[m_method]->GetModelLoc();
+
+  return -1;
+}
+
+GLint CRenderSystemGL::ShaderGetMatrix()
+{
+  if (m_pShader[m_method])
+    return m_pShader[m_method]->GetMatrixLoc();
+
+  return -1;
+}
+
+GLint CRenderSystemGL::ShaderGetClip()
+{
+  if (m_pShader[m_method])
+    return m_pShader[m_method]->GetShaderClipLoc();
+
+  return -1;
+}
+
+GLint CRenderSystemGL::ShaderGetCoordStep()
+{
+  if (m_pShader[m_method])
+    return m_pShader[m_method]->GetShaderCoordStepLoc();
 
   return -1;
 }

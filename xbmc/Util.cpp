@@ -7,6 +7,9 @@
  */
 
 #include "network/Network.h"
+#include "network/NetworkFileItemClassify.h"
+#include "playlists/PlayListFileItemClassify.h"
+#include "video/VideoFileItemClassify.h"
 #if defined(TARGET_DARWIN)
 #include <sys/param.h>
 #include <mach-o/dyld.h>
@@ -69,14 +72,11 @@
 #include "settings/SettingsComponent.h"
 #include "utils/Digest.h"
 #include "utils/FileExtensionProvider.h"
-#include "utils/FontUtils.h"
 #include "utils/LangCodeExpander.h"
 #include "utils/StringUtils.h"
-#include "utils/TimeUtils.h"
 #include "utils/URIUtils.h"
 #include "utils/log.h"
 #include "video/VideoDatabase.h"
-#include "video/VideoInfoTag.h"
 #ifdef HAVE_LIBCAP
   #include <sys/capability.h>
 #endif
@@ -90,8 +90,8 @@ using namespace MEDIA_DETECT;
 #endif
 
 using namespace XFILE;
-using namespace PLAYLIST;
 using KODI::UTILITY::CDigest;
+using namespace KODI;
 
 #if !defined(TARGET_WINDOWS)
 unsigned int CUtil::s_randomSeed = time(NULL);
@@ -155,7 +155,7 @@ std::string GetHomePath(const std::string& strTarget, std::string strPath)
   strPath = CUtil::ResolveExecutablePath();
   auto last_sep = strPath.find_last_of(PATH_SEPARATOR_CHAR);
   if (last_sep != std::string::npos)
-      strPath = strPath.substr(0, last_sep);
+    strPath.resize(last_sep);
 
   g_charsetConverter.utf8ToW(strPath, strPathW);
   if (IsDirectoryValidRoot(strPathW))
@@ -473,6 +473,13 @@ bool CUtil::GetFilenameIdentifier(const std::string& fileName,
     }
   }
   return false;
+}
+
+bool CUtil::HasFilenameIdentifier(const std::string& fileName)
+{
+  std::string identifierType;
+  std::string identifier;
+  return GetFilenameIdentifier(fileName, identifierType, identifier);
 }
 
 void CUtil::CleanString(const std::string& strFileName,
@@ -1005,13 +1012,13 @@ bool CUtil::CreateDirectoryEx(const std::string& strPath)
   return CDirectory::Exists(strPath);
 }
 
-std::string CUtil::MakeLegalFileName(std::string strFile, int LegalType)
+std::string CUtil::MakeLegalFileName(std::string strFile, LegalPath LegalType)
 {
   StringUtils::Replace(strFile, '/', '_');
   StringUtils::Replace(strFile, '\\', '_');
   StringUtils::Replace(strFile, '?', '_');
 
-  if (LegalType == LEGAL_WIN32_COMPAT)
+  if (LegalType == LegalPath::WIN32_COMPAT)
   {
     // just filter out some illegal characters on windows
     StringUtils::Replace(strFile, ':', '_');
@@ -1027,7 +1034,7 @@ std::string CUtil::MakeLegalFileName(std::string strFile, int LegalType)
 }
 
 // legalize entire path
-std::string CUtil::MakeLegalPath(std::string strPathAndFile, int LegalType)
+std::string CUtil::MakeLegalPath(std::string strPathAndFile, LegalPath LegalType)
 {
   if (URIUtils::IsStack(strPathAndFile))
     return MakeLegalPath(CStackDirectory::GetFirstStackedFile(strPathAndFile));
@@ -1156,7 +1163,7 @@ void CUtil::SplitParams(const std::string &paramString, std::vector<std::string>
           if (quotaPos > 1 && quotaPos < parameter.length() - 1 && parameter[quotaPos - 1] == '=')
           {
             parameter.erase(parameter.length() - 1);
-            parameter.erase(quotaPos);
+            parameter.erase(quotaPos, 1);
           }
         }
         parameters.push_back(parameter);
@@ -1197,14 +1204,16 @@ void CUtil::SplitParams(const std::string &paramString, std::vector<std::string>
     if (quotaPos > 1 && quotaPos < parameter.length() - 1 && parameter[quotaPos - 1] == '=')
     {
       parameter.erase(parameter.length() - 1);
-      parameter.erase(quotaPos);
+      parameter.erase(quotaPos, 1);
     }
   }
   if (!parameter.empty() || parameters.size())
     parameters.push_back(parameter);
 }
 
-int CUtil::GetMatchingSource(const std::string& strPath1, VECSOURCES& VECSOURCES, bool& bIsSourceName)
+int CUtil::GetMatchingSource(const std::string& strPath1,
+                             std::vector<CMediaSource>& sources,
+                             bool& bIsSourceName)
 {
   if (strPath1.empty())
     return -1;
@@ -1235,9 +1244,9 @@ int CUtil::GetMatchingSource(const std::string& strPath1, VECSOURCES& VECSOURCES
   int iIndex = -1;
 
   // we first test the NAME of a source
-  for (int i = 0; i < (int)VECSOURCES.size(); ++i)
+  for (int i = 0; i < static_cast<int>(sources.size()); ++i)
   {
-    const CMediaSource &share = VECSOURCES[i];
+    const CMediaSource& share = sources[i];
     std::string strName = share.strName;
 
     // special cases for dvds
@@ -1274,9 +1283,9 @@ int CUtil::GetMatchingSource(const std::string& strPath1, VECSOURCES& VECSOURCES
 
   size_t iLength = 0;
   size_t iLenPath = strDest.size();
-  for (int i = 0; i < (int)VECSOURCES.size(); ++i)
+  for (int i = 0; i < static_cast<int>(sources.size()); ++i)
   {
-    const CMediaSource &share = VECSOURCES[i];
+    const CMediaSource& share = sources[i];
 
     // does it match a source name?
     if (share.strPath.substr(0,8) == "shout://")
@@ -1341,7 +1350,7 @@ int CUtil::GetMatchingSource(const std::string& strPath1, VECSOURCES& VECSOURCES
 
       bIsSourceName = false;
       bool bDummy;
-      return GetMatchingSource(strPath, VECSOURCES, bDummy);
+      return GetMatchingSource(strPath, sources, bDummy);
     }
 
     CLog::Log(LOGDEBUG, "CUtil::GetMatchingSource: no matching source found for [{}]", strPath1);
@@ -1889,30 +1898,22 @@ std::string CUtil::GetFrameworksPath(bool forPython)
   return strFrameworksPath;
 }
 
-void CUtil::GetVideoBasePathAndFileName(const std::string& videoPath, std::string& basePath, std::string& videoFileName)
+void CUtil::GetVideoBasePathAndFileName(const std::string& videoPath,
+                                        std::string& basePath,
+                                        std::string& videoFileName)
 {
-  CFileItem item(videoPath, false);
-  videoFileName = URIUtils::ReplaceExtension(URIUtils::GetFileName(videoPath), "");
+  const CFileItem item(videoPath, false);
 
-  if (item.HasVideoInfoTag())
-    basePath = item.GetVideoInfoTag()->m_basePath;
-
-  if (basePath.empty() && item.IsOpticalMediaFile())
-    basePath = item.GetLocalMetadataPath();
-
-  CURL url(videoPath);
-  if (basePath.empty() && url.IsProtocol("bluray"))
+  if (item.IsOpticalMediaFile() || URIUtils::IsBlurayPath(item.GetDynPath()))
   {
-    basePath = url.GetHostName();
-    videoFileName = URIUtils::ReplaceExtension(GetTitleFromPath(url.GetHostName()), "");
-
-    url = CURL(url.GetHostName());
-    if (url.IsProtocol("udf"))
-      basePath = URIUtils::GetParentPath(url.GetHostName());
+    basePath = item.GetLocalMetadataPath();
+    videoFileName = URIUtils::ReplaceExtension(GetTitleFromPath(basePath), "");
   }
-
-  if (basePath.empty())
+  else
+  {
+    videoFileName = URIUtils::ReplaceExtension(URIUtils::GetFileName(videoPath), "");
     basePath = URIUtils::GetBasePath(videoPath);
+  }
 }
 
 void CUtil::GetItemsToScan(const std::string& videoPath,
@@ -2047,10 +2048,8 @@ void CUtil::ScanForExternalSubtitles(const std::string& strMovie, std::vector<st
   auto start = std::chrono::steady_clock::now();
 
   CFileItem item(strMovie, false);
-  if ((item.IsInternetStream() && !URIUtils::IsOnLAN(item.GetDynPath()))
-    || item.IsPlayList()
-    || item.IsLiveTV()
-    || !item.IsVideo())
+  if ((NETWORK::IsInternetStream(item) && !URIUtils::IsOnLAN(item.GetDynPath())) ||
+      PLAYLIST::IsPlayList(item) || item.IsPVR() || !VIDEO::IsVideo(item))
     return;
 
   CLog::Log(LOGDEBUG, "{}: Searching for subtitles...", __FUNCTION__);
@@ -2190,6 +2189,16 @@ ExternalStreamInfo CUtil::GetExternalStreamDetailsFromFilename(const std::string
       else if (!flag_tmp.compare("forced"))
       {
         info.flag |= StreamFlags::FLAG_FORCED;
+        continue;
+      }
+      else if (!flag_tmp.compare("original"))
+      {
+        info.flag |= StreamFlags::FLAG_ORIGINAL;
+        continue;
+      }
+      else if (!flag_tmp.compare("impaired"))
+      {
+        info.flag |= StreamFlags::FLAG_HEARING_IMPAIRED;
         continue;
       }
 
@@ -2339,11 +2348,8 @@ std::string CUtil::GetVobSubIdxFromSub(const std::string& vobSub)
 void CUtil::ScanForExternalAudio(const std::string& videoPath, std::vector<std::string>& vecAudio)
 {
   CFileItem item(videoPath, false);
-  if ( item.IsInternetStream()
-   ||  item.IsPlayList()
-   ||  item.IsLiveTV()
-   ||  item.IsPVR()
-   || !item.IsVideo())
+  if (NETWORK::IsInternetStream(item) || PLAYLIST::IsPlayList(item) || item.IsLiveTV() ||
+      item.IsPVR() || !VIDEO::IsVideo(item))
     return;
 
   std::string strBasePath;

@@ -132,7 +132,8 @@ bool CLinuxRendererGLES::Configure(const VideoPicture &picture, float fps, unsig
   // setup the background colour
   m_clearColour = CServiceBroker::GetWinSystem()->UseLimitedColor() ? (16.0f / 0xff) : 0.0f;
 
-  if (picture.hasDisplayMetadata && picture.hasLightMetadata)
+  if (picture.color_transfer == AVCOL_TRC_SMPTE2084 ||
+      picture.color_transfer == AVCOL_TRC_ARIB_STD_B67)
   {
     m_passthroughHDR = CServiceBroker::GetWinSystem()->SetHDR(&picture);
     CLog::Log(LOGDEBUG, "LinuxRendererGLES::Configure: HDR passthrough: {}",
@@ -170,6 +171,7 @@ void CLinuxRendererGLES::AddVideoPicture(const VideoPicture &picture, int index)
   buf.loaded = false;
   buf.m_srcPrimaries = picture.color_primaries;
   buf.m_srcColSpace = picture.color_space;
+  buf.m_srcColTransfer = picture.color_transfer;
   buf.m_srcFullRange = picture.color_range == 1;
   buf.m_srcBits = picture.colorBits;
 
@@ -357,6 +359,63 @@ void CLinuxRendererGLES::Update()
   ValidateRenderTarget();
 }
 
+void CLinuxRendererGLES::ClearBackBuffer()
+{
+  //set the entire backbuffer to black
+  //if we do a two pass render, we have to draw a quad. else we might occlude OSD elements.
+  if (CServiceBroker::GetWinSystem()->GetGfxContext().GetRenderOrder() ==
+      RENDER_ORDER_ALL_BACK_TO_FRONT)
+  {
+    CServiceBroker::GetWinSystem()->GetGfxContext().Clear(0xff000000);
+  }
+  else
+  {
+    ClearBackBufferQuad();
+  }
+}
+
+void CLinuxRendererGLES::ClearBackBufferQuad()
+{
+  CRect windowRect(0, 0, CServiceBroker::GetWinSystem()->GetGfxContext().GetWidth(),
+                   CServiceBroker::GetWinSystem()->GetGfxContext().GetHeight());
+  struct Svertex
+  {
+    float x, y;
+  };
+
+  std::vector<Svertex> vertices{
+      {windowRect.x1, windowRect.y2 * 2},
+      {windowRect.x1, windowRect.y1},
+      {windowRect.x2 * 2, windowRect.y1},
+  };
+
+  glDisable(GL_BLEND);
+
+  m_renderSystem->EnableGUIShader(ShaderMethodGLES::SM_DEFAULT);
+  GLint posLoc = m_renderSystem->GUIShaderGetPos();
+  GLint uniCol = m_renderSystem->GUIShaderGetUniCol();
+  GLint depthLoc = m_renderSystem->GUIShaderGetDepth();
+
+  glUniform4f(uniCol, m_clearColour / 255.0f, m_clearColour / 255.0f, m_clearColour / 255.0f, 1.0f);
+  glUniform1f(depthLoc, -1);
+
+  GLuint vertexVBO;
+  glGenBuffers(1, &vertexVBO);
+  glBindBuffer(GL_ARRAY_BUFFER, vertexVBO);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(Svertex) * vertices.size(), vertices.data(), GL_STATIC_DRAW);
+
+  glVertexAttribPointer(posLoc, 2, GL_FLOAT, GL_FALSE, sizeof(Svertex), 0);
+  glEnableVertexAttribArray(posLoc);
+
+  glDrawArrays(GL_TRIANGLES, 0, vertices.size());
+
+  glDisableVertexAttribArray(posLoc);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  glDeleteBuffers(1, &vertexVBO);
+
+  m_renderSystem->DisableGUIShader();
+}
+
 void CLinuxRendererGLES::DrawBlackBars()
 {
   CRect windowRect(0, 0, CServiceBroker::GetWinSystem()->GetGfxContext().GetWidth(),
@@ -399,8 +458,10 @@ void CLinuxRendererGLES::DrawBlackBars()
   renderSystem->EnableGUIShader(ShaderMethodGLES::SM_DEFAULT);
   GLint posLoc = renderSystem->GUIShaderGetPos();
   GLint uniCol = renderSystem->GUIShaderGetUniCol();
+  GLint depthLoc = m_renderSystem->GUIShaderGetDepth();
 
   glUniform4f(uniCol, m_clearColour / 255.0f, m_clearColour / 255.0f, m_clearColour / 255.0f, 1.0f);
+  glUniform1f(depthLoc, -1);
 
   GLuint vertexVBO;
   glGenBuffers(1, &vertexVBO);
@@ -431,6 +492,9 @@ void CLinuxRendererGLES::RenderUpdate(int index, int index2, bool clear, unsigne
   // if its first pass, just init textures and return
   if (ValidateRenderTarget())
   {
+    if (clear) //if clear is set, we're expected to overwrite all backbuffer pixels, even if we have nothing to render
+      ClearBackBuffer();
+
     return;
   }
 
@@ -455,9 +519,7 @@ void CLinuxRendererGLES::RenderUpdate(int index, int index2, bool clear, unsigne
       DrawBlackBars();
     else
     {
-      glClearColor(m_clearColour, m_clearColour, m_clearColour, 0);
-      glClear(GL_COLOR_BUFFER_BIT);
-      glClearColor(0, 0, 0, 0);
+      ClearBackBuffer();
     }
   }
 
@@ -489,7 +551,8 @@ void CLinuxRendererGLES::RenderUpdate(int index, int index2, bool clear, unsigne
     }
   }
 
-  Render(flags, index);
+  if (!Render(flags, index) && clear)
+    ClearBackBuffer();
 
   VerifyGLState();
   glEnable(GL_BLEND);
@@ -523,6 +586,8 @@ void CLinuxRendererGLES::UpdateVideoFilter()
   }
 
   m_scalingMethodGui = m_videoSettings.m_ScalingMethod;
+  if (m_scalingMethod != m_scalingMethodGui)
+    m_reloadShaders = true;
   m_scalingMethod = m_scalingMethodGui;
   m_viewRect = viewRect;
 
@@ -555,6 +620,8 @@ void CLinuxRendererGLES::UpdateVideoFilter()
     return;
   }
   case VS_SCALINGMETHOD_LINEAR:
+  case VS_SCALINGMETHOD_LANCZOS3_FAST:
+  case VS_SCALINGMETHOD_SPLINE36_FAST:
   {
     CLog::Log(LOGINFO, "GLES: Selecting single pass rendering");
     SetTextureFilter(GL_LINEAR);
@@ -562,8 +629,6 @@ void CLinuxRendererGLES::UpdateVideoFilter()
     return;
   }
   case VS_SCALINGMETHOD_LANCZOS2:
-  case VS_SCALINGMETHOD_SPLINE36_FAST:
-  case VS_SCALINGMETHOD_LANCZOS3_FAST:
   case VS_SCALINGMETHOD_SPLINE36:
   case VS_SCALINGMETHOD_LANCZOS3:
   case VS_SCALINGMETHOD_CUBIC_B_SPLINE:
@@ -648,9 +713,19 @@ void CLinuxRendererGLES::LoadShaders(int field)
 
           EShaderFormat shaderFormat = GetShaderFormat();
           m_toneMapMethod = m_videoSettings.m_ToneMapMethod;
-          m_pYUVProgShader = new YUV2RGBProgressiveShader(
-              shaderFormat, m_passthroughHDR ? m_srcPrimaries : AVColorPrimaries::AVCOL_PRI_BT709,
-              m_srcPrimaries, m_toneMap, m_toneMapMethod);
+          if (m_scalingMethod == VS_SCALINGMETHOD_LANCZOS3_FAST ||
+              m_scalingMethod == VS_SCALINGMETHOD_SPLINE36_FAST)
+          {
+            m_pYUVProgShader = new YUV2RGBFilterShader(
+                shaderFormat, m_passthroughHDR ? m_srcPrimaries : AVColorPrimaries::AVCOL_PRI_BT709,
+                m_srcPrimaries, m_toneMap, m_toneMapMethod, m_scalingMethod);
+          }
+          else
+          {
+            m_pYUVProgShader = new YUV2RGBProgressiveShader(
+                shaderFormat, m_passthroughHDR ? m_srcPrimaries : AVColorPrimaries::AVCOL_PRI_BT709,
+                m_srcPrimaries, m_toneMap, m_toneMapMethod);
+          }
           m_pYUVProgShader->SetConvertFullColorRange(m_fullRange);
           m_pYUVBobShader = new YUV2RGBBobShader(
               shaderFormat, m_passthroughHDR ? m_srcPrimaries : AVColorPrimaries::AVCOL_PRI_BT709,
@@ -718,6 +793,7 @@ void CLinuxRendererGLES::UnInit()
   m_bConfigured = false;
 
   CServiceBroker::GetWinSystem()->SetHDR(nullptr);
+  m_passthroughHDR = false;
 }
 
 bool CLinuxRendererGLES::CreateTexture(int index)
@@ -782,7 +858,7 @@ bool CLinuxRendererGLES::UploadTexture(int index)
   return ret;
 }
 
-void CLinuxRendererGLES::Render(unsigned int flags, int index)
+bool CLinuxRendererGLES::Render(unsigned int flags, int index)
 {
   // obtain current field, if interlaced
   if( flags & RENDER_FLAG_TOP)
@@ -801,7 +877,7 @@ void CLinuxRendererGLES::Render(unsigned int flags, int index)
   // call texture load function
   if (!UploadTexture(index))
   {
-    return;
+    return false;
   }
 
   if (RenderHook(index))
@@ -831,8 +907,13 @@ void CLinuxRendererGLES::Render(unsigned int flags, int index)
       break;
     }
   }
+  else
+  {
+    return false;
+  }
 
   AfterRenderHook(index);
+  return true;
 }
 
 void CLinuxRendererGLES::RenderSinglePass(int index, int field)
@@ -840,37 +921,12 @@ void CLinuxRendererGLES::RenderSinglePass(int index, int field)
   CPictureBuffer &buf = m_buffers[index];
   CYuvPlane (&planes)[YuvImage::MAX_PLANES] = m_buffers[index].fields[field];
 
-  if (buf.m_srcPrimaries != m_srcPrimaries)
-  {
-    m_srcPrimaries = buf.m_srcPrimaries;
-    m_reloadShaders = true;
-  }
-
-  bool toneMap = false;
-  ETONEMAPMETHOD toneMapMethod = m_videoSettings.m_ToneMapMethod;
-
-  if (!m_passthroughHDR && toneMapMethod != VS_TONEMAPMETHOD_OFF)
-  {
-    if (buf.hasLightMetadata || (buf.hasDisplayMetadata && buf.displayMetadata.has_luminance))
-    {
-      toneMap = true;
-    }
-  }
-
-  if (toneMap != m_toneMap || toneMapMethod != m_toneMapMethod)
-  {
-    m_reloadShaders = true;
-  }
-
-  m_toneMap = toneMap;
-  m_toneMapMethod = toneMapMethod;
+  CheckVideoParameters(index);
 
   if (m_reloadShaders)
   {
     LoadShaders(field);
   }
-
-  glDisable(GL_DEPTH_TEST);
 
   // Y
   glActiveTexture(GL_TEXTURE0);
@@ -974,30 +1030,7 @@ void CLinuxRendererGLES::RenderToFBO(int index, int field)
   CPictureBuffer &buf = m_buffers[index];
   CYuvPlane (&planes)[YuvImage::MAX_PLANES] = m_buffers[index].fields[field];
 
-  if (buf.m_srcPrimaries != m_srcPrimaries)
-  {
-    m_srcPrimaries = buf.m_srcPrimaries;
-    m_reloadShaders = true;
-  }
-
-  bool toneMap = false;
-  ETONEMAPMETHOD toneMapMethod = m_videoSettings.m_ToneMapMethod;
-
-  if (toneMapMethod != VS_TONEMAPMETHOD_OFF)
-  {
-    if (buf.hasLightMetadata || (buf.hasDisplayMetadata && buf.displayMetadata.has_luminance))
-    {
-      toneMap = true;
-    }
-  }
-
-  if (toneMap != m_toneMap || m_toneMapMethod != toneMapMethod)
-  {
-    m_reloadShaders = true;
-  }
-
-  m_toneMap = toneMap;
-  m_toneMapMethod = toneMapMethod;
+  CheckVideoParameters(index);
 
   if (m_reloadShaders)
   {
@@ -1019,8 +1052,6 @@ void CLinuxRendererGLES::RenderToFBO(int index, int field)
       return;
     }
   }
-
-  glDisable(GL_DEPTH_TEST);
 
   // Y
   glActiveTexture(GL_TEXTURE0);
@@ -1230,6 +1261,9 @@ void CLinuxRendererGLES::RenderFromFBO()
 
   glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, idx);
 
+  glDisableVertexAttribArray(loc);
+  glDisableVertexAttribArray(vertLoc);
+
   VerifyGLState();
 
   if (m_pVideoFilterShader)
@@ -1243,7 +1277,7 @@ void CLinuxRendererGLES::RenderFromFBO()
   VerifyGLState();
 }
 
-bool CLinuxRendererGLES::RenderCapture(CRenderCapture* capture)
+bool CLinuxRendererGLES::RenderCapture(int index, CRenderCapture* capture)
 {
   if (!m_bValidated)
   {
@@ -1269,7 +1303,7 @@ bool CLinuxRendererGLES::RenderCapture(CRenderCapture* capture)
 
   capture->BeginRender();
 
-  Render(RENDER_FLAG_NOOSD, m_iYV12RenderBuffer);
+  Render(RENDER_FLAG_NOOSD, index);
   // read pixels
   glReadPixels(0, CServiceBroker::GetWinSystem()->GetGfxContext().GetHeight() - capture->GetHeight(), capture->GetWidth(), capture->GetHeight(),
                GL_RGBA, GL_UNSIGNED_BYTE, capture->GetRenderBuffer());
@@ -1724,6 +1758,18 @@ bool CLinuxRendererGLES::Supports(ESCALINGMETHOD method) const
       method == VS_SCALINGMETHOD_SPLINE36 ||
       method == VS_SCALINGMETHOD_LANCZOS3)
   {
+    if (method == VS_SCALINGMETHOD_SPLINE36_FAST || method == VS_SCALINGMETHOD_LANCZOS3_FAST)
+    {
+#if defined(GL_ES_VERSION_3_0)
+      // we need GLES 3.0 headers for GL_RGBA16f, but GLES 3.1 for the shader
+      uint32_t major, minor;
+      m_renderSystem->GetRenderVersion(major, minor);
+      if (major < 3 || minor == 0)
+        return false;
+#else
+      return false;
+#endif
+    }
     // if scaling is below level, avoid hq scaling
     float scaleX = fabs((static_cast<float>(m_sourceWidth) - m_destRect.Width()) / m_sourceWidth) * 100;
     float scaleY = fabs((static_cast<float>(m_sourceHeight) - m_destRect.Height()) / m_sourceHeight) * 100;
@@ -1758,4 +1804,32 @@ bool CLinuxRendererGLES::IsGuiLayer()
 CRenderCapture* CLinuxRendererGLES::GetRenderCapture()
 {
   return new CRenderCaptureGLES;
+}
+
+void CLinuxRendererGLES::CheckVideoParameters(int index)
+{
+  const CPictureBuffer& buf = m_buffers[index];
+  const ETONEMAPMETHOD& toneMapMethod = m_videoSettings.m_ToneMapMethod;
+
+  if (buf.m_srcPrimaries != m_srcPrimaries)
+  {
+    m_srcPrimaries = buf.m_srcPrimaries;
+    m_reloadShaders = true;
+  }
+
+  bool toneMap = false;
+  const bool streamIsHDRPQ =
+      (buf.m_srcColTransfer == AVCOL_TRC_SMPTE2084 && buf.m_srcPrimaries == AVCOL_PRI_BT2020);
+
+  if (streamIsHDRPQ && !m_passthroughHDR && toneMapMethod != VS_TONEMAPMETHOD_OFF)
+  {
+    toneMap = true;
+  }
+
+  if (toneMap != m_toneMap || toneMapMethod != m_toneMapMethod)
+  {
+    m_reloadShaders = true;
+    m_toneMap = toneMap;
+    m_toneMapMethod = toneMapMethod;
+  }
 }

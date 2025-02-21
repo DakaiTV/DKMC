@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2018 Team Kodi
+ *  Copyright (C) 2005-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -8,13 +8,7 @@
 
 #include "InputManager.h"
 
-#include "ButtonTranslator.h"
-#include "CustomControllerTranslator.h"
-#include "JoystickMapper.h"
-#include "KeymapEnvironment.h"
 #include "ServiceBroker.h"
-#include "TouchTranslator.h"
-#include "XBMC_vkeys.h"
 #include "application/AppInboundProtocol.h"
 #include "application/Application.h"
 #include "application/ApplicationComponents.h"
@@ -24,9 +18,18 @@
 #include "guilib/GUIControl.h"
 #include "guilib/GUIWindow.h"
 #include "guilib/GUIWindowManager.h"
-#include "input/Key.h"
+#include "input/actions/Action.h"
+#include "input/actions/ActionIDs.h"
+#include "input/keyboard/Key.h"
+#include "input/keyboard/KeyIDs.h"
 #include "input/keyboard/KeyboardEasterEgg.h"
+#include "input/keyboard/XBMC_vkeys.h"
 #include "input/keyboard/interfaces/IKeyboardDriverHandler.h"
+#include "input/keymaps/ButtonTranslator.h"
+#include "input/keymaps/KeymapEnvironment.h"
+#include "input/keymaps/joysticks/JoystickMapper.h"
+#include "input/keymaps/remote/CustomControllerTranslator.h"
+#include "input/keymaps/touch/TouchTranslator.h"
 #include "input/mouse/MouseTranslator.h"
 #include "input/mouse/interfaces/IMouseDriverHandler.h"
 #include "messaging/ApplicationMessenger.h"
@@ -60,11 +63,11 @@ const std::unordered_map<uint8_t, int> keyComposeactionEventMap = {
 }
 
 CInputManager::CInputManager()
-  : m_keymapEnvironment(new CKeymapEnvironment),
-    m_buttonTranslator(new CButtonTranslator),
-    m_customControllerTranslator(new CCustomControllerTranslator),
-    m_touchTranslator(new CTouchTranslator),
-    m_joystickTranslator(new CJoystickMapper),
+  : m_keymapEnvironment(new KEYMAP::CKeymapEnvironment),
+    m_buttonTranslator(new KEYMAP::CButtonTranslator),
+    m_customControllerTranslator(new KEYMAP::CCustomControllerTranslator),
+    m_touchTranslator(new KEYMAP::CTouchTranslator),
+    m_joystickTranslator(new KEYMAP::CJoystickMapper),
     m_keyboardEasterEgg(new KEYBOARD::CKeyboardEasterEgg)
 {
   m_buttonTranslator->RegisterMapper("touch", m_touchTranslator.get());
@@ -321,9 +324,8 @@ void CInputManager::QueueAction(const CAction& action)
   if (action.IsAnalog())
   {
     m_queuedActions.erase(std::remove_if(m_queuedActions.begin(), m_queuedActions.end(),
-                                         [&action](const CAction& queuedAction) {
-                                           return action.GetID() == queuedAction.GetID();
-                                         }),
+                                         [&action](const CAction& queuedAction)
+                                         { return action.GetID() == queuedAction.GetID(); }),
                           m_queuedActions.end());
   }
 
@@ -702,7 +704,7 @@ bool CInputManager::AlwaysProcess(const CAction& action)
     const CExecString exec(action.GetName());
     if (exec.IsValid())
     {
-      const std::string builtInFunction = exec.GetFunction();
+      const std::string& builtInFunction = exec.GetFunction();
 
       // should this button be handled normally or just cancel the screensaver?
       if (builtInFunction == "powerdown" || builtInFunction == "reboot" ||
@@ -902,6 +904,11 @@ void CInputManager::RemoveKeymap(const std::string& keymap)
   }
 }
 
+const KEYMAP::IKeymapEnvironment* CInputManager::KeymapEnvironment() const
+{
+  return m_keymapEnvironment.get();
+}
+
 CAction CInputManager::GetAction(int window, const CKey& key, bool fallback /* = true */)
 {
   return m_buttonTranslator->GetAction(window, key, fallback);
@@ -924,7 +931,7 @@ bool CInputManager::TranslateTouchAction(
                                                  actionString);
 }
 
-std::vector<std::shared_ptr<const IWindowKeymap>> CInputManager::GetJoystickKeymaps() const
+std::vector<std::shared_ptr<const KEYMAP::IWindowKeymap>> CInputManager::GetJoystickKeymaps() const
 {
   return m_joystickTranslator->GetJoystickKeymaps();
 }

@@ -11,6 +11,7 @@
 #include "Album.h"
 #include "Artist.h"
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "GUIInfoManager.h"
 #include "LangInfo.h"
 #include "ServiceBroker.h"
@@ -37,6 +38,7 @@
 #include "guilib/GUIWindowManager.h"
 #include "guilib/LocalizeStrings.h"
 #include "guilib/guiinfo/GUIInfoLabels.h"
+#include "imagefiles/ImageFileURL.h"
 #include "interfaces/AnnouncementManager.h"
 #include "messaging/helpers/DialogHelper.h"
 #include "messaging/helpers/DialogOKHelper.h"
@@ -63,6 +65,7 @@
 
 #include <inttypes.h>
 
+using namespace KODI;
 using namespace XFILE;
 using namespace MUSICDATABASEDIRECTORY;
 using namespace KODI::MESSAGING;
@@ -2246,7 +2249,7 @@ bool CMusicDatabase::AddArtistVideoLinks(const CArtist& artist)
         const int songId = m_pDS->fv(0).get_asInt();
         std::string strSQL2 = PrepareSQL("UPDATE song SET strVideoURL='%s' WHERE idSong = %i",
                                          videoURL.videoURL.c_str(), songId);
-        CLog::Log(LOGDEBUG, "Adding videolink for song {} with id {}", dbSong.c_str(), songId);
+        CLog::Log(LOGDEBUG, "Adding videolink for song {} with id {}", dbSong, songId);
         m_pDS2->exec(strSQL2);
 
         if (!videoURL.thumbURL.empty())
@@ -2284,7 +2287,7 @@ bool CMusicDatabase::AddArtistVideoLinks(const CArtist& artist)
   }
   catch (...)
   {
-    CLog::Log(LOGERROR, "MusicDatabase: Unable to add videolink for song ({})", dbSong.c_str());
+    CLog::Log(LOGERROR, "MusicDatabase: Unable to add videolink for song ({})", dbSong);
     return false;
   }
 }
@@ -4569,8 +4572,11 @@ int CMusicDatabase::Cleanup(CGUIDialogProgress* progressDialog /*= nullptr*/)
   SetLibraryLastCleaned();
 
   // Drop triggers  song_artist and album_artist to avoid creation of entries in removed_link
-  m_pDS->exec("DROP TRIGGER tgrDeleteSongArtist");
-  m_pDS->exec("DROP TRIGGER tgrDeleteAlbumArtist");
+  // Check that triggers actually exist first as interrupting the clean causes them to not be
+  // re-created
+
+  m_pDS->exec("DROP TRIGGER IF EXISTS tgrDeleteSongArtist");
+  m_pDS->exec("DROP TRIGGER IF EXISTS tgrDeleteAlbumArtist");
 
   // first cleanup any songs with invalid paths
   if (progressDialog)
@@ -7232,19 +7238,19 @@ bool CMusicDatabase::GetArtistsByWhereJSON(
         if (joinLayout.GetOutput(joinToArtist_idArt))
         {
           artistObj["art"][record->at(joinLayout.GetRecNo(joinToArtist_artType)).get_asString()] =
-              CTextureUtils::GetWrappedImageURL(
+              IMAGE_FILES::URLFromFile(
                   record->at(joinLayout.GetRecNo(joinToArtist_artURL)).get_asString());
         }
         if (joinLayout.GetOutput(joinToArtist_thumbnail) &&
             record->at(joinLayout.GetRecNo(joinToArtist_artType)).get_asString() == "thumb")
         {
-          artistObj["thumbnail"] = CTextureUtils::GetWrappedImageURL(
+          artistObj["thumbnail"] = IMAGE_FILES::URLFromFile(
               record->at(joinLayout.GetRecNo(joinToArtist_artURL)).get_asString());
         }
         if (joinLayout.GetOutput(joinToArtist_fanart) &&
             record->at(joinLayout.GetRecNo(joinToArtist_artType)).get_asString() == "fanart")
         {
-          artistObj["fanart"] = CTextureUtils::GetWrappedImageURL(
+          artistObj["fanart"] = IMAGE_FILES::URLFromFile(
               record->at(joinLayout.GetRecNo(joinToArtist_artURL)).get_asString());
         }
       }
@@ -7617,7 +7623,7 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(
             {
               std::string url = record->at(1 + i).get_asString();
               if (!url.empty())
-                url = CTextureUtils::GetWrappedImageURL(url);
+                url = IMAGE_FILES::URLFromFile(url);
               albumObj[JSONtoDBAlbum[dbfieldindex[i]].fieldJSON] = url;
             }
             else
@@ -9873,7 +9879,7 @@ bool CMusicDatabase::GetAlbumFolder(const CAlbum& album,
   // Create a valid unique folder name from album title
   // @todo: Does UFT8 matter or need normalizing?
   // @todo: Simplify punctuation removing unicode appostraphes, "..." etc.?
-  strFolder = CUtil::MakeLegalFileName(album.strAlbum, LEGAL_WIN32_COMPAT);
+  strFolder = CUtil::MakeLegalFileName(album.strAlbum, LegalPath::WIN32_COMPAT);
   StringUtils::Replace(strFolder, " _ ", "_");
 
   // Check <first albumartist name>/<albumname> is unique e.g. 2 x Bruckner Symphony No. 3
@@ -9909,7 +9915,7 @@ bool CMusicDatabase::GetArtistFolderName(const std::string& strArtist,
   // Create a valid unique folder name for artist
   // @todo: Does UFT8 matter or need normalizing?
   // @todo: Simplify punctuation removing unicode appostraphes, "..." etc.?
-  strFolder = CUtil::MakeLegalFileName(strArtist, LEGAL_WIN32_COMPAT);
+  strFolder = CUtil::MakeLegalFileName(strArtist, LegalPath::WIN32_COMPAT);
   StringUtils::Replace(strFolder, " _ ", "_");
 
   // Ensure <artist name> is unique e.g. 2 x John Williams.
@@ -10215,7 +10221,7 @@ bool CMusicDatabase::DeleteAlbumSources(int idAlbum)
   return ExecuteQuery(PrepareSQL("DELETE FROM album_source WHERE idAlbum = %i", idAlbum));
 }
 
-bool CMusicDatabase::CheckSources(VECSOURCES& sources)
+bool CMusicDatabase::CheckSources(std::vector<CMediaSource>& sources)
 {
   if (sources.empty())
   {
@@ -10277,7 +10283,7 @@ bool CMusicDatabase::CheckSources(VECSOURCES& sources)
 bool CMusicDatabase::MigrateSources()
 {
   //Fetch music sources from xml
-  VECSOURCES sources(*CMediaSourceSettings::GetInstance().GetSources("music"));
+  std::vector<CMediaSource> sources(*CMediaSourceSettings::GetInstance().GetSources("music"));
 
   std::string strSQL;
   try
@@ -10317,7 +10323,7 @@ bool CMusicDatabase::MigrateSources()
 bool CMusicDatabase::UpdateSources()
 {
   //Check library and xml sources match
-  VECSOURCES sources(*CMediaSourceSettings::GetInstance().GetSources("music"));
+  std::vector<CMediaSource> sources(*CMediaSourceSettings::GetInstance().GetSources("music"));
   if (CheckSources(sources))
     return true;
 
@@ -13228,6 +13234,13 @@ int CMusicDatabase::GetOrderFilter(const std::string& type,
     }
   }
 
+  // Get the right tableview as if we are using strArtistSort the column name is ambiguous
+  std::string table;
+  if (StringUtils::StartsWithNoCase(type, "album"))
+    table = "albumview.";
+  else if (StringUtils::StartsWithNoCase(type, "song"))
+    table = "songview.";
+
   // Convert field names into order by statement elements
   for (auto& name : orderfields)
   {
@@ -13236,7 +13249,8 @@ int CMusicDatabase::GetOrderFilter(const std::string& type,
     if (StringUtils::EndsWith(name, "strArtists") || StringUtils::EndsWith(name, "strArtist"))
     {
       if (StringUtils::EndsWith(name, "strArtists"))
-        sortSQL = SortnameBuildSQL("artistsortname", sorting.sortAttributes, name, "strArtistSort");
+        sortSQL = SortnameBuildSQL("artistsortname", sorting.sortAttributes, name,
+                                   table + "strArtistSort");
       else
         sortSQL = SortnameBuildSQL("artistsortname", sorting.sortAttributes, name, "strSortName");
       if (!sortSQL.empty())
@@ -13283,7 +13297,7 @@ bool CMusicDatabase::GetFilter(CDbUrl& musicUrl, Filter& filter, SortDescription
   auto option = options.find("xsp");
   if (option != options.end())
   {
-    CSmartPlaylist xsp;
+    PLAYLIST::CSmartPlaylist xsp;
     if (!xsp.LoadFromJson(option->second.asString()))
       return false;
 
@@ -13866,7 +13880,7 @@ bool CMusicDatabase::GetFilter(CDbUrl& musicUrl, Filter& filter, SortDescription
   option = options.find("filter");
   if (option != options.end())
   {
-    CSmartPlaylist xspFilter;
+    PLAYLIST::CSmartPlaylist xspFilter;
     if (!xspFilter.LoadFromJson(option->second.asString()))
       return false;
 
@@ -13946,4 +13960,57 @@ bool CMusicDatabase::GetResumeBookmarkForAudioBook(const CFileItem& item, int& b
 
   bookmark = m_pDS->fv(0).get_asInt();
   return true;
+}
+
+std::vector<std::string> CMusicDatabase::GetUsedImages(
+    const std::vector<std::string>& imagesToCheck) const
+{
+  try
+  {
+    if (!m_pDB || !m_pDS)
+      return imagesToCheck;
+
+    if (!imagesToCheck.size())
+      return {};
+
+    int artworkLevel = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(
+        CSettings::SETTING_MUSICLIBRARY_ARTWORKLEVEL);
+    if (artworkLevel == CSettings::MUSICLIBRARY_ARTWORK_LEVEL_NONE)
+    {
+      return {};
+    }
+
+    std::string sql = "SELECT DISTINCT url FROM art WHERE url IN (";
+    for (const auto& image : imagesToCheck)
+    {
+      sql += PrepareSQL("'%s',", image.c_str());
+    }
+    sql.pop_back(); // remove last ','
+    sql += ")";
+
+    // add arttype filters if set to "Basic"
+    if (artworkLevel == CSettings::MUSICLIBRARY_ARTWORK_LEVEL_BASIC)
+    {
+      sql += PrepareSQL(" AND (media_type = 'album' AND type = 'thumb' OR media_type = 'artist' "
+                        "AND type IN ('thumb', 'fanart'))");
+    }
+
+    if (!m_pDS->query(sql))
+      return {};
+
+    std::vector<std::string> result;
+    while (!m_pDS->eof())
+    {
+      result.push_back(m_pDS->fv(0).get_asString());
+      m_pDS->next();
+    }
+    m_pDS->close();
+
+    return result;
+  }
+  catch (...)
+  {
+    CLog::Log(LOGERROR, "{}, failed", __FUNCTION__);
+  }
+  return {};
 }

@@ -19,8 +19,10 @@
 #include "filesystem/MultiPathDirectory.h"
 #include "filesystem/SpecialProtocol.h"
 #include "filesystem/StackDirectory.h"
+#include "guilib/GUIComponent.h"
 #include "guilib/GUIKeyboardFactory.h"
 #include "guilib/LocalizeStrings.h"
+#include "imagefiles/ImageFileURL.h"
 #include "settings/MediaSourceSettings.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
@@ -144,7 +146,7 @@ bool CFileUtils::RemoteAccessAllowed(const std::string &strPath)
   // Check manually added sources (held in sources.xml)
   for (const std::string& sourceName : SourceNames)
   {
-    VECSOURCES* sources = CMediaSourceSettings::GetInstance().GetSources(sourceName);
+    std::vector<CMediaSource>* sources = CMediaSourceSettings::GetInstance().GetSources(sourceName);
     int sourceIndex = CUtil::GetMatchingSource(realPath, *sources, isSource);
     if (sourceIndex >= 0 && sourceIndex < static_cast<int>(sources->size()) &&
         sources->at(sourceIndex).m_iHasLock != LOCK_STATE_LOCKED &&
@@ -152,7 +154,7 @@ bool CFileUtils::RemoteAccessAllowed(const std::string &strPath)
       return true;
   }
   // Check auto-mounted sources
-  VECSOURCES sources;
+  std::vector<CMediaSource> sources;
   CServiceBroker::GetMediaManager().GetRemovableDrives(
       sources); // Sources returned always have m_allowsharing = true
   //! @todo Make sharing of auto-mounted sources user configurable
@@ -272,19 +274,12 @@ bool CFileUtils::CheckFileAccessAllowed(const std::string &filePath)
   auto kodiExtraWhitelist = CCompileInfo::GetWebserverExtraWhitelist();
   whitelist.insert(whitelist.end(), kodiExtraWhitelist.begin(), kodiExtraWhitelist.end());
 
-  // image urls come in the form of image://... sometimes with a / appended at the end
-  // and can be embedded in a music or video file image://music@...
-  // strip this off to get the real file path
   bool isImage = false;
   std::string decodePath = CURL::Decode(filePath);
-  size_t pos = decodePath.find("image://");
-  if (pos != std::string::npos)
+  if (URIUtils::IsProtocol(filePath, "image"))
   {
     isImage = true;
-    decodePath.erase(pos, 8);
-    URIUtils::RemoveSlashAtEnd(decodePath);
-    if (StringUtils::StartsWith(decodePath, "music@") || StringUtils::StartsWith(decodePath, "video@"))
-      decodePath.erase(pos, 6);
+    decodePath = IMAGE_FILES::CImageFileURL(filePath).GetTargetFile();
   }
 
   // check blacklist
@@ -358,4 +353,18 @@ bool CFileUtils::CheckFileAccessAllowed(const std::string &filePath)
 bool CFileUtils::Exists(const std::string& strFileName, bool bUseCache)
 {
   return CFile::Exists(strFileName, bUseCache);
+}
+
+bool CFileUtils::DeleteItemWithConfirm(const std::shared_ptr<CFileItem>& item)
+{
+  if (CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
+          CSettings::SETTING_FILELISTS_CONFIRMFILEDELETION))
+  {
+    CGUIComponent* gui = CServiceBroker::GetGUI();
+
+    if (!gui || !gui->ConfirmDelete(item->GetPath()))
+      return false;
+  }
+
+  return CFileUtils::DeleteItem(item);
 }

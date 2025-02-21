@@ -9,6 +9,7 @@
 #include "GUIDialogMusicInfo.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "GUIPassword.h"
 #include "GUIUserMessages.h"
 #include "ServiceBroker.h"
@@ -18,13 +19,17 @@
 #include "dialogs/GUIDialogFileBrowser.h"
 #include "dialogs/GUIDialogProgress.h"
 #include "filesystem/Directory.h"
+#include "filesystem/MusicDatabaseDirectory/DirectoryNode.h"
 #include "filesystem/MusicDatabaseDirectory/QueryParams.h"
 #include "guilib/GUIComponent.h"
 #include "guilib/GUIWindowManager.h"
 #include "guilib/LocalizeStrings.h"
-#include "input/Key.h"
+#include "imagefiles/ImageFileURL.h"
+#include "input/actions/Action.h"
+#include "input/actions/ActionIDs.h"
 #include "messaging/helpers/DialogOKHelper.h"
 #include "music/MusicDatabase.h"
+#include "music/MusicFileItemClassify.h"
 #include "music/MusicLibraryQueue.h"
 #include "music/MusicThumbLoader.h"
 #include "music/MusicUtils.h"
@@ -46,6 +51,7 @@
 using namespace XFILE;
 using namespace MUSIC_INFO;
 using namespace MUSICDATABASEDIRECTORY;
+using namespace KODI;
 using namespace KODI::MESSAGING;
 
 #define CONTROL_BTN_REFRESH      6
@@ -235,7 +241,8 @@ public:
       if (dlgProgress->IsCanceled())
         return false;
       CMusicInfoScanner scanner;
-      if (scanner.UpdateArtistInfo(m_artist, scraper, true, dlgProgress) != CInfoScanner::INFO_ADDED)
+      if (scanner.UpdateArtistInfo(m_artist, scraper, true, dlgProgress) !=
+          CInfoScanner::InfoRet::ADDED)
         return false;
       else
         // Tell info dialog, so can show message
@@ -265,7 +272,8 @@ public:
       if (dlgProgress->IsCanceled())
         return false;
       CMusicInfoScanner scanner;
-      if (scanner.UpdateAlbumInfo(m_album, scraper, true, GetProgressDialog()) != CInfoScanner::INFO_ADDED)
+      if (scanner.UpdateAlbumInfo(m_album, scraper, true, GetProgressDialog()) !=
+          CInfoScanner::InfoRet::ADDED)
         return false;
       else
         // Tell info dialog, so can show message
@@ -701,7 +709,8 @@ std::string CGUIDialogMusicInfo::GetContent()
     return "albums";
 }
 
-void CGUIDialogMusicInfo::AddItemPathToFileBrowserSources(VECSOURCES &sources, const CFileItem &item)
+void CGUIDialogMusicInfo::AddItemPathToFileBrowserSources(std::vector<CMediaSource>& sources,
+                                                          const CFileItem& item)
 {
   std::string itemDir;
   std::string artistFolder;
@@ -882,14 +891,11 @@ void CGUIDialogMusicInfo::OnGetArt()
     std::string thumb(item->GetArt("thumb"));
     if (thumb.empty())
       continue;
-    CURL url(CTextureUtils::UnwrapImageURL(thumb));
+    CURL url(IMAGE_FILES::CImageFileURL(thumb).GetTargetFile());
     // Skip images from remote sources (current thumb could be remote)
     if (url.IsProtocol("http") || url.IsProtocol("https"))
       continue;
     CServiceBroker::GetTextureCache()->ClearCachedImage(thumb);
-    // Remove any thumbnail of local image too (created when browsing files)
-    std::string thumbthumb(CTextureUtils::GetWrappedThumbURL(thumb));
-    CServiceBroker::GetTextureCache()->ClearCachedImage(thumbthumb);
   }
 
   // Show list of possible art for user selection
@@ -898,7 +904,7 @@ void CGUIDialogMusicInfo::OnGetArt()
   // never used by Kodi again, but there is no obvious way to clear these
   // thumbs from the cache automatically.
   std::string result;
-  VECSOURCES sources(*CMediaSourceSettings::GetInstance().GetSources("music"));
+  std::vector<CMediaSource> sources(*CMediaSourceSettings::GetInstance().GetSources("music"));
   CGUIDialogMusicInfo::AddItemPathToFileBrowserSources(sources, *m_item);
   CServiceBroker::GetMediaManager().GetLocalDrives(sources);
   if (CGUIDialogFileBrowser::ShowAndGetImage(items, sources, g_localizeStrings.Get(13511), result) &&
@@ -988,7 +994,7 @@ void CGUIDialogMusicInfo::ShowFor(CFileItem* pItem)
 
   // We have a folder album/artist info dialog only shown for db items
   // or for music video with artist/album in music library
-  if (pItem->IsMusicDb())
+  if (MUSIC::IsMusicDb(*pItem))
   {
     if (!pItem->HasMusicInfoTag() || pItem->GetMusicInfoTag()->GetDatabaseId() < 1)
     {

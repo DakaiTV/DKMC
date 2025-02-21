@@ -15,7 +15,6 @@
 #include "cores/VideoPlayer/Process/ProcessInfo.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
-#include "utils/log.h"
 
 #include <mutex>
 
@@ -130,6 +129,13 @@ void CVideoBufferPoolVTB::Return(int id)
 
 IHardwareDecoder* CDecoder::Create(CDVDStreamInfo &hint, CProcessInfo &processInfo, AVPixelFormat fmt)
 {
+#if defined(TARGET_DARWIN_EMBEDDED)
+  // force disable HW acceleration for live streams
+  // to avoid absent image issue on interlaced videos
+  if (processInfo.IsRealtimeStream())
+    return nullptr;
+#endif
+
   if (fmt == AV_PIX_FMT_VIDEOTOOLBOX && CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(CSettings::SETTING_VIDEOPLAYER_USEVTB))
     return new VTB::CDecoder(processInfo);
 
@@ -190,7 +196,7 @@ CDVDVideoCodec::VCReturn CDecoder::Decode(AVCodecContext* avctx, AVFrame* frame)
 
   if(frame)
   {
-    if (frame->interlaced_frame)
+    if (frame->flags & AV_FRAME_FLAG_INTERLACED)
       return CDVDVideoCodec::VC_FATAL;
 
     if (m_renderBuffer)

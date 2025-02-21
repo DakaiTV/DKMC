@@ -160,11 +160,13 @@ protected:
   void DrawTextInternal(CGraphicContext& context,
                         float x,
                         float y,
-                        const std::vector<UTILS::COLOR::Color>& colors,
+                        const std::vector<KODI::UTILS::COLOR::Color>& colors,
                         const vecText& text,
                         uint32_t alignment,
                         float maxPixelWidth,
-                        bool scrolling);
+                        bool scrolling,
+                        float dx = 0.0f,
+                        float dy = 0.0f);
 
   float m_height{0.0f};
 
@@ -175,7 +177,7 @@ protected:
                        float posX,
                        float posY,
                        const Character* ch,
-                       UTILS::COLOR::Color color,
+                       KODI::UTILS::COLOR::Color color,
                        bool roundX,
                        std::vector<SVertex>& vertices);
   void ClearCharacterCache();
@@ -206,7 +208,7 @@ protected:
   unsigned int GetTextureLineHeight() const;
   unsigned int GetMaxFontHeight() const;
 
-  UTILS::COLOR::Color m_color{UTILS::COLOR::NONE};
+  KODI::UTILS::COLOR::Color m_color{KODI::UTILS::COLOR::NONE};
 
   std::vector<Character> m_char; // our characters
 
@@ -238,16 +240,22 @@ protected:
     float m_translateX;
     float m_translateY;
     float m_translateZ;
+    float m_offsetX; // skews the "raw" mesh before applying UI matrix (useful for scrolling)
+    float m_offsetY;
     const CVertexBuffer* m_vertexBuffer;
     CRect m_clip;
     CTranslatedVertices(float translateX,
                         float translateY,
                         float translateZ,
                         const CVertexBuffer* vertexBuffer,
-                        const CRect& clip)
+                        const CRect& clip,
+                        float offsetX = 0.0f,
+                        float offsetY = 0.0f)
       : m_translateX(translateX),
         m_translateY(translateY),
         m_translateZ(translateZ),
+        m_offsetX(offsetX),
+        m_offsetY(offsetY),
         m_vertexBuffer(vertexBuffer),
         m_clip(clip)
     {

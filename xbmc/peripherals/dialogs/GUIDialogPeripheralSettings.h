@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2018 Team Kodi
+ *  Copyright (C) 2005-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "games/controllers/ControllerTypes.h"
 #include "settings/dialogs/GUIDialogSettingsManualBase.h"
 
 class CFileItem;
@@ -16,6 +17,9 @@ namespace PERIPHERALS
 {
 class CPeripherals;
 
+/*!
+ * \ingroup peripherals
+ */
 class CGUIDialogPeripheralSettings : public CGUIDialogSettingsManualBase
 {
 public:
@@ -24,6 +28,9 @@ public:
 
   // specializations of CGUIControl
   bool OnMessage(CGUIMessage& message) override;
+
+  // Implementation of CGUIWindow
+  void OnDeinitWindow(int nextWindowID) override;
 
   void RegisterPeripheralManager(CPeripherals& manager);
   void UnregisterPeripheralManager();
@@ -42,6 +49,8 @@ protected:
 
   // specialization of CGUIDialogSettingsManualBase
   void InitializeSettings() override;
+
+  void UpdateIcon(const KODI::GAME::ControllerPtr& controller);
 
   // Dialog state
   CPeripherals* m_manager{nullptr};

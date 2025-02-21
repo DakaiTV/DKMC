@@ -9,6 +9,7 @@
 #include "addons/kodi-dev-kit/include/kodi/gui/Window.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "GUITranslator.h"
 #include "General.h"
 #include "ServiceBroker.h"
@@ -23,7 +24,8 @@
 #include "guilib/GUIRenderingControl.h"
 #include "guilib/GUIWindowManager.h"
 #include "guilib/TextureManager.h"
-#include "input/Key.h"
+#include "input/actions/Action.h"
+#include "input/actions/ActionIDs.h"
 #include "messaging/ApplicationMessenger.h"
 #include "utils/FileUtils.h"
 #include "utils/StringUtils.h"

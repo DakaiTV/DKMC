@@ -18,12 +18,9 @@
 #include "filesystem/File.h"
 #include "guilib/GUIFontManager.h"
 #include "guilib/StereoscopicsManager.h"
-#include "input/KeyboardLayoutManager.h"
+#include "input/keyboard/KeyboardLayoutManager.h"
 
 #include <mutex>
-#if defined(TARGET_POSIX)
-#include "platform/posix/PosixTimezone.h"
-#endif // defined(TARGET_POSIX)
 #include "network/upnp/UPnPSettings.h"
 #include "network/WakeOnAccess.h"
 #if defined(TARGET_DARWIN_OSX) and defined(HAS_XBMCHELPER)
@@ -43,6 +40,7 @@
 #include "settings/DisplaySettings.h"
 #include "settings/MediaSettings.h"
 #include "settings/MediaSourceSettings.h"
+#include "settings/PlayerSettings.h"
 #include "settings/ServicesSettings.h"
 #include "settings/SettingConditions.h"
 #include "settings/SettingsComponent.h"
@@ -327,31 +325,9 @@ void CSettings::InitializeControls()
   GetSettingsManager()->RegisterSettingControl("colorbutton", this);
 }
 
-void CSettings::InitializeVisibility()
-{
-  // hide some settings if necessary
-#if defined(TARGET_DARWIN_EMBEDDED)
-  std::shared_ptr<CSettingString> timezonecountry = std::static_pointer_cast<CSettingString>(GetSettingsManager()->GetSetting(CSettings::SETTING_LOCALE_TIMEZONECOUNTRY));
-  std::shared_ptr<CSettingString> timezone = std::static_pointer_cast<CSettingString>(GetSettingsManager()->GetSetting(CSettings::SETTING_LOCALE_TIMEZONE));
-
-  timezonecountry->SetRequirementsMet(false);
-  timezone->SetRequirementsMet(false);
-#endif
-}
-
 void CSettings::InitializeDefaults()
 {
   // set some default values if necessary
-#if defined(TARGET_POSIX)
-  std::shared_ptr<CSettingString> timezonecountry = std::static_pointer_cast<CSettingString>(GetSettingsManager()->GetSetting(CSettings::SETTING_LOCALE_TIMEZONECOUNTRY));
-  std::shared_ptr<CSettingString> timezone = std::static_pointer_cast<CSettingString>(GetSettingsManager()->GetSetting(CSettings::SETTING_LOCALE_TIMEZONE));
-
-  if (timezonecountry->IsVisible())
-    timezonecountry->SetDefault(g_timezone.GetCountryByTimezone(g_timezone.GetOSConfiguredTimezone()));
-  if (timezone->IsVisible())
-    timezone->SetDefault(g_timezone.GetOSConfiguredTimezone());
-#endif // defined(TARGET_POSIX)
-
 #if defined(TARGET_WINDOWS)
   // We prefer a fake fullscreen mode (window covering the screen rather than dedicated fullscreen)
   // as it works nicer with switching to other applications. However on some systems vsync is broken
@@ -432,11 +408,10 @@ void CSettings::InitializeOptionFillers()
   GetSettingsManager()->RegisterSettingOptionsFiller("skincolors", ADDON::CSkinInfo::SettingOptionsSkinColorsFiller);
   GetSettingsManager()->RegisterSettingOptionsFiller("skinfonts", ADDON::CSkinInfo::SettingOptionsSkinFontsFiller);
   GetSettingsManager()->RegisterSettingOptionsFiller("skinthemes", ADDON::CSkinInfo::SettingOptionsSkinThemesFiller);
-#ifdef TARGET_LINUX
-  GetSettingsManager()->RegisterSettingOptionsFiller("timezonecountries", CPosixTimezone::SettingOptionsTimezoneCountriesFiller);
-  GetSettingsManager()->RegisterSettingOptionsFiller("timezones", CPosixTimezone::SettingOptionsTimezonesFiller);
-#endif
-  GetSettingsManager()->RegisterSettingOptionsFiller("keyboardlayouts", CKeyboardLayoutManager::SettingOptionsKeyboardLayoutsFiller);
+  GetSettingsManager()->RegisterSettingOptionsFiller(
+      "keyboardlayouts", KEYBOARD::CKeyboardLayoutManager::SettingOptionsKeyboardLayoutsFiller);
+  GetSettingsManager()->RegisterSettingOptionsFiller(
+      "smbversions", CServicesSettings::SettingOptionsSmbVersionsFiller);
   GetSettingsManager()->RegisterSettingOptionsFiller(
       "filechunksizes", CServicesSettings::SettingOptionsChunkSizesFiller);
   GetSettingsManager()->RegisterSettingOptionsFiller(
@@ -447,6 +422,10 @@ void CSettings::InitializeOptionFillers()
       "filecachereadfactors", CServicesSettings::SettingOptionsReadFactorsFiller);
   GetSettingsManager()->RegisterSettingOptionsFiller(
       "filecachechunksizes", CServicesSettings::SettingOptionsCacheChunkSizesFiller);
+  GetSettingsManager()->RegisterSettingOptionsFiller(
+      "playerqueuetimesizes", CPlayerSettings::SettingOptionsQueueTimeSizesFiller);
+  GetSettingsManager()->RegisterSettingOptionsFiller(
+      "playerqueuedatasizes", CPlayerSettings::SettingOptionsQueueDataSizesFiller);
 }
 
 void CSettings::UninitializeOptionFillers()
@@ -493,11 +472,14 @@ void CSettings::UninitializeOptionFillers()
 #endif // defined(TARGET_LINUX)
   GetSettingsManager()->UnregisterSettingOptionsFiller("verticalsyncs");
   GetSettingsManager()->UnregisterSettingOptionsFiller("keyboardlayouts");
+  GetSettingsManager()->UnregisterSettingOptionsFiller("smbversions");
   GetSettingsManager()->UnregisterSettingOptionsFiller("filechunksizes");
   GetSettingsManager()->UnregisterSettingOptionsFiller("filecachebuffermodes");
   GetSettingsManager()->UnregisterSettingOptionsFiller("filecachememorysizes");
   GetSettingsManager()->UnregisterSettingOptionsFiller("filecachereadfactors");
   GetSettingsManager()->UnregisterSettingOptionsFiller("filecachechunksizes");
+  GetSettingsManager()->UnregisterSettingOptionsFiller("playerqueuetimesizes");
+  GetSettingsManager()->UnregisterSettingOptionsFiller("playerqueuedatasizes");
 }
 
 void CSettings::InitializeConditions()
@@ -531,9 +513,6 @@ void CSettings::InitializeISettingsHandlers()
   GetSettingsManager()->RegisterSettingsHandler(&CWakeOnAccess::GetInstance());
   GetSettingsManager()->RegisterSettingsHandler(&CRssManager::GetInstance());
   GetSettingsManager()->RegisterSettingsHandler(&g_langInfo);
-#if defined(TARGET_LINUX) && !defined(TARGET_ANDROID) && !defined(__UCLIBC__)
-  GetSettingsManager()->RegisterSettingsHandler(&g_timezone);
-#endif
   GetSettingsManager()->RegisterSettingsHandler(&CMediaSettings::GetInstance());
 }
 
@@ -541,9 +520,6 @@ void CSettings::UninitializeISettingsHandlers()
 {
   // unregister ISettingsHandler implementations
   GetSettingsManager()->UnregisterSettingsHandler(&CMediaSettings::GetInstance());
-#if defined(TARGET_LINUX)
-  GetSettingsManager()->UnregisterSettingsHandler(&g_timezone);
-#endif // defined(TARGET_LINUX)
   GetSettingsManager()->UnregisterSettingsHandler(&g_langInfo);
   GetSettingsManager()->UnregisterSettingsHandler(&CRssManager::GetInstance());
   GetSettingsManager()->UnregisterSettingsHandler(&CWakeOnAccess::GetInstance());
@@ -587,6 +563,7 @@ void CSettings::InitializeISettingCallbacks()
   settingSet.insert(CSettings::SETTING_VIDEOLIBRARY_IMPORT);
   settingSet.insert(CSettings::SETTING_VIDEOLIBRARY_EXPORT);
   settingSet.insert(CSettings::SETTING_VIDEOLIBRARY_SHOWUNWATCHEDPLOTS);
+  settingSet.insert(CSettings::SETTING_MAINTENANCE_CLEANIMAGECACHE);
   GetSettingsManager()->RegisterCallback(&CMediaSettings::GetInstance(), settingSet);
 
   settingSet.clear();
@@ -627,13 +604,6 @@ void CSettings::InitializeISettingCallbacks()
   settingSet.clear();
   settingSet.insert(CSettings::SETTING_LOOKANDFEEL_RSSEDIT);
   GetSettingsManager()->RegisterCallback(&CRssManager::GetInstance(), settingSet);
-
-#if defined(TARGET_LINUX)
-  settingSet.clear();
-  settingSet.insert(CSettings::SETTING_LOCALE_TIMEZONE);
-  settingSet.insert(CSettings::SETTING_LOCALE_TIMEZONECOUNTRY);
-  GetSettingsManager()->RegisterCallback(&g_timezone, settingSet);
-#endif
 
 #if defined(TARGET_DARWIN_OSX) and defined(HAS_XBMCHELPER)
   settingSet.clear();
@@ -677,9 +647,6 @@ void CSettings::UninitializeISettingCallbacks()
   GetSettingsManager()->UnregisterCallback(&g_langInfo);
   GetSettingsManager()->UnregisterCallback(&g_passwordManager);
   GetSettingsManager()->UnregisterCallback(&CRssManager::GetInstance());
-#if defined(TARGET_LINUX)
-  GetSettingsManager()->UnregisterCallback(&g_timezone);
-#endif // defined(TARGET_LINUX)
 #if defined(TARGET_DARWIN_OSX) and defined(HAS_XBMCHELPER)
   GetSettingsManager()->UnregisterCallback(&XBMCHelper::GetInstance());
 #endif

@@ -100,8 +100,8 @@ namespace XBMCAddon
       if (!exec.IsValid())
         return;
 
-      const std::string execute = exec.GetFunction();
-      const std::vector<std::string> params = exec.GetParams();
+      const std::string& execute = exec.GetFunction();
+      const std::vector<std::string>& params = exec.GetParams();
 
       if (StringUtils::EqualsNoCase(execute, "activatewindow") ||
           StringUtils::EqualsNoCase(execute, "closedialog"))
@@ -457,8 +457,8 @@ namespace XBMCAddon
       }
       else if (StringUtils::CompareNoCase(id, "meridiem") == 0)
       {
-        result = StringUtils::Format("{}/{}", g_langInfo.GetMeridiemSymbol(MeridiemSymbolAM),
-                                     g_langInfo.GetMeridiemSymbol(MeridiemSymbolPM));
+        result = StringUtils::Format("{}/{}", g_langInfo.GetMeridiemSymbol(MeridiemSymbol::AM),
+                                     g_langInfo.GetMeridiemSymbol(MeridiemSymbol::PM));
       }
 #ifdef TARGET_WINDOWS
       StringUtils::Replace(result, "%-", "%#"); //Convert to Windows format if required.
@@ -578,11 +578,11 @@ namespace XBMCAddon
 
     int getPLAYLIST_MUSIC()
     {
-      return PLAYLIST::TYPE_MUSIC;
+      return static_cast<int>(PLAYLIST::Id::TYPE_MUSIC);
     }
     int getPLAYLIST_VIDEO()
     {
-      return PLAYLIST::TYPE_VIDEO;
+      return static_cast<int>(PLAYLIST::Id::TYPE_VIDEO);
     }
     int getTRAY_OPEN()
     {

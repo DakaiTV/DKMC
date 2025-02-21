@@ -15,13 +15,13 @@
 #endif
 
 #include "BitstreamConverter.h"
-#include "BitstreamReader.h"
-#include "BitstreamWriter.h"
+#include "HevcSei.h"
 
 #include <algorithm>
 
 extern "C"
 {
+#include <libavutil/intreadwrite.h>
 #ifdef HAVE_LIBDOVI
 #include <libdovi/rpu_parser.h>
 #endif
@@ -356,6 +356,8 @@ CBitstreamConverter::CBitstreamConverter()
   m_sps_pps_context.sps_pps_data = NULL;
   m_start_decode = true;
   m_convert_dovi = false;
+  m_removeDovi = false;
+  m_removeHdr10Plus = false;
 }
 
 CBitstreamConverter::~CBitstreamConverter()
@@ -623,7 +625,7 @@ bool CBitstreamConverter::Convert(uint8_t *pData, int iSize)
           uint8_t *nal_start = pData;
           while (nal_start < end)
           {
-            nal_size = BS_RB24(nal_start);
+            nal_size = AV_RB24(nal_start);
             avio_wb32(pb, nal_size);
             nal_start += 3;
             avio_write(pb, nal_start, nal_size);
@@ -913,6 +915,8 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData, int iSize, uint8_t **
   const DoviData* rpu_data = NULL;
 #endif
 
+  std::vector<uint8_t> finalPrefixSeiNalu;
+
   switch (m_codec)
   {
     case AV_CODEC_ID_H264:
@@ -970,13 +974,38 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData, int iSize, uint8_t **
       const uint8_t* buf_to_write = buf;
       int32_t final_nal_size = nal_size;
 
+      bool containsHdr10Plus{false};
+
       if (!m_sps_pps_context.first_idr && IsSlice(unit_type))
       {
           m_sps_pps_context.first_idr = 1;
           m_sps_pps_context.idr_sps_pps_seen = 0;
       }
 
-      if (m_convert_dovi)
+      if (m_removeDovi && (unit_type == HEVC_NAL_UNSPEC62 || unit_type == HEVC_NAL_UNSPEC63))
+        write_buf = false;
+
+      // Try removing HDR10+ only if the NAL is big enough, optimization
+      if (m_removeHdr10Plus && unit_type == HEVC_NAL_SEI_PREFIX && nal_size >= 7)
+      {
+        std::tie(containsHdr10Plus, finalPrefixSeiNalu) =
+            CHevcSei::RemoveHdr10PlusFromSeiNalu(buf, nal_size);
+
+        if (containsHdr10Plus)
+        {
+          if (!finalPrefixSeiNalu.empty())
+          {
+            buf_to_write = finalPrefixSeiNalu.data();
+            final_nal_size = finalPrefixSeiNalu.size();
+          }
+          else
+          {
+            write_buf = false;
+          }
+        }
+      }
+
+      if (write_buf && m_convert_dovi)
       {
         if (unit_type == HEVC_NAL_UNSPEC62)
         {
@@ -1008,6 +1037,9 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData, int iSize, uint8_t **
         rpu_data = NULL;
       }
 #endif
+
+      if (containsHdr10Plus && !finalPrefixSeiNalu.empty())
+        finalPrefixSeiNalu.clear();
     }
 
     buf += nal_size;
@@ -1054,7 +1086,7 @@ void CBitstreamConverter::BitstreamAllocAndCopy(uint8_t** poutbuf,
   memcpy(*poutbuf + sps_pps_size + nal_header_size + offset, in, in_size);
   if (!offset)
   {
-    BS_WB32(*poutbuf + sps_pps_size, 1);
+    AV_WB32(*poutbuf + sps_pps_size, 1);
   }
   else if (nal_header_size == 4)
   {
@@ -1114,7 +1146,7 @@ int CBitstreamConverter::isom_write_avcc(AVIOContext *pb, const uint8_t *data, i
   if (len > 6)
   {
     /* check for h264 start code */
-    if (BS_RB32(data) == 0x00000001 || BS_RB24(data) == 0x000001)
+    if (AV_RB32(data) == 0x00000001 || AV_RB24(data) == 0x000001)
     {
       uint8_t *buf=NULL, *end, *start;
       uint32_t sps_size=0, pps_size=0;
@@ -1131,7 +1163,7 @@ int CBitstreamConverter::isom_write_avcc(AVIOContext *pb, const uint8_t *data, i
       {
         uint32_t size;
         uint8_t  nal_type;
-        size = std::min<uint32_t>(BS_RB32(buf), end - buf - 4);
+        size = std::min<uint32_t>(AV_RB32(buf), end - buf - 4);
         buf += 4;
         nal_type = buf[0] & 0x1f;
         if (nal_type == 7) /* SPS */

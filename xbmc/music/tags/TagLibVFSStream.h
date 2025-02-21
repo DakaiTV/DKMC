@@ -10,6 +10,7 @@
 
 #include "filesystem/File.h"
 
+#include <taglib/taglib.h>
 #include <taglib/tiostream.h>
 
 namespace MUSIC_INFO
@@ -36,7 +37,11 @@ namespace MUSIC_INFO
     /*!
      * Reads a block of size \a length at the current get pointer.
      */
+#if (TAGLIB_MAJOR_VERSION >= 2)
+    TagLib::ByteVector readBlock(size_t length) override;
+#else
     TagLib::ByteVector readBlock(TagLib::ulong length) override;
+#endif
 
     /*!
      * Attempts to write the block \a data at the current get pointer.  If the
@@ -56,7 +61,13 @@ namespace MUSIC_INFO
      * \note This method is slow since it requires rewriting all of the file
      * after the insertion point.
      */
+#if (TAGLIB_MAJOR_VERSION >= 2)
+    void insert(const TagLib::ByteVector& data,
+                TagLib::offset_t start = 0,
+                size_t replace = 0) override;
+#else
     void insert(const TagLib::ByteVector &data, TagLib::ulong start = 0, TagLib::ulong replace = 0) override;
+#endif
 
     /*!
      * Removes a block of the file starting a \a start and continuing for
@@ -65,7 +76,11 @@ namespace MUSIC_INFO
      * \note This method is slow since it involves rewriting all of the file
      * after the removed portion.
      */
+#if (TAGLIB_MAJOR_VERSION >= 2)
+    void removeBlock(TagLib::offset_t start = 0, size_t length = 0) override;
+#else
     void removeBlock(TagLib::ulong start = 0, TagLib::ulong length = 0) override;
+#endif
 
     /*!
      * Returns true if the file is read only (or if the file can not be opened).
@@ -84,7 +99,11 @@ namespace MUSIC_INFO
      *
      * \see Position
      */
+#if (TAGLIB_MAJOR_VERSION >= 2)
+    void seek(TagLib::offset_t offset, TagLib::IOStream::Position p = Beginning) override;
+#else
     void seek(long offset, TagLib::IOStream::Position p = Beginning) override;
+#endif
 
     /*!
      * Reset the end-of-file and error flags on the file.
@@ -94,23 +113,39 @@ namespace MUSIC_INFO
     /*!
      * Returns the current offset within the file.
      */
+#if (TAGLIB_MAJOR_VERSION >= 2)
+    TagLib::offset_t tell() const override;
+#else
     long tell() const override;
+#endif
 
     /*!
      * Returns the length of the file.
      */
+#if (TAGLIB_MAJOR_VERSION >= 2)
+    TagLib::offset_t length() override;
+#else
     long length() override;
+#endif
 
     /*!
      * Truncates the file to a \a length.
      */
+#if (TAGLIB_MAJOR_VERSION >= 2)
+    void truncate(TagLib::offset_t length) override;
+#else
     void truncate(long length) override;
+#endif
 
   protected:
     /*!
      * Returns the buffer size that is used for internal buffering.
      */
+#if (TAGLIB_MAJOR_VERSION >= 2)
+    static unsigned int bufferSize() { return 1024; }
+#else
     static TagLib::uint bufferSize() { return 1024; }
+#endif
 
   private:
     std::string   m_strFileName;

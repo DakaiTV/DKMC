@@ -9,10 +9,12 @@
 #include "GUIViewStatePVR.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "pvr/PVRManager.h"
 #include "pvr/addons/PVRClients.h"
 #include "pvr/epg/EpgSearchPath.h"
+#include "pvr/providers/PVRProvidersPath.h"
 #include "pvr/recordings/PVRRecordingsPath.h"
 #include "pvr/timers/PVRTimersPath.h"
 #include "settings/AdvancedSettings.h"
@@ -33,6 +35,9 @@ CGUIViewStateWindowPVRChannels::CGUIViewStateWindowPVRChannels(const int windowI
   AddSortMethod(
       SortByLastPlayed, 568, // "Last played"
       LABEL_MASKS("%L", "%p", "%L", "%p")); // Filename, LastPlayed | Foldername, LastPlayed
+  AddSortMethod(SortByDateAdded, 570, // "Date added"
+                LABEL_MASKS("%L", "%a", "%L", "%a"), // Filename, DateAdded | Foldername, DateAdded
+                SortAttributeNone, SortOrderDescending);
   AddSortMethod(SortByClientChannelOrder, 19315, // "Backend number"
                 LABEL_MASKS("%L", "", "%L", "")); // Filename, empty | Foldername, empty
   AddSortMethod(SortByProvider, 19348, // "Provider"
@@ -106,6 +111,9 @@ CGUIViewStateWindowPVRGuide::CGUIViewStateWindowPVRGuide(const int windowId,
   AddSortMethod(
       SortByLastPlayed, SortAttributeIgnoreLabel, 568, // "Last played"
       LABEL_MASKS("%L", "%p", "%L", "%p")); // Filename, LastPlayed | Foldername, LastPlayed
+  AddSortMethod(SortByDateAdded, 570, // "Date added"
+                LABEL_MASKS("%L", "%a", "%L", "%a"), // Filename, DateAdded | Foldername, DateAdded
+                SortAttributeNone, SortOrderDescending);
   AddSortMethod(SortByClientChannelOrder, 19315, // "Backend number"
                 LABEL_MASKS("%L", "", "%L", "")); // Filename, empty | Foldername, empty
   AddSortMethod(SortByProvider, 19348, // "Provider"
@@ -179,4 +187,38 @@ bool CGUIViewStateWindowPVRSearch::HideParentDirItems()
 {
   return (CGUIViewState::HideParentDirItems() ||
           CPVREpgSearchPath(m_items.GetPath()).IsSearchRoot());
+}
+
+CGUIViewStateWindowPVRProviders::CGUIViewStateWindowPVRProviders(const int windowId,
+                                                                 const CFileItemList& items)
+  : CGUIViewStatePVR(windowId, items)
+{
+  AddSortMethod(SortByLabel, 551, // "Name"
+                LABEL_MASKS("%L", "", "%L", "")); // Filename, empty | Foldername, empty
+
+  if (CPVRProvidersPath(m_items.GetPath()).IsProvidersRoot())
+  {
+    AddSortMethod(SortByProvider, 19348, // "Provider"
+                  LABEL_MASKS("%L", "", "%L", "")); // Filename, empty | Foldername, empty
+
+    SetSortMethod(SortByProvider, SortOrderAscending);
+  }
+  else
+  {
+    SetSortMethod(SortByLabel, SortOrderAscending);
+  }
+
+  LoadViewState(m_items.GetPath(), m_windowId);
+}
+
+void CGUIViewStateWindowPVRProviders::SaveViewState()
+{
+  SaveViewToDb(m_items.GetPath(), m_windowId,
+               CViewStateSettings::GetInstance().Get("pvrproviders"));
+}
+
+bool CGUIViewStateWindowPVRProviders::HideParentDirItems()
+{
+  return (CGUIViewState::HideParentDirItems() ||
+          CPVRProvidersPath(m_items.GetPath()).IsProvidersRoot());
 }

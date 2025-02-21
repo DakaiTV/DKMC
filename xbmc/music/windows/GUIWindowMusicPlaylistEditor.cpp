@@ -10,15 +10,18 @@
 
 #include "Autorun.h"
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "GUIUserMessages.h"
 #include "ServiceBroker.h"
+#include "URL.h"
 #include "Util.h"
 #include "dialogs/GUIDialogFileBrowser.h"
 #include "dialogs/GUIDialogKaiToast.h"
 #include "filesystem/PlaylistFileDirectory.h"
 #include "guilib/GUIKeyboardFactory.h"
 #include "guilib/LocalizeStrings.h"
-#include "input/Key.h"
+#include "input/actions/Action.h"
+#include "input/actions/ActionIDs.h"
 #include "music/MusicUtils.h"
 #include "playlists/PlayListM3U.h"
 #include "settings/Settings.h"
@@ -36,6 +39,8 @@
 #define CONTROL_LIST              50
 #define CONTROL_PLAYLIST         100
 #define CONTROL_LABEL_PLAYLIST   101
+
+using namespace KODI;
 
 CGUIWindowMusicPlaylistEditor::CGUIWindowMusicPlaylistEditor(void)
     : CGUIWindowMusicBase(WINDOW_MUSIC_PLAYLIST_EDITOR, "MyMusicPlaylistEditor.xml")
@@ -81,7 +86,7 @@ bool CGUIWindowMusicPlaylistEditor::OnClick(int iItem, const std::string& player
   CFileItemPtr item = m_vecItems->Get(iItem);
 
   // Expand .m3u files in sources list when clicked on regardless of <playlistasfolders>
-  if (item->IsFileFolder(EFILEFOLDER_MASK_ONBROWSE))
+  if (item->IsFileFolder(FileFolderType::MASK_ONBROWSE))
     return Update(item->GetPath());
   // Avoid playback (default click behaviour) of media files
   if (!item->m_bIsFolder)
@@ -409,7 +414,7 @@ void CGUIWindowMusicPlaylistEditor::OnSourcesContext()
 
   CFileItemPtr item = GetCurrentListItem();
   CContextButtons buttons;
-  if (item->IsFileFolder(EFILEFOLDER_MASK_ONBROWSE))
+  if (item->IsFileFolder(FileFolderType::MASK_ONBROWSE))
     buttons.Add(CONTEXT_BUTTON_BROWSE_INTO, 37015); //Browse into
   if (item && !item->IsParentFolder() && !m_vecItems->IsVirtualDirectoryRoot())
     buttons.Add(CONTEXT_BUTTON_QUEUE_ITEM, 15019); // Add (to playlist)

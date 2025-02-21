@@ -1,9 +1,11 @@
-# Minimum SDK version we support
+# Minimum SDK version required to build
+set(VS_MINIMUM_BUILD_SDK_VERSION 10.0.22621.0)
+# Minimum OS version to run the app
 set(VS_MINIMUM_SDK_VERSION 10.0.18362.0)
 
-if(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION VERSION_LESS VS_MINIMUM_SDK_VERSION)
+if(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION VERSION_LESS VS_MINIMUM_BUILD_SDK_VERSION)
   message(FATAL_ERROR "Detected Windows SDK version is ${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}.\n"
-    "Windows SDK ${VS_MINIMUM_SDK_VERSION} or higher is required.\n"
+    "Windows SDK ${VS_MINIMUM_BUILD_SDK_VERSION} or higher is required.\n"
     "INFO: Windows SDKs can be installed from the Visual Studio installer.")
 endif()
 
@@ -54,7 +56,7 @@ set(DEPS_FOLDER_RELATIVE project/BuildDependencies)
 # ToDo: currently host build tools are hardcoded to win32
 # If we ever allow package.native other than 0_package.native-win32.list we will want to
 # adapt this based on host
-set(NATIVEPREFIX ${CMAKE_SOURCE_DIR}/${DEPS_FOLDER_RELATIVE}/win32)
+set(NATIVEPREFIX ${CMAKE_SOURCE_DIR}/${DEPS_FOLDER_RELATIVE}/tools)
 set(DEPENDS_PATH ${CMAKE_SOURCE_DIR}/${DEPS_FOLDER_RELATIVE}/win10-${ARCH})
 set(MINGW_LIBS_DIR ${CMAKE_SOURCE_DIR}/${DEPS_FOLDER_RELATIVE}/mingwlibs/win10-${ARCH})
 
@@ -67,6 +69,9 @@ if(NOT TARBALL_DIR)
 endif()
 
 # -------- Compiler options ---------
+
+# Allow to use UTF-8 strings in the source code, disable MSVC charset conversion
+add_options(CXX ALL_BUILDS "/utf-8")
 
 add_options(CXX ALL_BUILDS "/wd\"4996\"")
 add_options(CXX ALL_BUILDS "/wd\"4146\"")

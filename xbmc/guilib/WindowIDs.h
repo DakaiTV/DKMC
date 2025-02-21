@@ -134,7 +134,9 @@
 #define WINDOW_RADIO_SEARCH               (WINDOW_PVR_ID_START+9)
 #define WINDOW_TV_TIMER_RULES             (WINDOW_PVR_ID_START+10)
 #define WINDOW_RADIO_TIMER_RULES          (WINDOW_PVR_ID_START+11)
-#define WINDOW_PVR_ID_END                 WINDOW_RADIO_TIMER_RULES
+#define WINDOW_TV_PROVIDERS (WINDOW_PVR_ID_START + 12)
+#define WINDOW_RADIO_PROVIDERS (WINDOW_PVR_ID_START + 13)
+#define WINDOW_PVR_ID_END WINDOW_RADIO_PROVIDERS
 
 // virtual windows for PVR specific keymap bindings in fullscreen playback
 #define WINDOW_FULLSCREEN_LIVETV          10800
@@ -164,12 +166,24 @@
 #define WINDOW_DIALOG_MUSIC_INFO          12001
 #define WINDOW_DIALOG_OK                  12002
 #define WINDOW_DIALOG_VIDEO_INFO          12003
-#define WINDOW_DIALOG_VIDEO_VERSION 12004
+#define WINDOW_DIALOG_MANAGE_VIDEO_VERSIONS 12004
 #define WINDOW_FULLSCREEN_VIDEO           12005
 #define WINDOW_VISUALISATION              12006
 #define WINDOW_SLIDESHOW                  12007
 #define WINDOW_DIALOG_COLOR_PICKER 12008
-#define WINDOW_DIALOG_VIDEO_VERSION_SELECT 12009
+
+//! @todo Numbers given here must match the ids given in strings.po for a translatable string for
+//! the window. 12009 to 12014 are already taken for something else in strings.po (accidentally).
+//! So, do not define windows with ids 12009 to 12014, unless strings.po got fixed.
+
+#define WINDOW_DIALOG_SELECT_VIDEO_VERSION 12015
+#define WINDOW_DIALOG_SELECT_VIDEO_EXTRA 12016
+#define WINDOW_DIALOG_MANAGE_VIDEO_EXTRAS 12017
+
+#define WINDOW_DIALOG_SELECT_VIDEO_STREAM 12300
+#define WINDOW_DIALOG_SELECT_AUDIO_STREAM 12301
+#define WINDOW_DIALOG_SELECT_SUBTITLE_STREAM 12302
+
 #define WINDOW_WEATHER                    12600
 #define WINDOW_SCREENSAVER                12900
 #define WINDOW_DIALOG_VIDEO_OSD           12901

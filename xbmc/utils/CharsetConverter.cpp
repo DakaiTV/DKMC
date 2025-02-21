@@ -93,8 +93,8 @@ public:
 
   void Reset(void);
   void ReinitTo(const std::string& sourceCharset, const std::string& targetCharset, unsigned int targetSingleCharMaxLen = 1);
-  std::string GetSourceCharset(void) const  { return m_sourceCharset; }
-  std::string GetTargetCharset(void) const  { return m_targetCharset; }
+  const std::string& GetSourceCharset() const { return m_sourceCharset; }
+  const std::string& GetTargetCharset() const { return m_targetCharset; }
   unsigned int GetTargetSingleCharMaxLen(void) const  { return m_targetSingleCharMaxLen; }
 
 private:
@@ -462,7 +462,7 @@ bool CCharsetConverter::CInnerConverter::convert(iconv_t type, int multiplier, c
   const typename OUTPUT::size_type sizeInChars = (typename OUTPUT::size_type) (outBufSize - outBytesAvail) / sizeof(typename OUTPUT::value_type);
   typename OUTPUT::const_pointer strPtr = (typename OUTPUT::const_pointer) outBuf;
   /* Make sure that all buffer is assigned and string is stopped at end of buffer */
-  if (strPtr[sizeInChars-1] == 0 && strSource[strSource.length()-1] != 0)
+  if (sizeInChars > 0 && strPtr[sizeInChars - 1] == 0 && strSource[strSource.length() - 1] != 0)
     strDest.assign(strPtr, sizeInChars-1);
   else
     strDest.assign(strPtr, sizeInChars);

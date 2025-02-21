@@ -2,12 +2,13 @@ apply plugin: 'com.android.application'
 
 android {
     namespace '@APP_PACKAGE@'
-    compileSdkVersion @TARGET_SDK@
+    compileSdk @TARGET_SDK@
     ndkPath "@NDKROOT@"
+    ndkVersion "@NDKVERSION@"
     defaultConfig {
         applicationId "@APP_PACKAGE@"
-        minSdkVersion @TARGET_MINSDK@
-        targetSdkVersion @TARGET_SDK@
+        minSdk @TARGET_MINSDK@
+        targetSdk @TARGET_SDK@
         versionCode @APP_VERSION_CODE_ANDROID@
         versionName "@APP_VERSION@"
     }
@@ -21,26 +22,21 @@ android {
             enableV2Signing true
             enableV3Signing true
         }
-
     }
     buildTypes {
         debug {
-            zipAlignEnabled true
             signingConfig signingConfigs.release
         }
         relwithdebinfo {
-            zipAlignEnabled true
             signingConfig signingConfigs.release
         }
         release {
-            zipAlignEnabled true
             signingConfig signingConfigs.release
         }
     }
     aaptOptions {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
     }
-
     sourceSets {
         main {
             manifest.srcFile 'AndroidManifest.xml'
@@ -52,6 +48,9 @@ android {
     }
     packagingOptions{
       doNotStrip '**.setup'
+      jniLibs {
+          useLegacyPackaging = true
+      }
     }
 }
 
@@ -60,7 +59,8 @@ project.afterEvaluate {
 }
 
 dependencies {
+    implementation 'androidx.core:core:1.15.0'
     // New support library to for channels/programs development.
-    implementation 'androidx.tvprovider:tvprovider:1.0.0'
-    implementation 'com.google.code.gson:gson:2.10.1'
+    implementation 'androidx.tvprovider:tvprovider:1.1.0-alpha01'
+    implementation 'com.google.code.gson:gson:2.11.0'
 }

@@ -10,15 +10,20 @@
 
 #include "TextureCacheJob.h"
 #include "TextureDatabase.h"
+#include "guilib/AspectRatio.h"
 #include "threads/CriticalSection.h"
 #include "threads/Event.h"
+#include "threads/Timer.h"
 #include "utils/JobManager.h"
 
+#include <atomic>
+#include <chrono>
 #include <memory>
 #include <set>
 #include <string>
 #include <vector>
 
+class CGUIDialogProgress;
 class CJob;
 class CURL;
 class CTexture;
@@ -88,12 +93,18 @@ public:
    \param image url of the image to cache
    \param texture [out] the loaded image
    \param details [out] details of the cached image
+   \param idealWidth the ideal width of the returned texture (defaults to 0, no ideal width). Only matters if texture is not null.
+   \param idealHeight the ideal height of the returned texture (defaults to 0, no ideal height). Only matters if texture is not null.
+   \param aspectRatio the aspect ratio mode of the texture (defaults to "center"). Only matters if texture is not null.
    \return cached url of this image
    \sa CTextureCacheJob::CacheTexture
    */
   std::string CacheImage(const std::string& image,
                          std::unique_ptr<CTexture>* texture = nullptr,
-                         CTextureDetails* details = nullptr);
+                         CTextureDetails* details = nullptr,
+                         unsigned int idealWidth = 0,
+                         unsigned int idealHeight = 0,
+                         CAspectRatio::AspectRatio aspectRatio = CAspectRatio::CENTER);
 
   /*! \brief Cache an image to image cache if not already cached, returning the image details.
    \param image url of the image to cache.
@@ -136,12 +147,6 @@ public:
    */
   static std::string GetCachedPath(const std::string &file);
 
-  /*! \brief check whether an image:// URL may be cached
-   \param url the URL to the image
-   \return true if the given URL may be cached, false otherwise
-   */
-  static bool CanCacheImageURL(const CURL &url);
-
   /*! \brief Add this image to the database
    Thread-safe wrapper of CTextureDatabase::AddCachedTexture
    \param image url of the original image
@@ -158,6 +163,9 @@ public:
    */
   bool Export(const std::string &image, const std::string &destination, bool overwrite);
   bool Export(const std::string &image, const std::string &destination); //! @todo BACKWARD COMPATIBILITY FOR MUSIC THUMBS
+
+  bool CleanAllUnusedImages();
+
 private:
   // private construction, and no assignments; use the provided singleton methods
   CTextureCache(const CTextureCache&) = delete;
@@ -219,6 +227,12 @@ private:
    */
   void OnCachingComplete(bool success, CTextureCacheJob *job);
 
+  void CleanTimer();
+  std::chrono::milliseconds ScanOldestCache();
+  bool CleanAllUnusedImagesJob(CGUIDialogProgress* progress);
+
+  std::atomic_flag m_cleaningInProgress;
+  CTimer m_cleanTimer;
   CCriticalSection m_databaseSection;
   CTextureDatabase m_database;
   std::set<std::string> m_processinglist; ///< currently processing list to avoid 2 jobs being processed at once

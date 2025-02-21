@@ -54,12 +54,10 @@ extern HWND g_hWnd;
 #endif
 
 CExternalPlayer::CExternalPlayer(IPlayerCallback& callback)
-    : IPlayer(callback),
-      CThread("ExternalPlayer")
+  : IPlayer(callback), CThread("ExternalPlayer"), m_playbackStartTime{}
 {
   m_bAbortRequest = false;
   m_bIsPlaying = false;
-  m_playbackStartTime = {};
   m_speed = 1;
   m_time = 0;
 
@@ -118,7 +116,7 @@ bool CExternalPlayer::CloseFile(bool reopen)
     TerminateProcess(m_processInfo.hProcess, 1);
   }
 #endif
-
+  CServiceBroker::GetDataCacheCore().Reset();
   return true;
 }
 
@@ -484,7 +482,7 @@ bool CExternalPlayer::ExecuteAppAndroid(const char* strSwitches,const char* strP
     CLog::Log(LOGINFO, "{}: Failure", __FUNCTION__);
   }
 
-  return (ret == 0);
+  return ret;
 }
 #endif
 

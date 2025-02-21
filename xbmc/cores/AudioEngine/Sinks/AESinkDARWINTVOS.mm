@@ -300,7 +300,7 @@ bool CAAudioUnitSink::deactivate()
     AudioUnitReset(m_audioUnit, kAudioUnitScope_Global, 0);
 
     // this is a delayed call, the OS will block here
-    // until the autio unit actually is stopped.
+    // until the audio unit actually is stopped.
     AudioOutputUnitStop(m_audioUnit);
 
     // detach the render callback on the unit
@@ -784,15 +784,15 @@ bool CAESinkDARWINTVOS::Initialize(AEAudioFormat& format, std::string& device)
   switch (format.m_streamInfo.m_type)
   {
     case CAEStreamInfo::STREAM_TYPE_AC3:
-      if (!format.m_streamInfo.m_ac3FrameSize)
-        format.m_streamInfo.m_ac3FrameSize = 1536;
-      format.m_frames = format.m_streamInfo.m_ac3FrameSize;
+      if (!format.m_streamInfo.m_frameSize)
+        format.m_streamInfo.m_frameSize = 1536;
+      format.m_frames = format.m_streamInfo.m_frameSize;
       buffer_size = format.m_frames * 8;
       break;
     case CAEStreamInfo::STREAM_TYPE_EAC3:
-      if (!format.m_streamInfo.m_ac3FrameSize)
-        format.m_streamInfo.m_ac3FrameSize = 1536;
-      format.m_frames = format.m_streamInfo.m_ac3FrameSize;
+      if (!format.m_streamInfo.m_frameSize)
+        format.m_streamInfo.m_frameSize = 1536;
+      format.m_frames = format.m_streamInfo.m_frameSize;
       buffer_size = format.m_frames * 8;
       break;
     case CAEStreamInfo::STREAM_TYPE_DTS_512:

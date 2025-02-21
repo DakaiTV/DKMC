@@ -17,7 +17,7 @@
 #include <vector>
 
 //! \brief Video tag loader from plugin source.
-class CVideoTagLoaderPlugin : public VIDEO::IVideoInfoTagLoader
+class CVideoTagLoaderPlugin : public KODI::VIDEO::IVideoInfoTagLoader
 {
 public:
   CVideoTagLoaderPlugin(const CFileItem& item, bool forceRefresh);
@@ -29,8 +29,9 @@ public:
 
   //! \brief Load "tag" from plugin.
   //! \param tag Tag to load info into
-  CInfoScanner::INFO_TYPE Load(CVideoInfoTag& tag, bool prioritise,
-                               std::vector<EmbeddedArt>* = nullptr) override;
+  CInfoScanner::InfoType Load(CVideoInfoTag& tag,
+                              bool prioritise,
+                              std::vector<EmbeddedArt>* = nullptr) override;
 
   inline std::unique_ptr<std::map<std::string, std::string>>& GetArt()
   {

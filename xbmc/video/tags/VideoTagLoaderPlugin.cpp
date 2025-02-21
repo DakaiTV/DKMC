@@ -9,6 +9,7 @@
 #include "VideoTagLoaderPlugin.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "URL.h"
 #include "filesystem/PluginDirectory.h"
 
@@ -34,7 +35,9 @@ bool CVideoTagLoaderPlugin::HasInfo() const
   return m_tag || m_force_refresh;
 }
 
-CInfoScanner::INFO_TYPE CVideoTagLoaderPlugin::Load(CVideoInfoTag& tag, bool, std::vector<EmbeddedArt>*)
+CInfoScanner::InfoType CVideoTagLoaderPlugin::Load(CVideoInfoTag& tag,
+                                                   bool,
+                                                   std::vector<EmbeddedArt>*)
 {
   if (m_force_refresh)
   {
@@ -46,7 +49,7 @@ CInfoScanner::INFO_TYPE CVideoTagLoaderPlugin::Load(CVideoInfoTag& tag, bool, st
     CPluginDirectory plugin;
     CFileItemList items;
     if (!plugin.GetDirectory(url, items))
-      return CInfoScanner::ERROR_NFO;
+      return CInfoScanner::InfoType::ERROR_NFO;
     if (!items.IsEmpty())
     {
       const CFileItemPtr &item = items[0];
@@ -54,7 +57,7 @@ CInfoScanner::INFO_TYPE CVideoTagLoaderPlugin::Load(CVideoInfoTag& tag, bool, st
       if (item->HasVideoInfoTag())
       {
         tag = *item->GetVideoInfoTag();
-        return CInfoScanner::FULL_NFO;
+        return CInfoScanner::InfoType::FULL;
       }
     }
   }
@@ -62,7 +65,7 @@ CInfoScanner::INFO_TYPE CVideoTagLoaderPlugin::Load(CVideoInfoTag& tag, bool, st
   {
     // Otherwise just copy CFileItem video info to tag
     tag = *m_tag;
-    return CInfoScanner::FULL_NFO;
+    return CInfoScanner::InfoType::FULL;
   }
-  return CInfoScanner::NO_NFO;
+  return CInfoScanner::InfoType::NONE;
 }

@@ -67,12 +67,6 @@ void CApplicationPowerHandling::ResetNavigationTimer()
 
 void CApplicationPowerHandling::SetRenderGUI(bool renderGUI)
 {
-  if (renderGUI && !m_renderGUI)
-  {
-    CGUIComponent* gui = CServiceBroker::GetGUI();
-    if (gui)
-      CServiceBroker::GetGUI()->GetWindowManager().MarkDirty();
-  }
   m_renderGUI = renderGUI;
 }
 
@@ -160,11 +154,11 @@ bool CApplicationPowerHandling::WakeUpScreenSaver(bool bPowerOffKeyPressed /* = 
     {
       const std::shared_ptr<CProfileManager> profileManager =
           CServiceBroker::GetSettingsComponent()->GetProfileManager();
-      if (profileManager->GetMasterProfile().getLockMode() != LOCK_MODE_EVERYONE &&
+      if (profileManager->GetMasterProfile().getLockMode() != LockMode::EVERYONE &&
           (profileManager->UsingLoginScreen() ||
            CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
                CSettings::SETTING_MASTERLOCK_STARTUPLOCK)) &&
-          profileManager->GetCurrentProfile().getLockMode() != LOCK_MODE_EVERYONE &&
+          profileManager->GetCurrentProfile().getLockMode() != LockMode::EVERYONE &&
           m_screensaverIdInUse != "screensaver.xbmc.builtin.dim" &&
           m_screensaverIdInUse != "screensaver.xbmc.builtin.black" &&
           m_screensaverIdInUse != "visualization")
@@ -394,10 +388,8 @@ void CApplicationPowerHandling::ActivateScreenSaver(bool forceType /*= false */)
 
     // Enforce Dim for special cases.
     bool bUseDim = false;
-    if (CServiceBroker::GetGUI()->GetWindowManager().HasModalDialog(true))
-      bUseDim = true;
-    else if (appPlayer && appPlayer->IsPlayingVideo() &&
-             settings->GetBool(CSettings::SETTING_SCREENSAVER_USEDIMONPAUSE))
+    if (appPlayer && appPlayer->IsPlayingVideo() &&
+        settings->GetBool(CSettings::SETTING_SCREENSAVER_USEDIMONPAUSE))
       bUseDim = true;
     else if (CServiceBroker::GetPVRManager().Get<PVR::GUI::Channels>().IsRunningChannelScan())
       bUseDim = true;

@@ -12,14 +12,14 @@
 
 class CFileItemList;
 
-enum SelectFirstUnwatchedItem
+enum class SelectFirstUnwatchedItem
 {
   NEVER = 0,
   ON_FIRST_ENTRY = 1,
   ALWAYS = 2
 };
 
-enum IncludeAllSeasonsAndSpecials
+enum class IncludeAllSeasonsAndSpecials
 {
   NEITHER = 0,
   BOTH = 1,
@@ -48,7 +48,6 @@ protected:
   bool GetDirectory(const std::string &strDirectory, CFileItemList &items) override;
   void UpdateButtons() override;
   void DoSearch(const std::string& strSearch, CFileItemList& items) override;
-  virtual void PlayItem(int iItem);
   void OnDeleteItem(const CFileItemPtr& pItem) override;
   void GetContextButtons(int itemNumber, CContextButtons &buttons) override;
   bool OnPopupMenu(int iItem) override;
@@ -57,7 +56,7 @@ protected:
   bool OnClick(int iItem, const std::string &player = "") override;
   std::string GetStartFolder(const std::string &dir) override;
 
-  VECSOURCES m_shares;
+  std::vector<CMediaSource> m_shares;
 
 private:
   virtual SelectFirstUnwatchedItem GetSettingSelectFirstUnwatchedItem();

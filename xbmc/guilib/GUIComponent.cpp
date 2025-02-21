@@ -12,24 +12,32 @@
 #include "GUIColorManager.h"
 #include "GUIInfoManager.h"
 #include "GUILargeTextureManager.h"
+#include "GUITextureCallbackManager.h"
 #include "GUIWindowManager.h"
 #include "ServiceBroker.h"
 #include "StereoscopicsManager.h"
 #include "TextureManager.h"
 #include "URL.h"
 #include "dialogs/GUIDialogYesNo.h"
+#include "handlers/GUIAnnouncementHandlerContainer.h"
 
 #include <memory>
 
 CGUIComponent::CGUIComponent()
+  : m_pWindowManager(std::make_unique<CGUIWindowManager>()),
+    m_pTextureManager(std::make_unique<CGUITextureManager>()),
+    m_pLargeTextureManager(std::make_unique<CGUILargeTextureManager>()),
+    m_pTextureCallbackManager(std::make_unique<CGUITextureCallbackManager>()),
+    m_stereoscopicsManager(std::make_unique<CStereoscopicsManager>()),
+    m_guiInfoManager(std::make_unique<CGUIInfoManager>()),
+    m_guiColorManager(std::make_unique<CGUIColorManager>()),
+    m_guiAudioManager(std::make_unique<CGUIAudioManager>()),
+    m_announcementHandlerContainer(std::make_unique<CGUIAnnouncementHandlerContainer>())
 {
-  m_pWindowManager = std::make_unique<CGUIWindowManager>();
-  m_pTextureManager = std::make_unique<CGUITextureManager>();
-  m_pLargeTextureManager = std::make_unique<CGUILargeTextureManager>();
-  m_stereoscopicsManager = std::make_unique<CStereoscopicsManager>();
-  m_guiInfoManager = std::make_unique<CGUIInfoManager>();
-  m_guiColorManager = std::make_unique<CGUIColorManager>();
-  m_guiAudioManager = std::make_unique<CGUIAudioManager>();
+}
+
+CGUIComponent::CGUIComponent(bool)
+{
 }
 
 CGUIComponent::~CGUIComponent()
@@ -50,7 +58,8 @@ void CGUIComponent::Deinit()
 {
   CServiceBroker::UnregisterGUI();
 
-  m_pWindowManager->DeInitialize();
+  if (m_pWindowManager)
+    m_pWindowManager->DeInitialize();
 }
 
 CGUIWindowManager& CGUIComponent::GetWindowManager()
@@ -66,6 +75,11 @@ CGUITextureManager& CGUIComponent::GetTextureManager()
 CGUILargeTextureManager& CGUIComponent::GetLargeTextureManager()
 {
   return *m_pLargeTextureManager;
+}
+
+CGUITextureCallbackManager& CGUIComponent::GetTextureCallbackManager()
+{
+  return *m_pTextureCallbackManager;
 }
 
 CStereoscopicsManager &CGUIComponent::GetStereoscopicsManager()

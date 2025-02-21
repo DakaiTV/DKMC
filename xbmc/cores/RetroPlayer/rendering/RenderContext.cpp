@@ -9,7 +9,7 @@
 #include "RenderContext.h"
 
 #include "games/GameServices.h"
-#include "games/agents/GameAgentManager.h"
+#include "games/agents/input/AgentInput.h"
 #include "rendering/RenderSystem.h"
 #include "settings/DisplaySettings.h"
 #include "settings/MediaSettings.h"
@@ -184,6 +184,21 @@ int CRenderContext::GUIShaderGetUniCol()
   return -1;
 }
 
+int CRenderContext::GUIShaderGetDepth()
+{
+#if defined(HAS_GL)
+  CRenderSystemGL* renderingGL = dynamic_cast<CRenderSystemGL*>(m_rendering);
+  if (renderingGL != nullptr)
+    return static_cast<int>(renderingGL->ShaderGetDepth());
+#elif HAS_GLES >= 2
+  CRenderSystemGLES* renderingGLES = dynamic_cast<CRenderSystemGLES*>(m_rendering);
+  if (renderingGLES != nullptr)
+    return static_cast<int>(renderingGLES->GUIShaderGetDepth());
+#endif
+
+  return -1;
+}
+
 CGUIShaderDX* CRenderContext::GetGUIShader()
 {
 #if defined(HAS_DX)
@@ -310,12 +325,12 @@ RESOLUTION_INFO& CRenderContext::GetResolutionInfo(RESOLUTION resolution)
   return m_mediaSettings.GetDefaultGameSettings();
 }
 
-void CRenderContext::StartAgentManager(GAME::GameClientPtr gameClient)
+void CRenderContext::StartAgentInput(GAME::GameClientPtr gameClient)
 {
-  m_gameServices.GameAgentManager().Start(std::move(gameClient));
+  m_gameServices.AgentInput().Start(std::move(gameClient));
 }
 
-void CRenderContext::StopAgentManager()
+void CRenderContext::StopAgentInput()
 {
-  m_gameServices.GameAgentManager().Stop();
+  m_gameServices.AgentInput().Stop();
 }

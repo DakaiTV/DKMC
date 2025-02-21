@@ -313,10 +313,14 @@ CSysData::INTERNET_STATE CSysInfoJob::GetInternetState()
 std::string CSysInfoJob::GetMACAddress()
 {
   CNetworkInterface* iface = CServiceBroker::GetNetwork().GetFirstConnectedInterface();
+  std::string mac;
   if (iface)
-    return iface->GetMacAddress();
-
-  return "";
+  {
+    mac = iface->GetMacAddress();
+    if (mac.empty())
+      mac = g_localizeStrings.Get(10005); // Not available
+  }
+  return mac;
 }
 
 std::string CSysInfoJob::GetIPAddress()
@@ -776,6 +780,8 @@ std::string CSysInfo::GetOsPrettyNameWithVersion(void)
       break;
     case WindowsVersionWin11_21H2:
     case WindowsVersionWin11_22H2:
+    case WindowsVersionWin11_23H2:
+    case WindowsVersionWin11_24H2:
     case WindowsVersionWin11_Future:
       osNameVer.append("11");
       appendWindows10NameVersion(osNameVer);
@@ -969,7 +975,11 @@ CSysInfo::WindowsVersion CSysInfo::GetWindowsVersion()
         m_WinVer = WindowsVersionWin11_21H2;
       else if (osvi.dwMajorVersion == 10 && osvi.dwMinorVersion == 0 && osvi.dwBuildNumber == 22621)
         m_WinVer = WindowsVersionWin11_22H2;
-      else if (osvi.dwMajorVersion == 10 && osvi.dwMinorVersion == 0 && osvi.dwBuildNumber > 22621)
+      else if (osvi.dwMajorVersion == 10 && osvi.dwMinorVersion == 0 && osvi.dwBuildNumber == 22631)
+        m_WinVer = WindowsVersionWin11_23H2;
+      else if (osvi.dwMajorVersion == 10 && osvi.dwMinorVersion == 0 && osvi.dwBuildNumber == 26100)
+        m_WinVer = WindowsVersionWin11_24H2;
+      else if (osvi.dwMajorVersion == 10 && osvi.dwMinorVersion == 0 && osvi.dwBuildNumber > 26100)
         m_WinVer = WindowsVersionWin11_Future;
       else if (osvi.dwMajorVersion == 10 && osvi.dwMinorVersion == 0 && osvi.dwBuildNumber > 19045)
         m_WinVer = WindowsVersionWin10_Future;

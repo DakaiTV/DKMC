@@ -3,10 +3,10 @@ set(SOURCES Bookmark.cpp
             GUIViewStateVideo.cpp
             PlayerController.cpp
             Teletext.cpp
-            VideoChapterImageFileLoader.cpp
             VideoDatabase.cpp
             VideoDbUrl.cpp
             VideoEmbeddedImageFileLoader.cpp
+            VideoFileItemClassify.cpp
             VideoGeneratedImageFileLoader.cpp
             VideoInfoDownloader.cpp
             VideoInfoScanner.cpp
@@ -24,10 +24,10 @@ set(HEADERS Bookmark.h
             PlayerController.h
             Teletext.h
             TeletextDefines.h
-            VideoChapterImageFileLoader.h
             VideoDatabase.h
             VideoDbUrl.h
             VideoEmbeddedImageFileLoader.h
+            VideoFileItemClassify.h
             VideoGeneratedImageFileLoader.h
             VideoInfoDownloader.h
             VideoInfoScanner.h
@@ -36,6 +36,7 @@ set(HEADERS Bookmark.h
             VideoLibraryQueue.h
             VideoThumbLoader.h
             VideoUtils.h
+            VideoManagerTypes.h
             ViewModeSettings.h)
 
 core_add_library(video)

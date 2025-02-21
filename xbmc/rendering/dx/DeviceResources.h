@@ -17,6 +17,7 @@
 
 #include <concrt.h>
 #include <dxgi1_5.h>
+#include <winrt/windows.foundation.h>
 #include <wrl.h>
 #include <wrl/client.h>
 
@@ -128,6 +129,7 @@ namespace DX
     DEBUG_INFO_RENDER GetDebugInfo() const;
     std::vector<DXGI_COLOR_SPACE_TYPE> GetSwapChainColorSpaces() const;
     bool SetMultithreadProtected(bool enabled) const;
+    bool IsGCNOrOlder() const;
 
   private:
     class CBackBuffer : public CD3DTexture
@@ -149,7 +151,7 @@ namespace DX
     void HandleOutputChange(const std::function<bool(DXGI_OUTPUT_DESC)>& cmpFunc);
     bool CreateFactory();
     void CheckNV12SharedTexturesSupport();
-    VideoDriverInfo GetVideoDriverVersion();
+    VideoDriverInfo GetVideoDriverVersion() const;
     void CheckDXVA2SharedDecoderSurfaces();
 
     HWND m_window{ nullptr };

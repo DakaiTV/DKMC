@@ -13,6 +13,7 @@
 #include "settings/lib/ISettingsHandler.h"
 #include "utils/SortUtils.h"
 
+#include <cstdint>
 #include <set>
 #include <string>
 #include <utility>
@@ -94,6 +95,7 @@ struct RefreshVideoLatency
   float refreshmax;
 
   float delay;
+  float hdrextradelay;
 };
 
 typedef std::vector<TVShowRegexp> SETTINGS_TVSHOWLIST;
@@ -120,14 +122,15 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
 
     std::string m_audioDefaultPlayer;
     float m_audioPlayCountMinimumPercent;
-    bool m_VideoPlayerIgnoreDTSinWAV;
     float m_limiterHold;
     float m_limiterRelease;
 
     bool  m_omlSync = true;
 
     float m_videoSubsDelayRange;
+    float m_videoSubsDelayStep;
     float m_videoAudioDelayRange;
+    float m_videoAudioDelayStep;
     bool m_videoUseTimeSeeking;
     int m_videoTimeSeekForward;
     int m_videoTimeSeekBackward;
@@ -153,7 +156,9 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     int m_videoIgnoreSecondsAtStart;
     float m_videoIgnorePercentAtEnd;
     float m_audioApplyDrc;
-    unsigned int m_maxPassthroughOffSyncDuration = 10; // when 10 ms off adjust
+    unsigned int m_maxPassthroughOffSyncDuration = 50; // when 50 ms off adjust
+    bool m_AllowMultiChannelFloat = false; // Android only switch to be removed in v22
+    bool m_superviseAudioDelay = false; // Android only to correct broken audio firmwares
 
     int   m_videoVDPAUScaling;
     float m_videoNonLinStretchRatio;
@@ -161,6 +166,7 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     std::vector<RefreshOverride> m_videoAdjustRefreshOverrides;
     std::vector<RefreshVideoLatency> m_videoRefreshLatency;
     float m_videoDefaultLatency;
+    float m_videoDefaultHdrExtraLatency;
     int  m_videoCaptureUseOcclusionQuery;
     bool m_DXVACheckCompatibility;
     bool m_DXVACheckCompatibilityPresent;
@@ -170,6 +176,7 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
 
     std::string m_videoDefaultPlayer;
     float m_videoPlayCountMinimumPercent;
+    bool m_videoBypassCodecProfile = false; // Android only to bypass reported codec capabilities
 
     float m_slideshowBlackBarCompensation;
     float m_slideshowZoomAmount;
@@ -244,6 +251,7 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     bool m_bMusicLibraryCleanOnUpdate;
     bool m_bMusicLibraryArtistSortOnUpdate;
     bool m_bMusicLibraryUseISODates;
+    bool m_bMusicLibraryArtistNavigatesToSongs;
     std::string m_strMusicLibraryAlbumFormat;
     bool m_prioritiseAPEv2tags;
     std::string m_musicItemSeparator;
@@ -313,7 +321,8 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     int m_iPVRInfoToggleInterval; /*!< @brief if there are more than 1 pvr gui info item available (e.g. multiple recordings active at the same time), use this toggle delay in milliseconds. defaults to 3000. */
     bool m_bPVRChannelIconsAutoScan; /*!< @brief automatically scan user defined folder for channel icons when loading internal channel groups */
     bool m_bPVRAutoScanIconsUserSet; /*!< @brief mark channel icons populated by auto scan as "user set" */
-    int m_iPVRNumericChannelSwitchTimeout; /*!< @brief time in msecs after that a channel switch occurs after entering a channel number, if confirmchannelswitch is disabled */
+    uint32_t
+        m_iPVRNumericChannelSwitchTimeout; /*!< @brief time in msecs after that a channel switch occurs after entering a channel number, if confirmchannelswitch is disabled */
     int m_iPVRTimeshiftThreshold; /*!< @brief time diff between current playing time and timeshift buffer end, in seconds, before a playing stream is displayed as timeshifting. */
     bool m_bPVRTimeshiftSimpleOSD; /*!< @brief use simple timeshift OSD (with progress only for the playing event instead of progress for the whole ts buffer). */
     SortDescription m_PVRDefaultSortOrder; /*!< @brief SortDecription used to store default recording sort type and sort order */
@@ -328,6 +337,12 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     bool m_guiVisualizeDirtyRegions;
     int  m_guiAlgorithmDirtyRegions;
     bool m_guiSmartRedraw;
+    int32_t m_guiAnisotropicFiltering{0};
+    bool m_guiFrontToBackRendering{false};
+    bool m_guiGeometryClear{true};
+    bool m_guiAsyncTextureUpload{false};
+    bool m_guiVideoLayoutTransparent{false};
+
     unsigned int m_addonPackageFolderSize;
 
     bool m_jsonOutputCompact;
@@ -337,7 +352,7 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     std::vector<std::string> m_settingsFiles;
     void ParseSettingsFile(const std::string &file);
 
-    float GetLatencyTweak(float refreshrate);
+    float GetLatencyTweak(float refreshrate, bool isHDREnabled);
     bool m_initialized;
 
     void SetDebugMode(bool debug);

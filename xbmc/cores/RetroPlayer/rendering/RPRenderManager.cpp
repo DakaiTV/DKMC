@@ -142,7 +142,8 @@ bool CRPRenderManager::GetVideoBuffer(unsigned int width,
   auto bufferPools = m_processInfo.GetBufferManager().GetBufferPools();
 
   std::sort(bufferPools.begin(), bufferPools.end(),
-            [](const IRenderBufferPool* lhs, const IRenderBufferPool* rhs) {
+            [](const IRenderBufferPool* lhs, const IRenderBufferPool* rhs)
+            {
               // Prefer buffer pools with a visible renderer
               if (lhs->HasVisibleRenderer() && !rhs->HasVisibleRenderer())
                 return true;
@@ -262,6 +263,35 @@ void CRPRenderManager::AddFrame(const uint8_t* data,
       }
     }
   }
+}
+
+bool CRPRenderManager::Create(unsigned int width, unsigned int height)
+{
+  //! @todo
+  return false;
+}
+
+uintptr_t CRPRenderManager::GetCurrentFramebuffer(unsigned int width, unsigned int height)
+{
+  for (IRenderBufferPool* bufferPool : m_processInfo.GetBufferManager().GetBufferPools())
+  {
+    if (!bufferPool->HasVisibleRenderer())
+      continue;
+
+    IRenderBuffer* renderBuffer = bufferPool->GetBuffer(width, height);
+    if (renderBuffer != nullptr)
+    {
+      m_pendingBuffers.emplace_back(renderBuffer);
+      return renderBuffer->GetCurrentFramebuffer();
+    }
+  }
+
+  return 0;
+}
+
+void CRPRenderManager::RenderFrame()
+{
+  //! @todo
 }
 
 void CRPRenderManager::SetSpeed(double speed)
@@ -583,9 +613,9 @@ bool CRPRenderManager::HasRenderBuffer(IRenderBufferPool* bufferPool)
 
   std::unique_lock<CCriticalSection> lock(m_bufferMutex);
 
-  auto it = std::find_if(
-      m_renderBuffers.begin(), m_renderBuffers.end(),
-      [bufferPool](IRenderBuffer* renderBuffer) { return renderBuffer->GetPool() == bufferPool; });
+  auto it = std::find_if(m_renderBuffers.begin(), m_renderBuffers.end(),
+                         [bufferPool](IRenderBuffer* renderBuffer)
+                         { return renderBuffer->GetPool() == bufferPool; });
 
   if (it != m_renderBuffers.end())
     bHasRenderBuffer = true;
@@ -602,9 +632,8 @@ IRenderBuffer* CRPRenderManager::GetRenderBuffer(IRenderBufferPool* bufferPool)
 
   std::unique_lock<CCriticalSection> lock(m_bufferMutex);
 
-  auto getRenderBuffer = [bufferPool](IRenderBuffer* renderBuffer) {
-    return renderBuffer->GetPool() == bufferPool;
-  };
+  auto getRenderBuffer = [bufferPool](IRenderBuffer* renderBuffer)
+  { return renderBuffer->GetPool() == bufferPool; };
 
   auto it = std::find_if(m_renderBuffers.begin(), m_renderBuffers.end(), getRenderBuffer);
 
@@ -638,9 +667,9 @@ IRenderBuffer* CRPRenderManager::GetRenderBufferForSavestate(const std::string& 
     // Get a render buffer belonging to the specified pool
     const std::vector<IRenderBuffer*>& renderBuffers = it->second;
 
-    auto it2 = std::find_if(
-        renderBuffers.begin(), renderBuffers.end(),
-        [bufferPool](IRenderBuffer* buffer) { return buffer->GetPool() == bufferPool; });
+    auto it2 = std::find_if(renderBuffers.begin(), renderBuffers.end(),
+                            [bufferPool](IRenderBuffer* buffer)
+                            { return buffer->GetPool() == bufferPool; });
 
     if (it2 != renderBuffers.end())
     {
@@ -961,11 +990,10 @@ void CRPRenderManager::GetVideoFrame(IRenderBuffer*& readableBuffer,
 
   // Get a readable render buffer
   auto it = std::find_if(m_renderBuffers.begin(), m_renderBuffers.end(),
-                         [](const IRenderBuffer* renderBuffer) {
-                           return renderBuffer->GetMemoryAccess() != DataAccess::WRITE_ONLY;
-                         });
+                         [](const IRenderBuffer* renderBuffer)
+                         { return renderBuffer->GetMemoryAccess() != DataAccess::WRITE_ONLY; });
 
-  // Aquire buffer if one was found
+  // Acquire buffer if one was found
   if (it != m_renderBuffers.end())
   {
     readableBuffer = *it;
@@ -1007,8 +1035,8 @@ void CRPRenderManager::LoadVideoFrameAsync(const std::string& savestatePath)
                            m_savestateThreads.end());
 
   // Load the video data from the savestate asynchronously
-  std::future<void> task = std::async(
-      std::launch::async, [this, savestatePath]() { LoadVideoFrameSync(savestatePath); });
+  std::future<void> task = std::async(std::launch::async, [this, savestatePath]()
+                                      { LoadVideoFrameSync(savestatePath); });
 
   m_savestateThreads.emplace_back(std::move(task));
 }

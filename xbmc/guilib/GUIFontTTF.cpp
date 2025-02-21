@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2018 Team Kodi
+ *  Copyright (C) 2005-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -59,6 +59,36 @@ constexpr int CHAR_CHUNK = 64; // 64 chars allocated at a time (2048 bytes)
 constexpr int GLYPH_STRENGTH_BOLD = 24;
 constexpr int GLYPH_STRENGTH_LIGHT = -48;
 constexpr int TAB_SPACE_LENGTH = 4;
+
+// \brief Check for conflicting alignments
+void ValidateAlignments(uint32_t& aligns)
+{
+  // Validate the horizontal alignment (XBFONT_LEFT is implicit unless otherwise specified)
+  {
+    const uint32_t hAligns = XBFONT_RIGHT | XBFONT_CENTER_X | XBFONT_JUSTIFIED;
+    const uint32_t commonFlags = hAligns & aligns;
+    // Check if at least 2 bits are set, it means multiple aligns
+    if ((commonFlags & (commonFlags - 1)) != 0)
+    {
+      CLog::LogF(LOGERROR, "Text with invalid multiple horizontal alignments");
+      aligns &= ~commonFlags;
+    }
+  }
+
+  // Validate truncate alignment
+  {
+    const uint32_t truncateAligns = XBFONT_TRUNCATED | XBFONT_TRUNCATED_LEFT;
+    const uint32_t commonFlags = truncateAligns & aligns;
+    // Check if at least 2 bits are set, it means multiple aligns
+    if ((commonFlags & (commonFlags - 1)) != 0)
+    {
+      CLog::LogF(LOGERROR, "Text with invalid multiple truncate alignments");
+      aligns &= ~commonFlags;
+      aligns |= XBFONT_TRUNCATED;
+    }
+  }
+}
+
 } /* namespace */
 
 class CFreeTypeLibrary
@@ -335,11 +365,13 @@ void CGUIFontTTF::End()
 void CGUIFontTTF::DrawTextInternal(CGraphicContext& context,
                                    float x,
                                    float y,
-                                   const std::vector<UTILS::COLOR::Color>& colors,
+                                   const std::vector<KODI::UTILS::COLOR::Color>& colors,
                                    const vecText& text,
                                    uint32_t alignment,
                                    float maxPixelWidth,
-                                   bool scrolling)
+                                   bool scrolling,
+                                   float dx,
+                                   float dy)
 {
   if (text.empty())
   {
@@ -349,15 +381,40 @@ void CGUIFontTTF::DrawTextInternal(CGraphicContext& context,
   Begin();
   uint32_t rawAlignment = alignment;
   bool dirtyCache(false);
+
+#if not defined(HAS_DX)
+  // round coordinates to the pixel grid. otherwise, we might sample at the wrong positions.
+  if (!scrolling)
+    x = std::round(x);
+  y = std::round(y);
+#else
+  x += dx;
+  y += dy;
+#endif
+
+#if not defined(HAS_DX)
+  // GL can scissor and shader clip
+  const bool hardwareClipping = true;
+#else
+  // FIXME: remove static (CPU based) clipping for GLES/DX
   const bool hardwareClipping = m_renderSystem->ScissorsCanEffectClipping();
+#endif
+
+  // FIXME: remove positional stuff once GLES/DX are brought up to date
   CGUIFontCacheStaticPosition staticPos(x, y);
   CGUIFontCacheDynamicPosition dynamicPos;
+
+#if not defined(HAS_DX)
+  // dummy positions for the time being
+  dynamicPos = CGUIFontCacheDynamicPosition(0.0f, 0.0f, 0.0f);
+#else
   if (hardwareClipping)
   {
     dynamicPos =
         CGUIFontCacheDynamicPosition(context.ScaleFinalXCoord(x, y), context.ScaleFinalYCoord(x, y),
                                      context.ScaleFinalZCoord(x, y));
   }
+#endif
 
   CVertexBuffer unusedVertexBuffer;
   CVertexBuffer& vertexBuffer =
@@ -386,10 +443,23 @@ void CGUIFontTTF::DrawTextInternal(CGraphicContext& context,
 
   if (dirtyCache)
   {
+    // Try to validate any conflicting alignments
+    //! @todo: This validate is the last resort and can result in a bad rendered text
+    //! because the alignment it is used also by caller components for other operations
+    //! this inform the problem on the log, potentially can be improved
+    //! by add validating alignments from each parent caller component
+    ValidateAlignments(alignment);
+
     const std::vector<Glyph> glyphs = GetHarfBuzzShapedGlyphs(text);
     // save the origin, which is scaled separately
+#if not defined(HAS_DX)
+    // the origin is now at [0,0], and not at "random" locations anymore. positioning is done in the vertex shader.
+    m_originX = 0;
+    m_originY = 0;
+#else
     m_originX = x;
     m_originY = y;
+#endif
 
     // cache the ellipses width
     if (!m_ellipseCached)
@@ -409,6 +479,11 @@ void CGUIFontTTF::DrawTextInternal(CGraphicContext& context,
       if (maxPixelWidth <= 0.0f || GetTextWidthInternal(text, glyphs) <= maxPixelWidth)
         alignment &= ~XBFONT_TRUNCATED;
     }
+    else if (alignment & XBFONT_TRUNCATED_LEFT)
+    {
+      if (maxPixelWidth <= 0.0f || GetTextWidthInternal(text, glyphs) <= maxPixelWidth)
+        alignment &= ~XBFONT_TRUNCATED_LEFT;
+    }
     else if (alignment & XBFONT_JUSTIFIED)
     {
       if (maxPixelWidth <= 0.0f)
@@ -419,51 +494,74 @@ void CGUIFontTTF::DrawTextInternal(CGraphicContext& context,
     float startX = 0;
     float startY = (alignment & XBFONT_CENTER_Y) ? -0.5f * m_cellHeight : 0; // vertical centering
 
-    // Defines whether ellipses are to be added at the beginning for right-aligned text
-    bool isBeginWithEllipses{false};
-    // Defines the index position where start rendering glyphs
-    size_t startPosGlyph{0};
+    size_t startPosGlyph{0}; // Defines the index position where start rendering glyphs
+    float textWidth{0}; // The text width, by taking in account truncate (and ellipses)
 
-    if (alignment & XBFONT_CENTER_X)
+    if (alignment & XBFONT_TRUNCATED_LEFT)
     {
-      // Get the extent of this line
-      float w = GetTextWidthInternal(text, glyphs);
+      // To truncate to the left, we skip all characters that exceed the maximum width,
+      // so the rendering starts from the first character that falls within the maximum width,
+      // taking into account also the ellipses
+      textWidth = ellipsesWidth;
 
-      if (alignment & XBFONT_TRUNCATED && w > maxPixelWidth + 0.5f) // + 0.5f due to rounding issues
-        w = maxPixelWidth;
-
-      if (alignment & XBFONT_CENTER_X)
-        w *= 0.5f;
-      // Offset this line's starting position
-      startX -= w;
-    }
-    else if (alignment & XBFONT_RIGHT)
-    {
-      // We need to determine the point at which to stop rendering glyphs starting from the left,
-      // if "truncated" flag is set then we need to take in account ellipses before the text
-      float textWidth{0};
-      if (alignment & XBFONT_TRUNCATED)
-      {
-        textWidth = ellipsesWidth;
-        isBeginWithEllipses = true;
-      }
       // We need to iterate from the end to the beginning
       for (auto itRGlyph = glyphs.crbegin(); itRGlyph != glyphs.crend(); ++itRGlyph)
       {
-        Character* ch =
-            GetCharacter(text[itRGlyph->m_glyphInfo.cluster], itRGlyph->m_glyphInfo.codepoint);
-        if (!ch)
+        const character_t ch = text[itRGlyph->m_glyphInfo.cluster];
+        Character* c = GetCharacter(ch, itRGlyph->m_glyphInfo.codepoint);
+        if (!c)
           continue;
 
-        textWidth += ch->m_advance;
+        float nextWidth = textWidth;
+        if ((ch & 0xffff) == static_cast<character_t>('\t'))
+          nextWidth += GetTabSpaceLength();
+        else
+          nextWidth += c->m_advance;
 
-        if (textWidth > maxPixelWidth)
+        if (maxPixelWidth > 0 && nextWidth > maxPixelWidth)
         {
           // Start rendering from the glyph that does not exceed the maximum width
           startPosGlyph = std::distance(itRGlyph, glyphs.crend());
           break;
         }
+        textWidth = nextWidth;
       }
+    }
+    else
+    {
+      // Calculates the text width based on the characters that can be contained within the maximum width
+      if (alignment & XBFONT_TRUNCATED)
+        textWidth = ellipsesWidth;
+
+      for (const Glyph& glyph : glyphs)
+      {
+        const character_t ch = text[glyph.m_glyphInfo.cluster];
+        Character* c = GetCharacter(ch, glyph.m_glyphInfo.codepoint);
+        if (!c)
+          continue;
+
+        float nextWidth = textWidth;
+        if ((ch & 0xffff) == static_cast<character_t>('\t'))
+          nextWidth += GetTabSpaceLength();
+        else
+          nextWidth += c->m_advance;
+
+        if (maxPixelWidth > 0 && nextWidth > maxPixelWidth)
+          break;
+
+        textWidth = nextWidth;
+      }
+    }
+
+    if (alignment & XBFONT_RIGHT)
+    {
+      // Moves the x pos with the purpose of having the text effect aligned to the right
+      startX += maxPixelWidth - textWidth;
+    }
+    else if (alignment & XBFONT_CENTER_X)
+    {
+      textWidth *= 0.5f;
+      startX -= textWidth;
     }
 
     float spacePerSpaceCharacter = 0; // for justification effects
@@ -494,13 +592,13 @@ void CGUIFontTTF::DrawTextInternal(CGraphicContext& context,
     // are not currently cached and cause the texture to be enlarged, which
     // would invalidate the texture coordinates.
     std::queue<Character> characters;
-    if (alignment & XBFONT_TRUNCATED)
-      GetCharacter(L'.', 0);
 
-    if (isBeginWithEllipses) // for right aligned text only
+    if (alignment & XBFONT_TRUNCATED_LEFT)
       cursorX += ellipsesWidth;
 
-    for (auto itGlyph = glyphs.cbegin() + startPosGlyph; itGlyph != glyphs.cend(); ++itGlyph)
+    auto glyphBegin = glyphs.cbegin() + startPosGlyph;
+
+    for (auto itGlyph = glyphBegin; itGlyph != glyphs.cend(); ++itGlyph)
     {
       Character* ch =
           GetCharacter(text[itGlyph->m_glyphInfo.cluster], itGlyph->m_glyphInfo.codepoint);
@@ -517,11 +615,8 @@ void CGUIFontTTF::DrawTextInternal(CGraphicContext& context,
         float nextCursorX = cursorX;
 
         if (alignment & XBFONT_TRUNCATED)
-        {
-          nextCursorX += ch->m_advance;
-          if (!isBeginWithEllipses) // for left aligned text only
-            nextCursorX += ellipsesWidth;
-        }
+          nextCursorX += ch->m_advance + ellipsesWidth;
+
         if (nextCursorX > maxPixelWidth)
           break;
       }
@@ -533,11 +628,11 @@ void CGUIFontTTF::DrawTextInternal(CGraphicContext& context,
     tempVertices->reserve(VERTEX_PER_GLYPH * glyphs.size());
     cursorX = 0;
 
-    for (auto itGlyph = glyphs.cbegin() + startPosGlyph; itGlyph != glyphs.cend(); ++itGlyph)
+    for (auto itGlyph = glyphBegin; itGlyph != glyphs.cend(); ++itGlyph)
     {
       // If starting text on a new line, determine justification effects
       // Get the current letter in the CStdString
-      UTILS::COLOR::Color color = (text[itGlyph->m_glyphInfo.cluster] & 0xff0000) >> 16;
+      KODI::UTILS::COLOR::Color color = (text[itGlyph->m_glyphInfo.cluster] & 0xff0000) >> 16;
       if (color >= colors.size())
         color = 0;
       color = colors[color];
@@ -556,44 +651,36 @@ void CGUIFontTTF::DrawTextInternal(CGraphicContext& context,
 
       if (alignment & XBFONT_TRUNCATED)
       {
-        if (alignment & XBFONT_RIGHT)
+        // Check if we will be exceeded the max allowed width
+        if (cursorX + ch->m_advance + ellipsesWidth > maxPixelWidth)
         {
-          if (isBeginWithEllipses)
-          {
-            isBeginWithEllipses = false;
-            Character* period = GetCharacter(L'.', 0);
-            if (!period)
-              break;
-
-            for (int i = 0; i < 3; i++)
-            {
-              RenderCharacter(context, startX + cursorX, startY, period, color, !scrolling,
-                              *tempVertices);
-              cursorX += period->m_advance;
-            }
-          }
-          if (maxPixelWidth > 0 && cursorX > maxPixelWidth)
-            break; // exceeded max allowed width - stop rendering
-        }
-        else
-        {
-          // Check if we will be exceeded the max allowed width
-          if (cursorX + ch->m_advance + ellipsesWidth > maxPixelWidth)
-          {
-            // Yup. Let's draw the ellipses, then bail
-            // Perhaps we should really bail to the next line in this case??
-            Character* period = GetCharacter(L'.', 0);
-            if (!period)
-              break;
-
-            for (int i = 0; i < 3; i++)
-            {
-              RenderCharacter(context, startX + cursorX, startY, period, color, !scrolling,
-                              *tempVertices);
-              cursorX += period->m_advance;
-            }
+          // Yup. Let's draw the ellipses, then bail
+          // Perhaps we should really bail to the next line in this case??
+          Character* period = GetCharacter(L'.', 0);
+          if (!period)
             break;
+
+          for (int i = 0; i < 3; i++)
+          {
+            RenderCharacter(context, startX + cursorX, startY, period, color, !scrolling,
+                            *tempVertices);
+            cursorX += period->m_advance;
           }
+          break;
+        }
+      }
+      else if (alignment & XBFONT_TRUNCATED_LEFT && itGlyph == glyphBegin)
+      {
+        // Add ellipsis only at the beginning of the text
+        Character* period = GetCharacter(L'.', 0);
+        if (!period)
+          break;
+
+        for (int i = 0; i < 3; i++)
+        {
+          RenderCharacter(context, startX + cursorX, startY, period, color, !scrolling,
+                          *tempVertices);
+          cursorX += period->m_advance;
         }
       }
       else if (maxPixelWidth > 0 && cursorX > maxPixelWidth)
@@ -623,7 +710,11 @@ void CGUIFontTTF::DrawTextInternal(CGraphicContext& context,
                                 scrolling, std::chrono::steady_clock::now(), dirtyCache);
       CVertexBuffer newVertexBuffer = CreateVertexBuffer(*tempVertices);
       vertexBuffer = newVertexBuffer;
+#if not defined(HAS_DX)
+      m_vertexTrans.emplace_back(x, y, 0.0f, &vertexBuffer, context.GetClipRegion(), dx, dy);
+#else
       m_vertexTrans.emplace_back(.0f, .0f, .0f, &vertexBuffer, context.GetClipRegion());
+#endif
     }
     else
     {
@@ -637,8 +728,12 @@ void CGUIFontTTF::DrawTextInternal(CGraphicContext& context,
   else
   {
     if (hardwareClipping)
+#if not defined(HAS_DX)
+      m_vertexTrans.emplace_back(x, y, 0.0f, &vertexBuffer, context.GetClipRegion(), dx, dy);
+#else
       m_vertexTrans.emplace_back(dynamicPos.m_x, dynamicPos.m_y, dynamicPos.m_z, &vertexBuffer,
                                  context.GetClipRegion());
+#endif
     else
       /* Append the vertices from the cache to the set collected since the first Begin() call */
       m_vertex.insert(m_vertex.end(), vertices->begin(), vertices->end());
@@ -1029,7 +1124,7 @@ void CGUIFontTTF::RenderCharacter(CGraphicContext& context,
                                   float posX,
                                   float posY,
                                   const Character* ch,
-                                  UTILS::COLOR::Color color,
+                                  KODI::UTILS::COLOR::Color color,
                                   bool roundX,
                                   std::vector<SVertex>& vertices)
 {
@@ -1044,12 +1139,19 @@ void CGUIFontTTF::RenderCharacter(CGraphicContext& context,
 
   // posX and posY are relative to our origin, and the textcell is offset
   // from our (posX, posY).  Plus, these are unscaled quantities compared to the underlying GUI resolution
+#if not defined(HAS_DX)
+  CRect vertex((posX + ch->m_offsetX), (posY + ch->m_offsetY), (posX + ch->m_offsetX + width),
+               (posY + ch->m_offsetY + height));
+#else
   CRect vertex((posX + ch->m_offsetX) * context.GetGUIScaleX(),
                (posY + ch->m_offsetY) * context.GetGUIScaleY(),
                (posX + ch->m_offsetX + width) * context.GetGUIScaleX(),
                (posY + ch->m_offsetY + height) * context.GetGUIScaleY());
   vertex += CPoint(m_originX, m_originY);
+#endif
   CRect texture(ch->m_left, ch->m_top, ch->m_right, ch->m_bottom);
+
+#if defined(HAS_DX)
   if (!m_renderSystem->ScissorsCanEffectClipping())
     context.ClipRect(vertex, texture);
 
@@ -1109,6 +1211,14 @@ void CGUIFontTTF::RenderCharacter(CGraphicContext& context,
   const float tr = texture.x2 * m_textureScaleX;
   const float tt = texture.y1 * m_textureScaleY;
   const float tb = texture.y2 * m_textureScaleY;
+#else
+  // when scaling by shader, we have to grow the vertex and texture coords
+  // by .5 or we would ommit pixels when animating.
+  const float tl = (texture.x1 - .5f) * m_textureScaleX;
+  const float tr = (texture.x2 + .5f) * m_textureScaleX;
+  const float tt = (texture.y1 - .5f) * m_textureScaleY;
+  const float tb = (texture.y2 + .5f) * m_textureScaleY;
+#endif
 
   vertices.resize(vertices.size() + VERTEX_PER_GLYPH);
   SVertex* v = &vertices[vertices.size() - VERTEX_PER_GLYPH];
@@ -1154,29 +1264,38 @@ void CGUIFontTTF::RenderCharacter(CGraphicContext& context,
   v[3].v = tb;
 #else
   // GL / GLES uses triangle strips, not quads, so have to rearrange the vertex order
+  // GL uses vertex shaders to manipulate text rotation/translation/scaling/clipping.
+
+  // nudge position to align with raster grid. messes up kerning, but also avoids
+  // linear filtering (when not scaled/rotated).
+  float xOffset = 0.0f;
+  if (roundX)
+    xOffset = (vertex.x1 - std::floor(vertex.x1));
+  float yOffset = (vertex.y1 - std::floor(vertex.y1));
+
   v[0].u = tl;
   v[0].v = tt;
-  v[0].x = x[0];
-  v[0].y = y[0];
-  v[0].z = z[0];
+  v[0].x = vertex.x1 - xOffset - 0.5f;
+  v[0].y = vertex.y1 - yOffset - 0.5f;
+  v[0].z = 0;
 
   v[1].u = tl;
   v[1].v = tb;
-  v[1].x = x[3];
-  v[1].y = y[3];
-  v[1].z = z[3];
+  v[1].x = vertex.x1 - xOffset - 0.5f;
+  v[1].y = vertex.y2 - yOffset + 0.5f;
+  v[1].z = 0;
 
   v[2].u = tr;
   v[2].v = tt;
-  v[2].x = x[1];
-  v[2].y = y[1];
-  v[2].z = z[1];
+  v[2].x = vertex.x2 - xOffset + 0.5f;
+  v[2].y = vertex.y1 - yOffset - 0.5f;
+  v[2].z = 0;
 
   v[3].u = tr;
   v[3].v = tb;
-  v[3].x = x[2];
-  v[3].y = y[2];
-  v[3].z = z[2];
+  v[3].x = vertex.x2 - xOffset + 0.5f;
+  v[3].y = vertex.y2 - yOffset + 0.5f;
+  v[3].z = 0;
 #endif
 }
 

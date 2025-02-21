@@ -43,7 +43,7 @@
 #include "utils/FileUtils.h"
 #include "utils/JobManager.h"
 #include "utils/StringUtils.h"
-#include "utils/XBMCTinyXML.h"
+#include "utils/XBMCTinyXML2.h"
 #include "utils/XMLUtils.h"
 #include "utils/log.h"
 
@@ -88,27 +88,27 @@ bool CMediaManager::LoadSources()
   m_locations.clear();
 
   // load xml file...
-  CXBMCTinyXML xmlDoc;
+  CXBMCTinyXML2 xmlDoc;
   if ( !xmlDoc.LoadFile( MEDIA_SOURCES_XML ) )
     return false;
 
-  TiXmlElement* pRootElement = xmlDoc.RootElement();
+  auto* pRootElement = xmlDoc.RootElement();
   if (!pRootElement || StringUtils::CompareNoCase(pRootElement->Value(), "mediasources") != 0)
   {
-    CLog::Log(LOGERROR, "Error loading {}, Line {} ({})", MEDIA_SOURCES_XML, xmlDoc.ErrorRow(),
-              xmlDoc.ErrorDesc());
+    CLog::Log(LOGERROR, "Error loading {}, Line {} ({})", MEDIA_SOURCES_XML, xmlDoc.ErrorLineNum(),
+              xmlDoc.ErrorStr());
     return false;
   }
 
   // load the <network> block
-  TiXmlNode *pNetwork = pRootElement->FirstChild("network");
+  auto* pNetwork = pRootElement->FirstChildElement("network");
   if (pNetwork)
   {
-    TiXmlElement *pLocation = pNetwork->FirstChildElement("location");
+    auto* pLocation = pNetwork->FirstChildElement("location");
     while (pLocation)
     {
       CNetworkLocation location;
-      pLocation->Attribute("id", &location.id);
+      location.id = pLocation->IntAttribute("id");
       if (pLocation->FirstChild())
       {
         location.path = pLocation->FirstChild()->Value();
@@ -123,41 +123,43 @@ bool CMediaManager::LoadSources()
 
 bool CMediaManager::SaveSources()
 {
-  CXBMCTinyXML xmlDoc;
-  TiXmlElement xmlRootElement("mediasources");
-  TiXmlNode *pRoot = xmlDoc.InsertEndChild(xmlRootElement);
-  if (!pRoot) return false;
+  CXBMCTinyXML2 doc;
+  auto* xmlRootElement = doc.NewElement("mediasources");
+  auto* rootNode = doc.InsertFirstChild(xmlRootElement);
 
-  TiXmlElement networkNode("network");
-  TiXmlNode *pNetworkNode = pRoot->InsertEndChild(networkNode);
-  if (pNetworkNode)
+  if (!rootNode)
+    return false;
+
+  auto* networkElement = doc.NewElement("network");
+  auto* networkNode = rootNode->InsertEndChild(networkElement);
+  if (networkNode)
   {
     for (std::vector<CNetworkLocation>::iterator it = m_locations.begin(); it != m_locations.end(); ++it)
     {
-      TiXmlElement locationNode("location");
-      locationNode.SetAttribute("id", (*it).id);
-      TiXmlText value((*it).path);
-      locationNode.InsertEndChild(value);
-      pNetworkNode->InsertEndChild(locationNode);
+      auto* locationNode = doc.NewElement("location");
+      locationNode->SetAttribute("id", (*it).id);
+      auto* value = doc.NewText((*it).path.c_str());
+      locationNode->InsertEndChild(value);
+      networkNode->InsertEndChild(locationNode);
     }
   }
-  return xmlDoc.SaveFile(MEDIA_SOURCES_XML);
+  return doc.SaveFile(MEDIA_SOURCES_XML);
 }
 
-void CMediaManager::GetLocalDrives(VECSOURCES &localDrives, bool includeQ)
+void CMediaManager::GetLocalDrives(std::vector<CMediaSource>& localDrives, bool includeQ)
 {
   std::unique_lock<CCriticalSection> lock(m_CritSecStorageProvider);
   m_platformStorage->GetLocalDrives(localDrives);
 }
 
-void CMediaManager::GetRemovableDrives(VECSOURCES &removableDrives)
+void CMediaManager::GetRemovableDrives(std::vector<CMediaSource>& removableDrives)
 {
   std::unique_lock<CCriticalSection> lock(m_CritSecStorageProvider);
   if (m_platformStorage)
     m_platformStorage->GetRemovableDrives(removableDrives);
 }
 
-void CMediaManager::GetNetworkLocations(VECSOURCES &locations, bool autolocations)
+void CMediaManager::GetNetworkLocations(std::vector<CMediaSource>& locations, bool autolocations)
 {
   for (unsigned int i = 0; i < m_locations.size(); i++)
   {
@@ -320,7 +322,7 @@ CMediaSource CMediaManager::ComputeRootAddonTypeSource(const std::string& type,
   source.strPath = "addons://sources/" + type + "/";
   source.strName = label;
   source.m_strThumbnailImage = thumb;
-  source.m_iDriveType = CMediaSource::SOURCE_TYPE_VPATH;
+  source.m_iDriveType = SourceType::VPATH;
   source.m_ignore = true;
   return source;
 }
@@ -607,11 +609,11 @@ std::string CMediaManager::GetDiscPath()
 #else
 
   std::unique_lock<CCriticalSection> lock(m_CritSecStorageProvider);
-  VECSOURCES drives;
+  std::vector<CMediaSource> drives;
   m_platformStorage->GetRemovableDrives(drives);
   for(unsigned i = 0; i < drives.size(); ++i)
   {
-    if(drives[i].m_iDriveType == CMediaSource::SOURCE_TYPE_DVD && !drives[i].strPath.empty())
+    if (drives[i].m_iDriveType == SourceType::OPTICAL_DISC && !drives[i].strPath.empty())
       return drives[i].strPath;
   }
 
@@ -697,9 +699,12 @@ void CMediaManager::OnStorageAdded(const MEDIA_DETECT::STORAGE::StorageDevice& d
 {
 #ifdef HAS_OPTICAL_DRIVE
   const std::shared_ptr<CSettings> settings = CServiceBroker::GetSettingsComponent()->GetSettings();
-  if (settings->GetInt(CSettings::SETTING_AUDIOCDS_AUTOACTION) != AUTOCD_NONE || settings->GetBool(CSettings::SETTING_DVDS_AUTORUN))
+  if (settings->GetInt(CSettings::SETTING_AUDIOCDS_AUTOACTION) !=
+          static_cast<int>(AutoCDAction::NONE) ||
+      settings->GetBool(CSettings::SETTING_DVDS_AUTORUN))
   {
-    if (settings->GetInt(CSettings::SETTING_AUDIOCDS_AUTOACTION) == AUTOCD_RIP)
+    if (settings->GetInt(CSettings::SETTING_AUDIOCDS_AUTOACTION) ==
+        static_cast<int>(AutoCDAction::RIP))
     {
       CServiceBroker::GetJobManager()->AddJob(new CAutorunMediaJob(device.label, device.path), this,
                                               CJob::PRIORITY_LOW);
@@ -789,10 +794,10 @@ bool CMediaManager::playStubFile(const CFileItem& item)
   strLine1 = g_localizeStrings.Get(435).c_str();
   strLine2 = g_localizeStrings.Get(436).c_str();
 
-  CXBMCTinyXML discStubXML;
+  CXBMCTinyXML2 discStubXML;
   if (discStubXML.LoadFile(item.GetPath()))
   {
-    TiXmlElement* pRootElement = discStubXML.RootElement();
+    auto* pRootElement = discStubXML.RootElement();
     if (!pRootElement || StringUtils::CompareNoCase(pRootElement->Value(), "discstub") != 0)
       CLog::Log(LOGINFO, "No <discstub> node found for {}. Using default info dialog message",
                 item.GetPath());

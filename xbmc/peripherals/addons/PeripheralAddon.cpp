@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2014-2018 Team Kodi
+ *  Copyright (C) 2014-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -9,6 +9,7 @@
 #include "PeripheralAddon.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "PeripheralAddonTranslator.h"
 #include "addons/addoninfo/AddonInfo.h"
 #include "addons/addoninfo/AddonType.h"
@@ -229,9 +230,9 @@ void CPeripheralAddon::UnregisterRemovedDevices(const PeripheralScanResults& res
   {
     auto it = m_peripherals.find(index);
     const PeripheralPtr& peripheral = it->second;
-    CLog::Log(LOGINFO, "{} - device removed from {}/{}: {} ({}:{})", __FUNCTION__,
-              PeripheralTypeTranslator::TypeToString(peripheral->Type()), peripheral->Location(),
-              peripheral->DeviceName(), peripheral->VendorIdAsString(),
+    CLog::Log(LOGINFO, "{} - {} device removed from {}: {} ({}:{})", __FUNCTION__,
+              PeripheralTypeTranslator::TypeToString(peripheral->Type()),
+              peripheral->FileLocation(), peripheral->DeviceName(), peripheral->VendorIdAsString(),
               peripheral->ProductIdAsString());
     UnregisterButtonMap(peripheral.get());
     peripheral->OnDeviceRemoved();
@@ -860,9 +861,8 @@ void CPeripheralAddon::UnregisterButtonMap(CPeripheral* device)
 
   m_buttonMaps.erase(
       std::remove_if(m_buttonMaps.begin(), m_buttonMaps.end(),
-                     [device](const std::pair<CPeripheral*, JOYSTICK::IButtonMap*>& buttonMap) {
-                       return buttonMap.first == device;
-                     }),
+                     [device](const std::pair<CPeripheral*, JOYSTICK::IButtonMap*>& buttonMap)
+                     { return buttonMap.first == device; }),
       m_buttonMaps.end());
 }
 

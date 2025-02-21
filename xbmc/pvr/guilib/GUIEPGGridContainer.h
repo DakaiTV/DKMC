@@ -26,6 +26,7 @@ class CFileItem;
 class CFileItemList;
 class CGUIListItem;
 class CGUIListItemLayout;
+class TiXmlElement;
 
 namespace PVR
 {
@@ -63,12 +64,12 @@ namespace PVR
     bool OnMessage(CGUIMessage& message) override;
     void SetFocus(bool focus) override;
     std::string GetDescription() const override;
-    EVENT_RESULT OnMouseEvent(const CPoint& point, const CMouseEvent& event) override;
+    EVENT_RESULT OnMouseEvent(const CPoint& point, const KODI::MOUSE::CMouseEvent& event) override;
 
     void Process(unsigned int currentTime, CDirtyRegionList& dirtyregions) override;
     void Render() override;
 
-    CGUIListItemPtr GetListItem(int offset, unsigned int flag = 0) const override;
+    std::shared_ptr<CGUIListItem> GetListItem(int offset, unsigned int flag = 0) const override;
     std::string GetLabel(int info) const override;
 
     std::shared_ptr<CFileItem> GetSelectedGridItem(int offset = 0) const;
@@ -127,6 +128,10 @@ namespace PVR
      * @return true if the selection was set to the given channel, false otherwise.
      */
     bool SetChannel(const CPVRChannelNumber& channelNumber);
+
+    virtual void AssignDepth() override;
+
+    void AssignItemDepth(CGUIListItem* item, bool focused);
 
   private:
     bool OnClick(int actionID);
@@ -201,10 +206,22 @@ namespace PVR
     bool OnMouseDoubleClick(int dwButton, const CPoint& point);
     bool OnMouseWheel(char wheel, const CPoint& point);
 
-    void HandleChannels(bool bRender, unsigned int currentTime, CDirtyRegionList& dirtyregions);
-    void HandleRuler(bool bRender, unsigned int currentTime, CDirtyRegionList& dirtyregions);
-    void HandleRulerDate(bool bRender, unsigned int currentTime, CDirtyRegionList& dirtyregions);
-    void HandleProgrammeGrid(bool bRender, unsigned int currentTime, CDirtyRegionList& dirtyregions);
+    void HandleChannels(bool bRender,
+                        unsigned int currentTime,
+                        CDirtyRegionList& dirtyregions,
+                        bool bAssignDepth = false);
+    void HandleRuler(bool bRender,
+                     unsigned int currentTime,
+                     CDirtyRegionList& dirtyregions,
+                     bool bAssignDepth = false);
+    void HandleRulerDate(bool bRender,
+                         unsigned int currentTime,
+                         CDirtyRegionList& dirtyregions,
+                         bool bAssignDepth = false);
+    void HandleProgrammeGrid(bool bRender,
+                             unsigned int currentTime,
+                             CDirtyRegionList& dirtyregions,
+                             bool bAssignDepth = false);
 
     float GetCurrentTimePositionOnPage() const;
     float GetProgressIndicatorWidth() const;
@@ -248,6 +265,7 @@ namespace PVR
     float m_analogScrollCount = 0;
 
     std::unique_ptr<CGUITexture> m_guiProgressIndicatorTexture;
+    uint32_t m_guiProgressIndicatorTextureDepth{0};
 
     std::shared_ptr<CFileItem> m_lastItem;
     std::shared_ptr<CFileItem> m_lastChannel;

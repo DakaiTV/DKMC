@@ -14,6 +14,7 @@
 #include "VideoSync.h"
 #include "WinEvents.h"
 #include "cores/VideoPlayer/VideoRenderers/DebugInfo.h"
+#include "guilib/DirtyRegion.h"
 #include "guilib/DispResource.h"
 #include "utils/HDRCapabilities.h"
 
@@ -68,6 +69,8 @@ public:
   virtual bool SetFullScreen(bool fullScreen, RESOLUTION_INFO& res, bool blankOtherDisplays) = 0;
   virtual bool DisplayHardwareScalingEnabled() { return false; }
   virtual void UpdateDisplayHardwareScaling(const RESOLUTION_INFO& resInfo) { }
+  virtual void SetDirtyRegions(const CDirtyRegionList& dirtyRegionsList) {}
+  virtual int GetBufferAge() { return 2; }
   virtual bool MoveWindow(int topLeft, int topRight){return false;}
   virtual void FinishModeChange(RESOLUTION res){}
   virtual void FinishWindowResize(int newWidth, int newHeight) {ResizeWindow(newWidth, newHeight, -1, -1);}
@@ -172,7 +175,7 @@ public:
   void SetWindowResolution(int width, int height);
   std::vector<RESOLUTION_WHR> ScreenResolutions(float refreshrate);
   std::vector<REFRESHRATE> RefreshRates(int width, int height, uint32_t dwFlags);
-  REFRESHRATE DefaultRefreshRate(std::vector<REFRESHRATE> rates);
+  REFRESHRATE DefaultRefreshRate(const std::vector<REFRESHRATE>& rates);
   virtual bool HasCalibration(const RESOLUTION_INFO& resInfo) { return true; }
 
   // text input interface
@@ -217,6 +220,7 @@ public:
   virtual HDR_STATUS GetOSHDRStatus() { return HDR_STATUS::HDR_UNSUPPORTED; }
   virtual CHDRCapabilities GetDisplayHDRCapabilities() const { return {}; }
   static const char* SETTING_WINSYSTEM_IS_HDR_DISPLAY;
+  virtual float GetGuiSdrPeakLuminance() const { return .0f; }
   virtual bool HasSystemSdrPeakLuminance() { return false; }
 
   /*!
@@ -258,6 +262,24 @@ public:
    * \return std::pair containing dither enabled (bool) and dither depth (int)
    */
   std::pair<bool, int> GetDitherSettings();
+
+  /*!
+   * \brief Binds a shared context to the current thread, in order to upload textures asynchronously.
+   * \return Return true if a texture upload context exists and the binding succeeds.
+   */
+  virtual bool BindTextureUploadContext() { return false; }
+
+  /*!
+   * \brief Unbinds the shared context.
+   * \return Return true if the texture upload context has been unbound.
+   */
+  virtual bool UnbindTextureUploadContext() { return false; }
+
+  /*!
+   * \brief Checks if a graphics context is already bound to the current thread.
+   * \return Return true if so.
+   */
+  virtual bool HasContext() { return false; }
 
 protected:
   void UpdateDesktopResolution(RESOLUTION_INFO& newRes, const std::string &output, int width, int height, float refreshRate, uint32_t dwFlags);

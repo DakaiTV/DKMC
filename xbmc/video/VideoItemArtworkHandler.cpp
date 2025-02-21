@@ -9,27 +9,32 @@
 #include "VideoItemArtworkHandler.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "MediaSource.h"
 #include "ServiceBroker.h"
-#include "TextureDatabase.h"
 #include "filesystem/Directory.h"
 #include "guilib/LocalizeStrings.h"
+#include "imagefiles/ImageFileURL.h"
 #include "music/MusicDatabase.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
+#include "utils/ArtUtils.h"
 #include "utils/FileExtensionProvider.h"
 #include "utils/FileUtils.h"
 #include "utils/URIUtils.h"
 #include "utils/Variant.h"
 #include "utils/log.h"
 #include "video/VideoDatabase.h"
+#include "video/VideoFileItemClassify.h"
 #include "video/VideoInfoScanner.h"
 #include "video/VideoInfoTag.h"
 #include "video/VideoThumbLoader.h"
 #include "video/tags/VideoTagExtractionHelper.h"
 
-using namespace VIDEO;
 using namespace XFILE;
+
+namespace KODI::VIDEO
+{
 
 namespace
 {
@@ -118,7 +123,7 @@ void CVideoItemArtworkHandler::AddItemPathToFileBrowserSources(std::vector<CMedi
     itemDir = m_item->GetVideoInfoTag()->GetPath();
 
   const CFileItem itemTmp(itemDir, false);
-  if (itemTmp.IsVideo())
+  if (IsVideo(itemTmp))
     itemDir = URIUtils::GetParentPath(itemDir);
 
   AddItemPathStringToFileBrowserSources(sources, itemDir,
@@ -136,6 +141,8 @@ void CVideoItemArtworkHandler::PersistArt(const std::string& art)
 
   videodb.SetArtForItem(m_item->GetVideoInfoTag()->m_iDbId, m_item->GetVideoInfoTag()->m_type,
                         m_artType, art);
+
+  videodb.UpdateArtForItem(m_item->GetVideoInfoTag()->m_iDbId, m_artType);
 }
 
 void CVideoItemArtworkHandler::AddItemPathStringToFileBrowserSources(
@@ -467,14 +474,14 @@ std::vector<std::string> CVideoItemArtworkFanartHandler::GetRemoteArt() const
     if (URIUtils::IsProtocol(thumb, "image"))
       continue;
 
-    remoteArt.emplace_back(CTextureUtils::GetWrappedThumbURL(thumb));
+    remoteArt.emplace_back(IMAGE_FILES::URLFromFile(thumb));
   }
   return remoteArt;
 }
 
 std::string CVideoItemArtworkFanartHandler::GetLocalArt() const
 {
-  return m_item->GetLocalFanart();
+  return ART::GetLocalFanart(*m_item);
 }
 
 std::string CVideoItemArtworkFanartHandler::UpdateEmbeddedArt(const std::string& art)
@@ -552,3 +559,5 @@ std::unique_ptr<IVideoItemArtworkHandler> IVideoItemArtworkHandlerFactory::Creat
 
   return artHandler;
 }
+
+} // namespace KODI::VIDEO

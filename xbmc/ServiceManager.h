@@ -27,7 +27,7 @@ namespace PVR
 class CPVRManager;
 }
 
-namespace PLAYLIST
+namespace KODI::PLAYLIST
 {
 class CPlayListPlayer;
 }
@@ -48,6 +48,7 @@ class CNetworkBase;
 class CWinSystemBase;
 class CPowerManager;
 class CWeatherManager;
+class CSlideShowDelegator;
 
 namespace KODI
 {
@@ -126,7 +127,8 @@ public:
   KODI::RETRO::CGUIGameRenderManager& GetGameRenderManager();
   PERIPHERALS::CPeripherals& GetPeripherals();
 
-  PLAYLIST::CPlayListPlayer& GetPlaylistPlayer();
+  KODI::PLAYLIST::CPlayListPlayer& GetPlaylistPlayer();
+  CSlideShowDelegator& GetSlideShowDelegator();
   int init_level = 0;
 
   CFavouritesService& GetFavouritesService();
@@ -165,7 +167,7 @@ protected:
   std::unique_ptr<CContextMenuManager> m_contextMenuManager;
   std::unique_ptr<CDataCacheCore> m_dataCacheCore;
   std::unique_ptr<CPlatform> m_Platform;
-  std::unique_ptr<PLAYLIST::CPlayListPlayer> m_playlistPlayer;
+  std::unique_ptr<KODI::PLAYLIST::CPlayListPlayer> m_playlistPlayer;
   std::unique_ptr<KODI::GAME::CControllerManager> m_gameControllerManager;
   std::unique_ptr<KODI::GAME::CGameServices> m_gameServices;
   std::unique_ptr<KODI::RETRO::CGUIGameRenderManager> m_gameRenderManager;
@@ -182,4 +184,5 @@ protected:
 #if !defined(TARGET_WINDOWS) && defined(HAS_OPTICAL_DRIVE)
   std::unique_ptr<MEDIA_DETECT::CDetectDVDMedia> m_DetectDVDType;
 #endif
+  std::unique_ptr<CSlideShowDelegator> m_slideShowDelegator;
 };

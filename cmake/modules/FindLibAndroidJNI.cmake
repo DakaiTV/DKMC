@@ -4,16 +4,16 @@
 #
 # This will define the following target:
 #
-#   libandroidjni::libandroidjni   - The LibAndroidJNI library
+#   ${APP_NAME_LC}::LibAndroidJNI   - The LibAndroidJNI library
 
-if(NOT TARGET libandroidjni::libandroidjni)
+if(NOT TARGET ${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME})
   include(cmake/scripts/common/ModuleHelpers.cmake)
 
-  set(MODULE_LC libandroidjni)
+  set(${CMAKE_FIND_PACKAGE_NAME}_MODULE_LC libandroidjni)
 
   SETUP_BUILD_VARS()
 
-  set(LIBANDROIDJNI_BUILD_TYPE Release)
+  set(${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_BUILD_TYPE Release)
 
   # We still need to supply SOMETHING to CMAKE_ARGS to initiate a cmake BUILD_DEP_TARGET
   # Setting cmake_build_type twice wont cause issues
@@ -26,15 +26,11 @@ if(NOT TARGET libandroidjni::libandroidjni)
                                     REQUIRED_VARS LIBANDROIDJNI_LIBRARY LIBANDROIDJNI_INCLUDE_DIR
                                     VERSION_VAR LIBANDROIDJNI_VER)
 
-  add_library(libandroidjni::libandroidjni STATIC IMPORTED)
-  set_target_properties(libandroidjni::libandroidjni PROPERTIES
-                                                     FOLDER "External Projects"
-                                                     IMPORTED_LOCATION "${LIBANDROIDJNI_LIBRARY}"
-                                                     INTERFACE_INCLUDE_DIRECTORIES "${LIBANDROIDJNI_INCLUDE_DIR}")
+  add_library(${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME} STATIC IMPORTED)
+  set_target_properties(${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME} PROPERTIES
+                                                                   FOLDER "External Projects"
+                                                                   IMPORTED_LOCATION "${LIBANDROIDJNI_LIBRARY}"
+                                                                   INTERFACE_INCLUDE_DIRECTORIES "${LIBANDROIDJNI_INCLUDE_DIR}")
 
-  add_dependencies(libandroidjni::libandroidjni libandroidjni)
-
-  set_property(GLOBAL APPEND PROPERTY INTERNAL_DEPS_PROP libandroidjni::libandroidjni)
-
-  mark_as_advanced(LIBANDROIDJNI_INCLUDE_DIR LIBANDROIDJNI_LIBRARY)
+  add_dependencies(${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME} libandroidjni)
 endif()

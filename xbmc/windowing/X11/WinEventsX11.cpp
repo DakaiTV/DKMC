@@ -329,7 +329,7 @@ bool CWinEventsX11::MessagePump()
       continue;
     }
 
-    if (XFilterEvent(&xevent, m_window))
+    if (XFilterEvent(&xevent, None))
       continue;
 
     switch (xevent.type)
@@ -384,8 +384,9 @@ bool CWinEventsX11::MessagePump()
         m_structureChanged = true;
         XBMC_Event newEvent = {};
         newEvent.type = XBMC_VIDEORESIZE;
-        newEvent.resize.w = xevent.xconfigure.width;
-        newEvent.resize.h = xevent.xconfigure.height;
+        newEvent.resize.width = xevent.xconfigure.width;
+        newEvent.resize.height = xevent.xconfigure.height;
+        newEvent.resize.scale = 1.0;
         if (appPort)
           ret |= appPort->OnEvent(newEvent);
         CServiceBroker::GetGUI()->GetWindowManager().MarkDirty();

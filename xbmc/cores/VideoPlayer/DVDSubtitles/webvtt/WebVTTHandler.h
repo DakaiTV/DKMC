@@ -193,7 +193,7 @@ private:
   void GetCueData(std::string& cueText);
   std::string GetCueSettingValue(const std::string& propName,
                                  std::string& text,
-                                 std::string defaultValue);
+                                 const std::string& defaultValue);
   std::string GetCueCssValue(const std::string& cssPropName, std::string& line);
   void AddDefaultCssClasses();
   void InsertCssStyleStartTag(const tagToken& tag,
@@ -231,6 +231,6 @@ private:
   std::map<WebvttSelector, std::map<std::string, webvttCssStyle>> m_cssSelectors;
 
   bool m_CSSColorsLoaded{false};
-  std::vector<std::pair<std::string, UTILS::COLOR::ColorInfo>> m_CSSColors;
+  std::vector<std::pair<std::string, KODI::UTILS::COLOR::ColorInfo>> m_CSSColors;
   double m_offset{0.0};
 };

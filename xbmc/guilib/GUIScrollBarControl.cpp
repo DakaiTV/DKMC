@@ -9,9 +9,13 @@
 #include "GUIScrollBarControl.h"
 
 #include "GUIMessage.h"
-#include "input/Key.h"
+#include "input/actions/Action.h"
+#include "input/actions/ActionIDs.h"
+#include "input/mouse/MouseEvent.h"
 #include "input/mouse/MouseStat.h"
 #include "utils/StringUtils.h"
+
+using namespace KODI;
 
 #define MIN_NIB_SIZE 4.0f
 
@@ -35,8 +39,8 @@ GUIScrollBarControl::GUIScrollBarControl(int parentID,
     m_guiNibNoFocus(CGUITexture::CreateTexture(posX, posY, width, height, nibTexture)),
     m_guiNibFocus(CGUITexture::CreateTexture(posX, posY, width, height, nibTextureFocus))
 {
-  m_guiNibNoFocus->SetAspectRatio(CAspectRatio::AR_CENTER);
-  m_guiNibFocus->SetAspectRatio(CAspectRatio::AR_CENTER);
+  m_guiNibNoFocus->SetAspectRatio(CAspectRatio::CENTER);
+  m_guiNibFocus->SetAspectRatio(CAspectRatio::CENTER);
   m_numItems = 100;
   m_offset = 0;
   m_pageSize = 10;
@@ -314,7 +318,7 @@ void GUIScrollBarControl::SetFromPosition(const CPoint &point)
   }
 }
 
-EVENT_RESULT GUIScrollBarControl::OnMouseEvent(const CPoint &point, const CMouseEvent &event)
+EVENT_RESULT GUIScrollBarControl::OnMouseEvent(const CPoint& point, const MOUSE::CMouseEvent& event)
 {
   if (event.m_id == ACTION_MOUSE_DRAG || event.m_id == ACTION_MOUSE_DRAG_END)
   {

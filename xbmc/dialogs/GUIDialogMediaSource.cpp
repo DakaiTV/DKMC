@@ -7,34 +7,36 @@
  */
 
 #include "GUIDialogMediaSource.h"
-#include "ServiceBroker.h"
-#include "guilib/GUIKeyboardFactory.h"
+
+#include "FileItem.h"
+#include "FileItemList.h"
 #include "GUIDialogFileBrowser.h"
-#include "video/windows/GUIWindowVideoBase.h"
-#include "music/windows/GUIWindowMusicBase.h"
-#include "guilib/GUIComponent.h"
-#include "guilib/GUIWindowManager.h"
-#include "input/Key.h"
+#include "GUIDialogYesNo.h"
+#include "PasswordManager.h"
+#include "ServiceBroker.h"
+#include "URL.h"
 #include "Util.h"
-#include "utils/URIUtils.h"
-#include "utils/StringUtils.h"
-#include "utils/Variant.h"
 #include "filesystem/Directory.h"
 #include "filesystem/PVRDirectory.h"
-#include "GUIDialogYesNo.h"
-#include "FileItem.h"
+#include "guilib/GUIComponent.h"
+#include "guilib/GUIKeyboardFactory.h"
+#include "guilib/GUIWindowManager.h"
+#include "guilib/LocalizeStrings.h"
+#include "input/actions/ActionIDs.h"
+#include "music/windows/GUIWindowMusicBase.h"
+#include "pvr/recordings/PVRRecordingsPath.h"
 #include "settings/MediaSourceSettings.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
-#include "guilib/LocalizeStrings.h"
-#include "PasswordManager.h"
-#include "URL.h"
-#include "pvr/recordings/PVRRecordingsPath.h"
+#include "utils/StringUtils.h"
+#include "utils/URIUtils.h"
+#include "utils/Variant.h"
+#include "video/windows/GUIWindowVideoBase.h"
 
 #if defined(TARGET_ANDROID)
 #include "utils/FileUtils.h"
 
-#include "platform/android/activity/XBMCApp.h"
+#include "platform/android/storage/AndroidStorageProvider.h"
 #endif
 
 #ifdef TARGET_WINDOWS_STORE
@@ -150,7 +152,7 @@ bool CGUIDialogMediaSource::ShowAndAddMediaSource(const std::string &type)
 
 bool CGUIDialogMediaSource::ShowAndEditMediaSource(const std::string &type, const std::string&share)
 {
-  VECSOURCES* pShares = CMediaSourceSettings::GetInstance().GetSources(type);
+  std::vector<CMediaSource>* pShares = CMediaSourceSettings::GetInstance().GetSources(type);
   if (pShares)
   {
     for (unsigned int i = 0;i<pShares->size();++i)
@@ -195,7 +197,7 @@ std::string CGUIDialogMediaSource::GetUniqueMediaSourceName()
   // Get unique source name for this media type
   unsigned int i, j = 2;
   bool bConfirmed = false;
-  VECSOURCES* pShares = CMediaSourceSettings::GetInstance().GetSources(m_type);
+  std::vector<CMediaSource>* pShares = CMediaSourceSettings::GetInstance().GetSources(m_type);
   std::string strName = m_name;
   while (!bConfirmed)
   {
@@ -235,7 +237,7 @@ void CGUIDialogMediaSource::OnPathBrowse(int item)
   // Ignore current path is best at this stage??
   std::string path = m_paths->Get(item)->GetPath();
   bool allowNetworkShares(m_type != "programs");
-  VECSOURCES extraShares;
+  std::vector<CMediaSource> extraShares;
 
   if (m_name != CUtil::GetTitleFromPath(path))
     m_bNameChanged = true;
@@ -247,7 +249,8 @@ void CGUIDialogMediaSource::OnPathBrowse(int item)
 #if defined(TARGET_ANDROID)
     // add the default android music directory
     std::string path;
-    if (CXBMCApp::GetExternalStorage(path, "music") && !path.empty() && CDirectory::Exists(path))
+    if (CAndroidStorageProvider::GetExternalStorage(path, "music") && !path.empty() &&
+        CDirectory::Exists(path))
     {
       share1.strPath = path;
       share1.strName = g_localizeStrings.Get(20240);
@@ -301,7 +304,8 @@ void CGUIDialogMediaSource::OnPathBrowse(int item)
 #if defined(TARGET_ANDROID)
     // add the default android video directory
     std::string path;
-    if (CXBMCApp::GetExternalStorage(path, "videos") && !path.empty() && CFileUtils::Exists(path))
+    if (CAndroidStorageProvider::GetExternalStorage(path, "videos") && !path.empty() &&
+        CFileUtils::Exists(path))
     {
       share1.strPath = path;
       share1.strName = g_localizeStrings.Get(20241);
@@ -347,7 +351,8 @@ void CGUIDialogMediaSource::OnPathBrowse(int item)
 #if defined(TARGET_ANDROID)
     // add the default android music directory
     std::string path;
-    if (CXBMCApp::GetExternalStorage(path, "pictures") && !path.empty() && CFileUtils::Exists(path))
+    if (CAndroidStorageProvider::GetExternalStorage(path, "pictures") && !path.empty() &&
+        CFileUtils::Exists(path))
     {
       share1.strPath = path;
       share1.strName = g_localizeStrings.Get(20242);
@@ -356,7 +361,8 @@ void CGUIDialogMediaSource::OnPathBrowse(int item)
     }
 
     path.clear();
-    if (CXBMCApp::GetExternalStorage(path, "photos") && !path.empty() && CFileUtils::Exists(path))
+    if (CAndroidStorageProvider::GetExternalStorage(path, "photos") && !path.empty() &&
+        CFileUtils::Exists(path))
     {
       share1.strPath = path;
       share1.strName = g_localizeStrings.Get(20243);

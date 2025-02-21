@@ -9,10 +9,12 @@
 #include "PlayList.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "PlayListFactory.h"
 #include "ServiceBroker.h"
 #include "filesystem/File.h"
 #include "interfaces/AnnouncementManager.h"
+#include "music/MusicFileItemClassify.h"
 #include "music/tags/MusicInfoTag.h"
 #include "utils/Random.h"
 #include "utils/StringUtils.h"
@@ -28,10 +30,11 @@
 #include <utility>
 #include <vector>
 
-
 using namespace MUSIC_INFO;
 using namespace XFILE;
-using namespace PLAYLIST;
+
+namespace KODI::PLAYLIST
+{
 
 CPlayList::CPlayList(Id id /* = PLAYLIST::TYPE_NONE */) : m_id(id)
 {
@@ -42,32 +45,32 @@ CPlayList::CPlayList(Id id /* = PLAYLIST::TYPE_NONE */) : m_id(id)
 
 void CPlayList::AnnounceRemove(int pos)
 {
-  if (m_id == TYPE_NONE)
+  if (m_id == Id::TYPE_NONE)
     return;
 
   CVariant data;
-  data["playlistid"] = m_id;
+  data["playlistid"] = static_cast<int>(m_id);
   data["position"] = pos;
   CServiceBroker::GetAnnouncementManager()->Announce(ANNOUNCEMENT::Playlist, "OnRemove", data);
 }
 
 void CPlayList::AnnounceClear()
 {
-  if (m_id == TYPE_NONE)
+  if (m_id == Id::TYPE_NONE)
     return;
 
   CVariant data;
-  data["playlistid"] = m_id;
+  data["playlistid"] = static_cast<int>(m_id);
   CServiceBroker::GetAnnouncementManager()->Announce(ANNOUNCEMENT::Playlist, "OnClear", data);
 }
 
 void CPlayList::AnnounceAdd(const std::shared_ptr<CFileItem>& item, int pos)
 {
-  if (m_id == TYPE_NONE)
+  if (m_id == Id::TYPE_NONE)
     return;
 
   CVariant data;
-  data["playlistid"] = m_id;
+  data["playlistid"] = static_cast<int>(m_id);
   data["position"] = pos;
   CServiceBroker::GetAnnouncementManager()->Announce(ANNOUNCEMENT::Playlist, "OnAdd", item, data);
 }
@@ -350,7 +353,7 @@ int CPlayList::RemoveDVDItems()
   while (it != m_vecItems.end() )
   {
     CFileItemPtr item = *it;
-    if ( item->IsCDDA() || item->IsOnDVD() )
+    if (MUSIC::IsCDDA(*item) || item->IsOnDVD())
     {
       vecFilenames.push_back( item->GetPath() );
     }
@@ -506,8 +509,10 @@ void CPlayList::UpdateItem(const CFileItem *item)
 
 const std::string& CPlayList::ResolveURL(const std::shared_ptr<CFileItem>& item) const
 {
-  if (item->IsMusicDb() && item->HasMusicInfoTag())
+  if (MUSIC::IsMusicDb(*item) && item->HasMusicInfoTag())
     return item->GetMusicInfoTag()->GetURL();
   else
     return item->GetDynPath();
 }
+
+} // namespace KODI::PLAYLIST

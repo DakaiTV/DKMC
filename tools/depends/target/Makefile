@@ -6,9 +6,10 @@ endif
 
 # Keep in alphabetical order
 DEPENDS = \
+  brotli \
   bzip2 \
-  curl \
   dav1d \
+  exiv2 \
   expat \
   ffmpeg \
   fontconfig \
@@ -21,7 +22,6 @@ DEPENDS = \
   gnutls \
   gtest \
   harfbuzz \
-  libass \
   libbluray \
   libffi \
   libgcrypt \
@@ -54,8 +54,10 @@ else
   DEPENDS+=samba libcdio
 endif
 
+FONTCONFIG=fontconfig
 ifeq ($(OS),darwin_embedded)
   EXCLUDED_DEPENDS = libusb gtest
+  FONTCONFIG=
   ifeq ($(TARGET_PLATFORM),appletvos)
     EXCLUDED_DEPENDS += libshairplay libplist
   endif
@@ -63,6 +65,7 @@ ifeq ($(OS),darwin_embedded)
 endif
 
 ifeq ($(OS),osx)
+  FONTCONFIG=
   EXCLUDED_DEPENDS = libusb
   DEPENDS += smctemp
 endif
@@ -126,8 +129,8 @@ ifeq ($(OS),linux)
   endif
 
   ifeq ($(TARGET_PLATFORM),webos)
-    DEPENDS += wayland waylandpp wayland-protocols webos-wayland-extensions webos-userland
-    EXCLUDED_DEPENDS += dbus libcec linux-system-x11-libs pipewire mesa
+    DEPENDS += libdovi wayland waylandpp wayland-protocols webos-wayland-extensions webos-userland
+    EXCLUDED_DEPENDS += dbus linux-system-x11-libs pipewire mesa
   endif
 
   ifneq (,$(findstring gbm,$(TARGET_PLATFORM)))
@@ -150,15 +153,16 @@ $(DOWNLOAD_TARGETS):
 download: $(DOWNLOAD_TARGETS)
 
 crossguid: $(LIBUUID)
-curl: openssl nghttp2 $(ZLIB)
+curl: brotli openssl nghttp2 $(ZLIB)
 dbus: expat
+exiv2: $(ICONV) $(ZLIB) expat
 ffmpeg: $(ICONV) $(ZLIB) bzip2 gnutls dav1d $(LIBVA)
 fontconfig: freetype2 expat $(ICONV) $(LIBUUID)
 freetype2: bzip2 harfbuzz $(ZLIB)
 gettext: $(ICONV)
 gnutls: nettle $(ZLIB)
 harfbuzz: freetype2-noharfbuzz $(ICONV)
-libass: fontconfig fribidi harfbuzz libpng freetype2 expat $(ICONV)
+libass: $(FONTCONFIG) fribidi harfbuzz freetype2 $(ICONV)
 libbluray: fontconfig freetype2 $(ICONV) udfread libxml2
 libcdio-gplv3: $(ICONV)
 libcdio: $(ICONV)

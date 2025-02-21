@@ -9,6 +9,7 @@
 #include "VideoThumbLoader.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "TextureCache.h"
 #include "URL.h"
@@ -19,8 +20,10 @@
 #include "filesystem/StackDirectory.h"
 #include "guilib/GUIComponent.h"
 #include "guilib/StereoscopicsManager.h"
+#include "imagefiles/ImageFileURL.h"
 #include "music/MusicDatabase.h"
 #include "music/tags/MusicInfoTag.h"
+#include "network/NetworkFileItemClassify.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/SettingUtils.h"
 #include "settings/Settings.h"
@@ -29,14 +32,17 @@
 #include "utils/URIUtils.h"
 #include "utils/log.h"
 #include "video/VideoDatabase.h"
+#include "video/VideoFileItemClassify.h"
 #include "video/VideoInfoTag.h"
+#include "video/VideoManagerTypes.h"
+#include "video/guilib/VideoVersionHelper.h"
 
 #include <algorithm>
 #include <cstdlib>
 #include <utility>
 
+using namespace KODI;
 using namespace XFILE;
-using namespace VIDEO;
 
 CVideoThumbLoader::CVideoThumbLoader() : CThumbLoader()
 {
@@ -178,8 +184,11 @@ bool CVideoThumbLoader::LoadItemCached(CFileItem* pItem)
 
   if (!pItem->HasVideoInfoTag() || !pItem->GetVideoInfoTag()->HasStreamDetails()) // no stream details
   {
-    if ((pItem->HasVideoInfoTag() && pItem->GetVideoInfoTag()->m_iFileId >= 0) // file (or maybe folder) is in the database
-    || (!pItem->m_bIsFolder && pItem->IsVideo())) // Some other video file for which we haven't yet got any database details
+    if ((pItem->HasVideoInfoTag() &&
+         pItem->GetVideoInfoTag()->m_iFileId >= 0) // file (or maybe folder) is in the database
+        || (!pItem->m_bIsFolder &&
+            VIDEO::IsVideo(
+                *pItem))) // Some other video file for which we haven't yet got any database details
     {
       if (m_videoDatabase->GetStreamDetails(*pItem))
         pItem->SetInvalid();
@@ -240,43 +249,51 @@ bool CVideoThumbLoader::LoadItemLookup(CFileItem* pItem)
 
   m_videoDatabase->Open();
 
-  std::map<std::string, std::string> artwork = pItem->GetArt();
-  std::vector<std::string> artTypes = GetArtTypes(pItem->HasVideoInfoTag() ? pItem->GetVideoInfoTag()->m_type : "");
-  if (find(artTypes.begin(), artTypes.end(), "thumb") == artTypes.end())
-    artTypes.emplace_back("thumb"); // always look for "thumb" art for files
-  for (std::vector<std::string>::const_iterator i = artTypes.begin(); i != artTypes.end(); ++i)
+  const bool isLibraryItem = pItem->HasVideoInfoTag() && pItem->GetVideoInfoTag()->m_iDbId > -1 &&
+                             !pItem->GetVideoInfoTag()->m_type.empty();
+  const bool libraryArtFilled =
+      pItem->HasVideoInfoTag() && pItem->GetProperty("libraryartfilled").asBoolean();
+  if (!isLibraryItem || !libraryArtFilled)
   {
-    std::string type = *i;
-    if (!pItem->HasArt(type))
+    std::map<std::string, std::string> artwork = pItem->GetArt();
+    std::vector<std::string> artTypes =
+        GetArtTypes(pItem->HasVideoInfoTag() ? pItem->GetVideoInfoTag()->m_type : "");
+    if (find(artTypes.begin(), artTypes.end(), "thumb") == artTypes.end())
+      artTypes.emplace_back("thumb"); // always look for "thumb" art for files
+    for (std::vector<std::string>::const_iterator i = artTypes.begin(); i != artTypes.end(); ++i)
     {
-      std::string art = GetLocalArt(*pItem, type, type=="fanart");
-      if (!art.empty()) // cache it
+      std::string type = *i;
+      if (!pItem->HasArt(type))
       {
-        SetCachedImage(*pItem, type, art);
-        CServiceBroker::GetTextureCache()->BackgroundCacheImage(art);
-        artwork.insert(std::make_pair(type, art));
-      }
-      else
-      {
-        // If nothing was found, try embedded art
-        if (pItem->HasVideoInfoTag() && !pItem->GetVideoInfoTag()->m_coverArt.empty())
+        std::string art = GetLocalArt(*pItem, type, type == "fanart");
+        if (!art.empty()) // cache it
         {
-          for (auto& it : pItem->GetVideoInfoTag()->m_coverArt)
+          SetCachedImage(*pItem, type, art);
+          CServiceBroker::GetTextureCache()->BackgroundCacheImage(art);
+          artwork.insert(std::make_pair(type, art));
+        }
+        else
+        {
+          // If nothing was found, try embedded art
+          if (pItem->HasVideoInfoTag() && !pItem->GetVideoInfoTag()->m_coverArt.empty())
           {
-            if (it.m_type == type)
+            for (auto& it : pItem->GetVideoInfoTag()->m_coverArt)
             {
-              art = CTextureUtils::GetWrappedImageURL(pItem->GetPath(), "video_" + type);
-              artwork.insert(std::make_pair(type, art));
+              if (it.m_type == type)
+              {
+                art = IMAGE_FILES::URLFromFile(pItem->GetPath(), "video_" + type);
+                artwork.insert(std::make_pair(type, art));
+              }
             }
           }
         }
       }
     }
+    pItem->AppendArt(artwork);
   }
-  pItem->AppendArt(artwork);
 
   // We can only extract flags/thumbs for file-like items
-  if (!pItem->m_bIsFolder && pItem->IsVideo())
+  if (!pItem->m_bIsFolder && VIDEO::IsVideo(*pItem))
   {
     const std::shared_ptr<CSettings> settings = CServiceBroker::GetSettingsComponent()->GetSettings();
     if (!pItem->HasArt("thumb"))
@@ -396,8 +413,23 @@ bool CVideoThumbLoader::FillLibraryArt(CFileItem &item)
   if (tag.m_iDbId > -1 && !tag.m_type.empty())
   {
     m_videoDatabase->Open();
-    if (m_videoDatabase->GetArtForItem(tag.m_iDbId, tag.m_type, artwork))
+
+    // @todo unify asset path for other items path
+    if (VIDEO::IsVideoAssetFile(item))
+    {
+      if (m_videoDatabase->GetArtForAsset(
+              tag.m_iFileId,
+              (item.GetProperty("noartfallbacktoowner").asBoolean(false) ||
+               item.GetVideoInfoTag()->GetAssetInfo().GetType() != VideoAssetType::VERSION)
+                  ? ArtFallbackOptions::NONE
+                  : ArtFallbackOptions::PARENT,
+              artwork))
+        item.AppendArt(artwork);
+    }
+    else if (m_videoDatabase->GetArtForItem(tag.m_iDbId, tag.m_type, artwork) && !artwork.empty())
+    {
       item.AppendArt(artwork);
+    }
     else if (tag.m_type == "actor" && !tag.m_artist.empty() &&
              item.GetProperty("musicvideomediatype") != MediaTypeArtist)
     {
@@ -466,7 +498,7 @@ bool CVideoThumbLoader::FillThumb(CFileItem &item)
       {
         if (it.m_type == "thumb")
         {
-          thumb = CTextureUtils::GetWrappedImageURL(item.GetPath(), "video_" + it.m_type);
+          thumb = IMAGE_FILES::URLFromFile(item.GetPath(), "video_" + it.m_type);
           item.SetArt(it.m_type, thumb);
         }
       }
@@ -490,11 +522,11 @@ std::string CVideoThumbLoader::GetLocalArt(const CFileItem &item, const std::str
 
   const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
 
-  const bool cacheAll =
-      settings ? settings->GetInt(CSettings::SETTING_FILECACHE_BUFFERMODE) == CACHE_BUFFER_MODE_ALL
-               : false;
+  const bool cacheAll = settings ? settings->GetInt(CSettings::SETTING_FILECACHE_BUFFERMODE) ==
+                                       static_cast<int>(CacheBufferMode::ALL)
+                                 : false;
 
-  if (item.m_bIsFolder && (item.IsStreamedFilesystem() || cacheAll))
+  if (item.m_bIsFolder && (NETWORK::IsStreamedFilesystem(item) || cacheAll))
   {
     CFileItemList items; // Dummy list
     CDirectory::GetDirectory(item.GetPath(), items, "", DIR_FLAG_NO_FILE_DIRS | DIR_FLAG_READ_CACHE | DIR_FLAG_NO_FILE_INFO);
@@ -524,17 +556,19 @@ std::string CVideoThumbLoader::GetLocalArt(const CFileItem &item, const std::str
 std::string CVideoThumbLoader::GetEmbeddedThumbURL(const CFileItem &item)
 {
   std::string path(item.GetPath());
-  if (item.IsVideoDb() && item.HasVideoInfoTag())
+  if (VIDEO::IsVideoDb(item) && item.HasVideoInfoTag())
     path = item.GetVideoInfoTag()->m_strFileNameAndPath;
   if (URIUtils::IsStack(path))
     path = CStackDirectory::GetFirstStackedFile(path);
 
-  return CTextureUtils::GetWrappedImageURL(path, "video");
+  return IMAGE_FILES::URLFromFile(path, "video");
 }
 
 void CVideoThumbLoader::DetectAndAddMissingItemData(CFileItem &item)
 {
-  if (item.m_bIsFolder) return;
+  // @todo remove exception for hybrid movie/folder of versions
+  if (item.m_bIsFolder && !StringUtils::StartsWith(item.GetPath(), VIDEODB_PATH_VERSION_ID_ALL))
+    return;
 
   if (item.HasVideoInfoTag())
   {
@@ -568,7 +602,7 @@ void CVideoThumbLoader::DetectAndAddMissingItemData(CFileItem &item)
   if (stereoMode.empty())
   {
     std::string path = item.GetPath();
-    if (item.IsVideoDb() && item.HasVideoInfoTag())
+    if (VIDEO::IsVideoDb(item) && item.HasVideoInfoTag())
       path = item.GetVideoInfoTag()->GetPath();
 
     // check for custom stereomode setting in video settings

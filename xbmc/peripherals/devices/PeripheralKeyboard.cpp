@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2017-2018 Team Kodi
+ *  Copyright (C) 2017-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -79,6 +79,15 @@ void CPeripheralKeyboard::UnregisterKeyboardDriverHandler(
     m_keyboardHandlers.erase(it);
 }
 
+void CPeripheralKeyboard::SetLastActive(const CDateTime& lastActive)
+{
+  // Update state
+  m_lastActive = lastActive;
+
+  // Update ancestor
+  CPeripheral::SetLastActive(lastActive);
+}
+
 GAME::ControllerPtr CPeripheralKeyboard::ControllerProfile() const
 {
   if (m_controllerProfile)
@@ -89,9 +98,10 @@ GAME::ControllerPtr CPeripheralKeyboard::ControllerProfile() const
 
 bool CPeripheralKeyboard::OnKeyPress(const CKey& key)
 {
-  m_lastActive = CDateTime::GetCurrentDateTime();
-
   std::unique_lock<CCriticalSection> lock(m_mutex);
+
+  // Update state
+  SetLastActive(CDateTime::GetCurrentDateTime());
 
   bool bHandled = false;
 

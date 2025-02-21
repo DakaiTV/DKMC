@@ -22,7 +22,7 @@ function(generate_file file)
 
   add_custom_command(OUTPUT ${CPP_FILE}
                      COMMAND ${SWIG_EXECUTABLE}
-                     ARGS -w401 -c++ -o ${file}.xml -xml -I${CMAKE_SOURCE_DIR}/xbmc -xmllang python ${CMAKE_CURRENT_SOURCE_DIR}/../swig/${file}
+                     ARGS -w401 -c++ -o ${file}.xml -xml -I${CMAKE_SOURCE_DIR}/xbmc ${CMAKE_CURRENT_SOURCE_DIR}/../swig/${file}
                      COMMAND ${Java_JAVA_EXECUTABLE}
                      ARGS ${JAVA_OPEN_OPTS} -cp "${classpath}" groovy.ui.GroovyMain ${CMAKE_SOURCE_DIR}/tools/codegenerator/Generator.groovy ${file}.xml ${CMAKE_CURRENT_SOURCE_DIR}/../python/PythonSwig.cpp.template ${file}.cpp > ${devnull}
                      ${CLANG_FORMAT_COMMAND}
@@ -110,16 +110,11 @@ set(GROOVY_DIR ${CMAKE_SOURCE_DIR}/tools/codegenerator/groovy)
 
 foreach(INPUT IN LISTS INPUTS)
   generate_file(${INPUT})
-  list(APPEND GEN_SRCS ${CMAKE_CURRENT_BINARY_DIR}/${INPUT}.cpp)
 endforeach()
 
 add_library(python_binding STATIC ${SOURCES})
 set_target_properties(python_binding PROPERTIES POSITION_INDEPENDENT_CODE TRUE
                                                 FOLDER "Build Utilities")
-set(core_DEPENDS python_binding ${core_DEPENDS} CACHE STRING "" FORCE)
-add_dependencies(python_binding ${GLOBAL_TARGET_DEPS})
-# This propagates target options from dependencies (eg spdlog definitions)
-target_link_libraries(python_binding PRIVATE ${GLOBAL_TARGET_DEPS})
 
 if(CORE_SYSTEM_NAME STREQUAL windowsstore)
   set_target_properties(python_binding PROPERTIES STATIC_LIBRARY_FLAGS "/ignore:4264")
@@ -128,3 +123,8 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   set_target_properties(python_binding PROPERTIES
                         COMPILE_FLAGS -Wno-cast-function-type) # from -Wextra
 endif()
+
+# Add target dependencies to lib
+core_target_link_libraries(python_binding)
+# Link this target lib to core
+target_link_libraries(lib${APP_NAME_LC} PUBLIC python_binding)

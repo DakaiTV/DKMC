@@ -19,10 +19,13 @@
 
 class CFileItemList;
 class CGUIViewState;
+enum class SourceType;
+
 namespace
 {
 class CGetDirectoryItems;
 }
+class TiXmlElement;
 
 // base class for all media windows
 class CGUIMediaWindow : public CGUIWindow
@@ -145,7 +148,7 @@ protected:
   virtual bool GetAdvanceFilteredItems(CFileItemList &items);
 
   // check for a disc or connection
-  virtual bool HaveDiscOrConnection(const std::string& strPath, int iDriveType);
+  virtual bool HaveDiscOrConnection(const std::string& strPath, SourceType iDriveType);
   void ShowShareErrorMessage(CFileItem* pItem) const;
 
   void SaveSelectedItemInHistory();
@@ -208,7 +211,7 @@ protected:
   int m_iLastControl;
   std::string m_startDirectory;
 
-  CSmartPlaylist m_filter;
+  KODI::PLAYLIST::CSmartPlaylist m_filter;
   bool m_canFilterAdvanced;
   /*! \brief Contains the path used for filtering (including any active filter)
 

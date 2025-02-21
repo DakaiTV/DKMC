@@ -9,13 +9,15 @@
 #include "DirectoryNodeTitleMusicVideos.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "QueryParams.h"
 #include "video/VideoDatabase.h"
 
 using namespace XFILE::VIDEODATABASEDIRECTORY;
 
-CDirectoryNodeTitleMusicVideos::CDirectoryNodeTitleMusicVideos(const std::string& strName, CDirectoryNode* pParent)
-  : CDirectoryNode(NODE_TYPE_TITLE_MUSICVIDEOS, strName, pParent)
+CDirectoryNodeTitleMusicVideos::CDirectoryNodeTitleMusicVideos(const std::string& strName,
+                                                               CDirectoryNode* pParent)
+  : CDirectoryNode(NodeType::TITLE_MUSICVIDEOS, strName, pParent)
 {
 
 }

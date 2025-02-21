@@ -342,7 +342,7 @@ bool CDVDVideoCodecFFmpeg::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options
   // libdav1d av1 sw decoding is implemented as a separate decoder
   // in ffmpeg which is always found first when calling `avcodec_find_decoder`.
   // To get hwaccels we look for decoders registered for `av1` (unless sw decoding is enforced).
-  // The decoder state check is needed to succesfully fallback to sw decoding if
+  // The decoder state check is needed to successfully fallback to sw decoding if
   // necessary (on retry).
   if (hints.codec == AV_CODEC_ID_AV1 && m_decoderState != STATE_HW_FAILED &&
       !(hints.codecOptions & CODEC_FORCE_SOFTWARE))
@@ -792,12 +792,12 @@ CDVDVideoCodec::VCReturn CDVDVideoCodecFFmpeg::GetPicture(VideoPicture* pVideoPi
   }
   m_dropCtrl.Process(framePTS, m_pCodecContext->skip_frame > AVDISCARD_DEFAULT);
 
-  if (m_pDecodedFrame->key_frame)
+  if (m_pDecodedFrame->flags & AV_FRAME_FLAG_KEY)
   {
     m_started = true;
     m_iLastKeyframe = m_pCodecContext->has_b_frames + 2;
   }
-  if (m_pDecodedFrame->interlaced_frame)
+  if (m_pDecodedFrame->flags & AV_FRAME_FLAG_INTERLACED)
     m_interlaced = true;
   else
     m_interlaced = false;
@@ -1013,8 +1013,9 @@ bool CDVDVideoCodecFFmpeg::GetPictureCommon(VideoPicture* pVideoPicture)
 
   pVideoPicture->iRepeatPicture = 0.5 * m_pFrame->repeat_pict;
   pVideoPicture->iFlags = 0;
-  pVideoPicture->iFlags |= m_pFrame->interlaced_frame ? DVP_FLAG_INTERLACED : 0;
-  pVideoPicture->iFlags |= m_pFrame->top_field_first ? DVP_FLAG_TOP_FIELD_FIRST: 0;
+  pVideoPicture->iFlags |= m_pFrame->flags & AV_FRAME_FLAG_INTERLACED ? DVP_FLAG_INTERLACED : 0;
+  pVideoPicture->iFlags |=
+      m_pFrame->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST ? DVP_FLAG_TOP_FIELD_FIRST : 0;
 
   if (m_codecControlFlags & DVD_CODEC_CTRL_DROP)
   {
@@ -1062,6 +1063,8 @@ bool CDVDVideoCodecFFmpeg::GetPictureCommon(VideoPicture* pVideoPicture)
   pVideoPicture->qp_table = nullptr;
   pVideoPicture->qstride = 0;
   pVideoPicture->qscale_type = 0;
+
+  pVideoPicture->hdrType = m_hints.hdrType;
 
   AVFrameSideData* sd;
 

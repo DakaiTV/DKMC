@@ -5,22 +5,19 @@
 #
 # This will define the following target:
 #
-#   XRandR::XRandR   - The XRANDR library
+#   ${APP_NAME_LC}::XRandR   - The XRANDR library
 
-if(NOT TARGET XRandR::XRandR)
-
-  find_package(PkgConfig)
+if(NOT TARGET ${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME})
+  find_package(PkgConfig QUIET)
 
   if(PKG_CONFIG_FOUND)
     pkg_check_modules(PC_XRANDR xrandr QUIET)
   endif()
 
   find_path(XRANDR_INCLUDE_DIR NAMES X11/extensions/Xrandr.h
-                               PATHS ${PC_XRANDR_INCLUDEDIR}
-                               NO_CACHE)
+                               HINTS ${PC_XRANDR_INCLUDEDIR})
   find_library(XRANDR_LIBRARY NAMES Xrandr
-                              PATHS ${PC_XRANDR_LIBDIR}
-                              NO_CACHE)
+                              HINTS ${PC_XRANDR_LIBDIR})
 
   set(XRANDR_VERSION ${PC_XRANDR_VERSION})
 
@@ -30,12 +27,10 @@ if(NOT TARGET XRandR::XRandR)
                                     VERSION_VAR XRANDR_VERSION)
 
   if(XRANDR_FOUND)
-    add_library(XRandR::XRandR UNKNOWN IMPORTED)
-    set_target_properties(XRandR::XRandR PROPERTIES
-                                         IMPORTED_LOCATION "${XRANDR_LIBRARY}"
-                                         INTERFACE_INCLUDE_DIRECTORIES "${XRANDR_INCLUDE_DIR}"
-                                         INTERFACE_COMPILE_DEFINITIONS HAVE_LIBXRANDR=1)
-
-    set_property(GLOBAL APPEND PROPERTY INTERNAL_DEPS_PROP XRandR::XRandR)
+    add_library(${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME} UNKNOWN IMPORTED)
+    set_target_properties(${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME} PROPERTIES
+                                                                     IMPORTED_LOCATION "${XRANDR_LIBRARY}"
+                                                                     INTERFACE_INCLUDE_DIRECTORIES "${XRANDR_INCLUDE_DIR}"
+                                                                     INTERFACE_COMPILE_DEFINITIONS HAVE_LIBXRANDR)
   endif()
 endif()

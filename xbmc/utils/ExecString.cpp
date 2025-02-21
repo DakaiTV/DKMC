@@ -11,13 +11,19 @@
 #include "FileItem.h"
 #include "ServiceBroker.h"
 #include "URL.h"
+#include "Util.h"
+#include "music/MusicFileItemClassify.h"
 #include "music/tags/MusicInfoTag.h"
+#include "playlists/PlayListFileItemClassify.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/SettingsComponent.h"
 #include "utils/StringUtils.h"
 #include "utils/Variant.h"
 #include "utils/log.h"
+#include "video/VideoFileItemClassify.h"
 #include "video/VideoInfoTag.h"
+
+using namespace KODI;
 
 CExecString::CExecString(const std::string& execString)
 {
@@ -59,103 +65,6 @@ CExecString::CExecString(const CFileItem& item, const std::string& contextWindow
 
 namespace
 {
-void SplitParams(const std::string& paramString, std::vector<std::string>& parameters)
-{
-  bool inQuotes = false;
-  bool lastEscaped = false; // only every second character can be escaped
-  int inFunction = 0;
-  size_t whiteSpacePos = 0;
-  std::string parameter;
-  parameters.clear();
-  for (size_t pos = 0; pos < paramString.size(); pos++)
-  {
-    char ch = paramString[pos];
-    bool escaped = (pos > 0 && paramString[pos - 1] == '\\' && !lastEscaped);
-    lastEscaped = escaped;
-    if (inQuotes)
-    { // if we're in a quote, we accept everything until the closing quote
-      if (ch == '"' && !escaped)
-      { // finished a quote - no need to add the end quote to our string
-        inQuotes = false;
-      }
-    }
-    else
-    { // not in a quote, so check if we should be starting one
-      if (ch == '"' && !escaped)
-      { // start of quote - no need to add the quote to our string
-        inQuotes = true;
-      }
-      if (inFunction && ch == ')')
-      { // end of a function
-        inFunction--;
-      }
-      if (ch == '(')
-      { // start of function
-        inFunction++;
-      }
-      if (!inFunction && ch == ',')
-      { // not in a function, so a comma signifies the end of this parameter
-        if (whiteSpacePos)
-          parameter.resize(whiteSpacePos);
-        // trim off start and end quotes
-        if (parameter.length() > 1 && parameter[0] == '"' &&
-            parameter[parameter.length() - 1] == '"')
-          parameter = parameter.substr(1, parameter.length() - 2);
-        else if (parameter.length() > 3 && parameter[parameter.length() - 1] == '"')
-        {
-          // check name="value" style param.
-          size_t quotaPos = parameter.find('"');
-          if (quotaPos > 1 && quotaPos < parameter.length() - 1 && parameter[quotaPos - 1] == '=')
-          {
-            parameter.erase(parameter.length() - 1);
-            parameter.erase(quotaPos);
-          }
-        }
-        parameters.push_back(parameter);
-        parameter.clear();
-        whiteSpacePos = 0;
-        continue;
-      }
-    }
-    if ((ch == '"' || ch == '\\') && escaped)
-    { // escaped quote or backslash
-      parameter[parameter.size() - 1] = ch;
-      continue;
-    }
-    // whitespace handling - we skip any whitespace at the left or right of an unquoted parameter
-    if (ch == ' ' && !inQuotes)
-    {
-      if (parameter.empty()) // skip whitespace on left
-        continue;
-      if (!whiteSpacePos) // make a note of where whitespace starts on the right
-        whiteSpacePos = parameter.size();
-    }
-    else
-      whiteSpacePos = 0;
-    parameter += ch;
-  }
-  if (inFunction || inQuotes)
-    CLog::Log(LOGWARNING, "{}({}) - end of string while searching for ) or \"", __FUNCTION__,
-              paramString);
-  if (whiteSpacePos)
-    parameter.erase(whiteSpacePos);
-  // trim off start and end quotes
-  if (parameter.size() > 1 && parameter[0] == '"' && parameter[parameter.size() - 1] == '"')
-    parameter = parameter.substr(1, parameter.size() - 2);
-  else if (parameter.size() > 3 && parameter[parameter.size() - 1] == '"')
-  {
-    // check name="value" style param.
-    size_t quotaPos = parameter.find('"');
-    if (quotaPos > 1 && quotaPos < parameter.length() - 1 && parameter[quotaPos - 1] == '=')
-    {
-      parameter.erase(parameter.length() - 1);
-      parameter.erase(quotaPos);
-    }
-  }
-  if (!parameter.empty() || parameters.size())
-    parameters.push_back(parameter);
-}
-
 void SplitExecFunction(const std::string& execString,
                        std::string& function,
                        std::vector<std::string>& parameters)
@@ -175,7 +84,7 @@ void SplitExecFunction(const std::string& execString,
   // remove any whitespace, and the standard prefix (if it exists)
   StringUtils::Trim(function);
 
-  SplitParams(paramString, parameters);
+  CUtil::SplitParams(paramString, parameters);
 }
 } // namespace
 
@@ -198,7 +107,7 @@ bool CExecString::Parse(const CFileItem& item, const std::string& contextWindow)
   }
   else if (item.m_bIsFolder &&
            (CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_playlistAsFolders ||
-            !(item.IsSmartPlayList() || item.IsPlayList())))
+            !(PLAYLIST::IsSmartPlayList(item) || PLAYLIST::IsPlayList(item))))
   {
     if (!contextWindow.empty())
       Build("ActivateWindow", {contextWindow, StringUtils::Paramify(item.GetPath()), "return"});
@@ -219,9 +128,9 @@ bool CExecString::Parse(const CFileItem& item, const std::string& contextWindow)
     Build("StartAndroidActivity", {StringUtils::Paramify(item.GetPath().substr(26))});
   else // assume a media file
   {
-    if (item.IsVideoDb() && item.HasVideoInfoTag())
+    if (VIDEO::IsVideoDb(item) && item.HasVideoInfoTag())
       BuildPlayMedia(item, StringUtils::Paramify(item.GetVideoInfoTag()->m_strFileNameAndPath));
-    else if (item.IsMusicDb() && item.HasMusicInfoTag())
+    else if (MUSIC::IsMusicDb(item) && item.HasMusicInfoTag())
       BuildPlayMedia(item, StringUtils::Paramify(item.GetMusicInfoTag()->GetURL()));
     else if (item.IsPicture())
       Build("ShowPicture", {StringUtils::Paramify(item.GetPath())});

@@ -85,6 +85,9 @@ void CGUIDialogTeletext::Process(unsigned int currentTime, CDirtyRegionList &dir
 
 void CGUIDialogTeletext::Render()
 {
+  if (CServiceBroker::GetWinSystem()->GetGfxContext().GetRenderOrder() ==
+      RENDER_ORDER_FRONT_TO_BACK)
+    return;
   // Do not render if we have no texture
   if (!m_pTxtTexture)
   {
@@ -122,9 +125,9 @@ void CGUIDialogTeletext::Render()
     MarkDirtyRegion();
   }
 
-  UTILS::COLOR::Color color =
-      (static_cast<UTILS::COLOR::Color>(teletextFadeAmount * 2.55f) & 0xff) << 24 | 0xFFFFFF;
-  CGUITexture::DrawQuad(m_vertCoords, color, m_pTxtTexture.get());
+  KODI::UTILS::COLOR::Color color =
+      (static_cast<KODI::UTILS::COLOR::Color>(teletextFadeAmount * 2.55f) & 0xff) << 24 | 0xFFFFFF;
+  CGUITexture::DrawQuad(m_vertCoords, color, m_pTxtTexture.get(), nullptr, -1.0f);
 
   CGUIDialog::Render();
 }

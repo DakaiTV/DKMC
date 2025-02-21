@@ -48,8 +48,9 @@
 #include "utils/Variant.h"
 #include "utils/log.h"
 #include "video/dialogs/GUIDialogVideoInfo.h"
+#include "video/dialogs/GUIDialogVideoManagerExtras.h"
+#include "video/dialogs/GUIDialogVideoManagerVersions.h"
 #include "video/dialogs/GUIDialogVideoOSD.h"
-#include "video/dialogs/GUIDialogVideoVersion.h"
 #include "video/windows/GUIWindowFullScreen.h"
 #include "video/windows/GUIWindowVideoNav.h"
 #include "video/windows/GUIWindowVideoPlaylist.h"
@@ -112,6 +113,7 @@
 #include "video/dialogs/GUIDialogVideoSettings.h"
 
 /* PVR related include Files */
+#include "dialogs/GUIDialogSlider.h"
 #include "pvr/dialogs/GUIDialogPVRChannelGuide.h"
 #include "pvr/dialogs/GUIDialogPVRChannelManager.h"
 #include "pvr/dialogs/GUIDialogPVRChannelsOSD.h"
@@ -126,13 +128,12 @@
 #include "pvr/dialogs/GUIDialogPVRTimerSettings.h"
 #include "pvr/windows/GUIWindowPVRChannels.h"
 #include "pvr/windows/GUIWindowPVRGuide.h"
+#include "pvr/windows/GUIWindowPVRProviders.h"
 #include "pvr/windows/GUIWindowPVRRecordings.h"
 #include "pvr/windows/GUIWindowPVRSearch.h"
 #include "pvr/windows/GUIWindowPVRTimerRules.h"
 #include "pvr/windows/GUIWindowPVRTimers.h"
-
 #include "video/dialogs/GUIDialogTeletext.h"
-#include "dialogs/GUIDialogSlider.h"
 #ifdef HAS_OPTICAL_DRIVE
 #include "dialogs/GUIDialogPlayEject.h"
 #endif
@@ -268,12 +269,14 @@ void CGUIWindowManager::CreateWindows()
   Add(new CGUIWindowPVRTVTimers);
   Add(new CGUIWindowPVRTVTimerRules);
   Add(new CGUIWindowPVRTVSearch);
+  Add(new CGUIWindowPVRTVProviders);
   Add(new CGUIWindowPVRRadioChannels);
   Add(new CGUIWindowPVRRadioRecordings);
   Add(new CGUIWindowPVRRadioGuide);
   Add(new CGUIWindowPVRRadioTimers);
   Add(new CGUIWindowPVRRadioTimerRules);
   Add(new CGUIWindowPVRRadioSearch);
+  Add(new CGUIWindowPVRRadioProviders);
   Add(new CGUIDialogPVRRadioRDSInfo);
   Add(new CGUIDialogPVRGuideInfo);
   Add(new CGUIDialogPVRRecordingInfo);
@@ -292,8 +295,14 @@ void CGUIWindowManager::CreateWindows()
   Add(new CGUIDialogMusicInfo);
   Add(new CGUIDialogOK);
   Add(new CGUIDialogVideoInfo);
-  Add(new CGUIDialogVideoVersion(WINDOW_DIALOG_VIDEO_VERSION));
-  Add(new CGUIDialogVideoVersion(WINDOW_DIALOG_VIDEO_VERSION_SELECT));
+  Add(new CGUIDialogVideoManagerVersions);
+  Add(new CGUIDialogVideoManagerExtras);
+  Add(new CGUIDialogSelect(WINDOW_DIALOG_SELECT_VIDEO_VERSION));
+  Add(new CGUIDialogSelect(WINDOW_DIALOG_SELECT_VIDEO_EXTRA));
+  Add(new CGUIDialogSelect(WINDOW_DIALOG_SELECT_VIDEO_STREAM));
+  Add(new CGUIDialogSelect(WINDOW_DIALOG_SELECT_AUDIO_STREAM));
+  Add(new CGUIDialogSelect(WINDOW_DIALOG_SELECT_SUBTITLE_STREAM));
+
   Add(new CGUIDialogTextViewer);
   Add(new CGUIWindowFullScreen);
   Add(new CGUIWindowVisualisation);
@@ -334,8 +343,10 @@ bool CGUIWindowManager::DestroyWindows()
     DestroyWindow(WINDOW_MUSIC_NAV);
     DestroyWindow(WINDOW_DIALOG_MUSIC_INFO);
     DestroyWindow(WINDOW_DIALOG_VIDEO_INFO);
-    DestroyWindow(WINDOW_DIALOG_VIDEO_VERSION);
-    DestroyWindow(WINDOW_DIALOG_VIDEO_VERSION_SELECT);
+    DestroyWindow(WINDOW_DIALOG_SELECT_VIDEO_EXTRA);
+    DestroyWindow(WINDOW_DIALOG_SELECT_VIDEO_VERSION);
+    DestroyWindow(WINDOW_DIALOG_MANAGE_VIDEO_EXTRAS);
+    DestroyWindow(WINDOW_DIALOG_MANAGE_VIDEO_VERSIONS);
     DestroyWindow(WINDOW_VIDEO_PLAYLIST);
     DestroyWindow(WINDOW_VIDEO_NAV);
     DestroyWindow(WINDOW_FILES);
@@ -378,6 +389,9 @@ bool CGUIWindowManager::DestroyWindows()
     DestroyWindow(WINDOW_DIALOG_SLIDER);
     DestroyWindow(WINDOW_DIALOG_MEDIA_FILTER);
     DestroyWindow(WINDOW_DIALOG_SUBTITLES);
+    DestroyWindow(WINDOW_DIALOG_SELECT_VIDEO_STREAM);
+    DestroyWindow(WINDOW_DIALOG_SELECT_AUDIO_STREAM);
+    DestroyWindow(WINDOW_DIALOG_SELECT_SUBTITLE_STREAM);
     DestroyWindow(WINDOW_DIALOG_COLOR_PICKER);
 
     /* Delete PVR related windows and dialogs */
@@ -387,12 +401,14 @@ bool CGUIWindowManager::DestroyWindows()
     DestroyWindow(WINDOW_TV_TIMERS);
     DestroyWindow(WINDOW_TV_TIMER_RULES);
     DestroyWindow(WINDOW_TV_SEARCH);
+    DestroyWindow(WINDOW_TV_PROVIDERS);
     DestroyWindow(WINDOW_RADIO_CHANNELS);
     DestroyWindow(WINDOW_RADIO_RECORDINGS);
     DestroyWindow(WINDOW_RADIO_GUIDE);
     DestroyWindow(WINDOW_RADIO_TIMERS);
     DestroyWindow(WINDOW_RADIO_TIMER_RULES);
     DestroyWindow(WINDOW_RADIO_SEARCH);
+    DestroyWindow(WINDOW_RADIO_PROVIDERS);
     DestroyWindow(WINDOW_DIALOG_PVR_GUIDE_INFO);
     DestroyWindow(WINDOW_DIALOG_PVR_RECORDING_INFO);
     DestroyWindow(WINDOW_DIALOG_PVR_TIMER_SETTING);
@@ -1218,6 +1234,19 @@ void CGUIWindowManager::Process(unsigned int currentTime)
       pWindow->DoProcess(currentTime, m_dirtyregions);
   }
 
+  // assign depth values to all active controls
+  if (pWindow)
+    pWindow->AssignDepth();
+
+  std::vector<CGUIWindow*> activeDialogs = m_activeDialogs;
+  stable_sort(activeDialogs.begin(), activeDialogs.end(), RenderOrderSortFunction);
+
+  for (const auto& window : activeDialogs)
+  {
+    if (window->IsDialogRunning())
+      window->AssignDepth();
+  }
+
   for (auto& itr : m_dirtyregions)
     m_tracker.MarkDirtyRegion(itr);
 }
@@ -1244,6 +1273,14 @@ void CGUIWindowManager::MarkDirty(const CRect& rect)
 
 void CGUIWindowManager::RenderPass() const
 {
+  if (CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_guiFrontToBackRendering)
+    RenderPassDual();
+  else
+    RenderPassSingle();
+}
+
+void CGUIWindowManager::RenderPassSingle() const
+{
   CGUIWindow* pWindow = GetWindow(GetActiveWindow());
   if (pWindow)
   {
@@ -1254,6 +1291,40 @@ void CGUIWindowManager::RenderPass() const
   // we render the dialogs based on their render order.
   auto renderList = m_activeDialogs;
   stable_sort(renderList.begin(), renderList.end(), RenderOrderSortFunction);
+
+  for (const auto& window : renderList)
+  {
+    if (window->IsDialogRunning())
+      window->DoRender();
+  }
+}
+
+void CGUIWindowManager::RenderPassDual() const
+{
+  CGUIWindow* pWindow = GetWindow(GetActiveWindow());
+  if (pWindow)
+    pWindow->ClearBackground();
+
+  std::vector<CGUIWindow*> renderList = m_activeDialogs;
+  stable_sort(renderList.begin(), renderList.end(), RenderOrderSortFunction);
+
+  // first the opaque pass, rendering from front to back
+  CServiceBroker::GetWinSystem()->GetGfxContext().SetRenderOrder(RENDER_ORDER_FRONT_TO_BACK);
+  for (auto it = renderList.rbegin(); it != renderList.rend(); ++it)
+  {
+    if ((*it)->IsDialogRunning())
+      (*it)->DoRender();
+  }
+
+  if (pWindow)
+    pWindow->DoRender();
+
+  // now we render all elements with transparency back to front
+  CServiceBroker::GetWinSystem()->GetGfxContext().SetRenderOrder(RENDER_ORDER_BACK_TO_FRONT);
+  if (pWindow)
+  {
+    pWindow->DoRender();
+  }
 
   for (const auto& window : renderList)
   {
@@ -1285,11 +1356,24 @@ bool CGUIWindowManager::Render()
   assert(CServiceBroker::GetAppMessenger()->IsProcessThread());
   CSingleExit lock(CServiceBroker::GetWinSystem()->GetGfxContext());
 
+  int bufferAge = CServiceBroker::GetWinSystem()->GetBufferAge();
+  bool visualizeDirtyRegions =
+      CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_guiVisualizeDirtyRegions;
+  if (visualizeDirtyRegions)
+    bufferAge = 20;
+  if (bufferAge)
+    m_tracker.CleanMarkedRegions(bufferAge + 1);
+  else
+    m_tracker.CleanMarkedRegions(10);
+
   CDirtyRegionList dirtyRegions = m_tracker.GetDirtyRegions();
 
   bool hasRendered = false;
   // If we visualize the regions we will always render the entire viewport
-  if (CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_guiVisualizeDirtyRegions || CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_guiAlgorithmDirtyRegions == DIRTYREGION_SOLVER_FILL_VIEWPORT_ALWAYS)
+  // If the buffer age is zero, the current content is undefined and has to be rendered
+  if (visualizeDirtyRegions || bufferAge == 0 ||
+      CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_guiAlgorithmDirtyRegions ==
+          DIRTYREGION_SOLVER_FILL_VIEWPORT_ALWAYS)
   {
     RenderPass();
     hasRendered = true;
@@ -1309,6 +1393,9 @@ bool CGUIWindowManager::Render()
       if (i.IsEmpty())
         continue;
 
+      if (!hasRendered)
+        CServiceBroker::GetWinSystem()->SetDirtyRegions(dirtyRegions);
+
       CServiceBroker::GetWinSystem()->GetGfxContext().SetScissors(i);
       RenderPass();
       hasRendered = true;
@@ -1316,7 +1403,7 @@ bool CGUIWindowManager::Render()
     CServiceBroker::GetWinSystem()->GetGfxContext().ResetScissors();
   }
 
-  if (CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_guiVisualizeDirtyRegions)
+  if (visualizeDirtyRegions)
   {
     CServiceBroker::GetWinSystem()->GetGfxContext().SetRenderingResolution(CServiceBroker::GetWinSystem()->GetGfxContext().GetResInfo(), false);
     const CDirtyRegionList &markedRegions  = m_tracker.GetMarkedRegions();
@@ -1331,8 +1418,7 @@ bool CGUIWindowManager::Render()
 
 void CGUIWindowManager::AfterRender()
 {
-  m_tracker.CleanMarkedRegions();
-
+  CServiceBroker::GetWinSystem()->GetGfxContext().ResetDepth();
   CGUIWindow* pWindow = GetWindow(GetActiveWindow());
   if (pWindow)
     pWindow->AfterRender();
@@ -1413,7 +1499,10 @@ bool CGUIWindowManager::ProcessRenderLoop(bool renderOnly)
     m_iNested++;
     if (!renderOnly)
       m_pCallback->Process();
-    m_pCallback->FrameMove(!renderOnly);
+    {
+      CSingleExit leaveIt(CServiceBroker::GetWinSystem()->GetGfxContext());
+      m_pCallback->FrameMove(!renderOnly);
+    }
     m_pCallback->Render();
     m_iNested--;
   }
@@ -1599,6 +1688,12 @@ int CGUIWindowManager::RemoveThreadMessageByMessageIds(int *pMessageIDList)
 void CGUIWindowManager::AddMsgTarget(IMsgTargetCallback* pMsgTarget)
 {
   m_vecMsgTargets.emplace_back(pMsgTarget);
+}
+
+void CGUIWindowManager::RemoveMsgTarget(IMsgTargetCallback* pMsgTarget)
+{
+  m_vecMsgTargets.erase(std::remove(m_vecMsgTargets.begin(), m_vecMsgTargets.end(), pMsgTarget),
+                        m_vecMsgTargets.end());
 }
 
 int CGUIWindowManager::GetActiveWindow() const

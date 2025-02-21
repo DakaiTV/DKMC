@@ -9,11 +9,12 @@
 #include "GUIDialogColorPicker.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "filesystem/SpecialProtocol.h"
 #include "guilib/GUIColorManager.h"
 #include "guilib/GUIMessage.h"
 #include "guilib/LocalizeStrings.h"
-#include "input/Key.h"
+#include "input/actions/ActionIDs.h"
 #include "utils/ColorUtils.h"
 #include "utils/StringUtils.h"
 #include "utils/log.h"
@@ -162,7 +163,7 @@ void CGUIDialogColorPicker::LoadColors()
 void CGUIDialogColorPicker::LoadColors(const std::string& filePath)
 {
   CGUIColorManager colorManager;
-  std::vector<std::pair<std::string, UTILS::COLOR::ColorInfo>> colors;
+  std::vector<std::pair<std::string, KODI::UTILS::COLOR::ColorInfo>> colors;
   if (colorManager.LoadColorsListFromXML(filePath, colors, true))
   {
     for (auto& color : colors)
@@ -177,7 +178,7 @@ void CGUIDialogColorPicker::LoadColors(const std::string& filePath)
               __FUNCTION__);
 }
 
-std::string CGUIDialogColorPicker::GetSelectedColor() const
+const std::string& CGUIDialogColorPicker::GetSelectedColor() const
 {
   return m_selectedColor;
 }

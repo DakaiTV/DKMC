@@ -9,10 +9,11 @@
 #include "VideoLibrary.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "PVROperations.h"
 #include "ServiceBroker.h"
-#include "TextureDatabase.h"
 #include "Util.h"
+#include "imagefiles/ImageFileURL.h"
 #include "messaging/ApplicationMessenger.h"
 #include "utils/SortUtils.h"
 #include "utils/StringUtils.h"
@@ -92,7 +93,9 @@ JSONRPC_STATUS CVideoLibrary::GetMovieDetails(const std::string &method, ITransp
     return InternalError;
 
   CVideoInfoTag infos;
-  if (!videodatabase.GetMovieInfo("", infos, id, RequiresAdditionalDetails(MediaTypeMovie, parameterObject)) || infos.m_iDbId <= 0)
+  if (!videodatabase.GetMovieInfo("", infos, id, -1, //! @todo API support for video version id
+                                  RequiresAdditionalDetails(MediaTypeMovie, parameterObject)) ||
+      infos.m_iDbId <= 0)
     return InvalidParams;
 
   HandleFileItem("movieid", true, "moviedetails", std::make_shared<CFileItem>(infos),
@@ -585,10 +588,10 @@ JSONRPC_STATUS CVideoLibrary::GetAvailableArt(const std::string& method, ITransp
   for (const auto& artentry : videodatabase.GetAvailableArtForItem(mediaID, mediaType, artType))
   {
     CVariant item = CVariant(CVariant::VariantTypeObject);
-    item["url"] = CTextureUtils::GetWrappedImageURL(artentry.m_url);
+    item["url"] = IMAGE_FILES::URLFromFile(artentry.m_url);
     item["arttype"] = artentry.m_aspect;
     if (!artentry.m_preview.empty())
-      item["previewurl"] = CTextureUtils::GetWrappedImageURL(artentry.m_preview);
+      item["previewurl"] = IMAGE_FILES::URLFromFile(artentry.m_preview);
     availableart.append(item);
   }
   result = CVariant(CVariant::VariantTypeObject);
@@ -606,7 +609,8 @@ JSONRPC_STATUS CVideoLibrary::SetMovieDetails(const std::string &method, ITransp
     return InternalError;
 
   CVideoInfoTag infos;
-  if (!videodatabase.GetMovieInfo("", infos, id) || infos.m_iDbId <= 0)
+  if (!videodatabase.GetMovieInfo("", infos, id, -1) || //! @todo API support for video version id)
+      infos.m_iDbId <= 0)
     return InvalidParams;
 
   // get artwork
@@ -861,7 +865,8 @@ JSONRPC_STATUS CVideoLibrary::RefreshMovie(const std::string &method, ITransport
     return InternalError;
 
   CVideoInfoTag infos;
-  if (!videodatabase.GetMovieInfo("", infos, id) || infos.m_iDbId <= 0)
+  if (!videodatabase.GetMovieInfo("", infos, id, -1) || //! @todo API support for video version id
+      infos.m_iDbId <= 0)
     return InvalidParams;
 
   bool ignoreNfo = parameterObject["ignorenfo"].asBoolean();
@@ -1067,7 +1072,7 @@ bool CVideoLibrary::FillFileItemList(const CVariant &parameterObject, CFileItemL
   if (movieID > 0)
   {
     CVideoInfoTag details;
-    videodatabase.GetMovieInfo("", details, movieID);
+    videodatabase.GetMovieInfo("", details, movieID, -1); //! @todo API support for video version id
     if (!details.IsEmpty())
     {
       list.Add(std::make_shared<CFileItem>(details));
@@ -1157,7 +1162,10 @@ JSONRPC_STATUS CVideoLibrary::RemoveVideo(const CVariant &parameterObject)
     return InternalError;
 
   if (parameterObject.isMember("movieid"))
-    videodatabase.DeleteMovie((int)parameterObject["movieid"].asInteger());
+  {
+    if (!videodatabase.DeleteMovie((int)parameterObject["movieid"].asInteger()))
+      return InternalError;
+  }
   else if (parameterObject.isMember("tvshowid"))
     videodatabase.DeleteTvShow((int)parameterObject["tvshowid"].asInteger());
   else if (parameterObject.isMember("episodeid"))
@@ -1373,7 +1381,7 @@ void CVideoLibrary::UpdateVideoTag(const CVariant &parameterObject, CVideoInfoTa
     {
       if (artIt->second.isString() && !artIt->second.asString().empty())
       {
-        artwork[artIt->first] = CTextureUtils::UnwrapImageURL(artIt->second.asString());
+        artwork[artIt->first] = IMAGE_FILES::ToCacheKey(artIt->second.asString());
         updatedDetails.insert("art.altered");
       }
       else if (artIt->second.isNull())

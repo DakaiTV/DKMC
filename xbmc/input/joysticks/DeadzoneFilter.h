@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2016-2018 Team Kodi
+ *  Copyright (C) 2016-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -21,6 +21,7 @@ class IButtonMap;
 
 /*!
  * \ingroup joystick
+ *
  * \brief Analog axis deadzone filtering
  *
  * Axis is scaled appropriately, so position is continuous
@@ -51,6 +52,10 @@ public:
    * \return The value after applying deadzone filtering
    */
   float FilterAxis(unsigned int axisIndex, float axisValue);
+
+  // Settings for analog sticks
+  static const char* SETTING_LEFT_STICK_DEADZONE;
+  static const char* SETTING_RIGHT_STICK_DEADZONE;
 
 private:
   /*!

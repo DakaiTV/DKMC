@@ -19,6 +19,7 @@
 #include "pvr/channels/PVRChannel.h"
 #include "pvr/channels/PVRChannelGroupsContainer.h"
 #include "pvr/epg/EpgInfoTag.h"
+#include "pvr/guilib/PVRGUIActionsChannels.h"
 #include "pvr/guilib/PVRGUIActionsEPG.h"
 #include "pvr/guilib/PVRGUIActionsPlayback.h"
 #include "pvr/guilib/PVRGUIActionsRecordings.h"
@@ -29,7 +30,10 @@
 #include "pvr/timers/PVRTimerInfoTag.h"
 #include "pvr/timers/PVRTimers.h"
 #include "pvr/timers/PVRTimersPath.h"
+#include "settings/Settings.h"
+#include "settings/SettingsComponent.h"
 #include "utils/URIUtils.h"
+#include "video/guilib/VideoPlayActionProcessor.h"
 
 #include <memory>
 #include <string>
@@ -57,6 +61,7 @@ namespace CONTEXTMENUITEM
   };
 
 DECL_STATICCONTEXTMENUITEM(PlayEpgTag);
+DECL_CONTEXTMENUITEM(PlayEpgTagFromHere);
 DECL_STATICCONTEXTMENUITEM(PlayRecording);
 DECL_CONTEXTMENUITEM(ShowInformation);
 DECL_STATICCONTEXTMENUITEM(ShowChannelGuide);
@@ -77,7 +82,10 @@ DECL_STATICCONTEXTMENUITEM(AddReminder);
 DECL_STATICCONTEXTMENUITEM(ExecuteSearch);
 DECL_STATICCONTEXTMENUITEM(EditSearch);
 DECL_STATICCONTEXTMENUITEM(RenameSearch);
+DECL_STATICCONTEXTMENUITEM(ChooseIconForSearch);
+DECL_STATICCONTEXTMENUITEM(DuplicateSearch);
 DECL_STATICCONTEXTMENUITEM(DeleteSearch);
+DECL_STATICCONTEXTMENUITEM(HideChannel);
 
 class PVRClientMenuHook : public IContextMenuItem
 {
@@ -126,6 +134,37 @@ bool PlayEpgTag::Execute(const CFileItemPtr& item) const
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Play epg tag from here
+
+std::string PlayEpgTagFromHere::GetLabel(const CFileItem& item) const
+{
+  if (CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
+          CSettings::SETTING_PVRPLAYBACK_AUTOPLAYNEXTPROGRAMME))
+    return g_localizeStrings.Get(19354); /* Play only this programme */
+
+  return g_localizeStrings.Get(19353); /* Play programmes from here */
+}
+
+bool PlayEpgTagFromHere::IsVisible(const CFileItem& item) const
+{
+  const std::shared_ptr<const CPVREpgInfoTag> epg(item.GetEPGInfoTag());
+  if (epg)
+    return epg->IsPlayable();
+
+  return false;
+}
+
+bool PlayEpgTagFromHere::Execute(const CFileItemPtr& item) const
+{
+  ContentUtils::PlayMode mode{ContentUtils::PlayMode::PLAY_FROM_HERE};
+  if (CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
+          CSettings::SETTING_PVRPLAYBACK_AUTOPLAYNEXTPROGRAMME))
+    mode = ContentUtils::PlayMode::PLAY_ONLY_THIS;
+
+  return CServiceBroker::GetPVRManager().Get<PVR::GUI::Playback>().PlayEpgTag(*item, mode);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Play recording
 
 bool PlayRecording::IsVisible(const CFileItem& item) const
@@ -140,8 +179,13 @@ bool PlayRecording::IsVisible(const CFileItem& item) const
 
 bool PlayRecording::Execute(const CFileItemPtr& item) const
 {
-  return CServiceBroker::GetPVRManager().Get<PVR::GUI::Playback>().PlayRecording(
-      *item, true /* bCheckResume */);
+  const std::shared_ptr<CPVRRecording> recording{
+      CServiceBroker::GetPVRManager().Recordings()->GetRecordingForEpgTag(item->GetEPGInfoTag())};
+  if (!recording)
+    return false;
+
+  KODI::VIDEO::GUILIB::CVideoPlayActionProcessor proc{std::make_shared<CFileItem>(recording)};
+  return proc.ProcessDefaultAction();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -232,53 +276,37 @@ bool FindSimilar::Execute(const CFileItemPtr& item) const
 
 bool StartRecording::IsVisible(const CFileItem& item) const
 {
-  const std::shared_ptr<const CPVRClient> client = CServiceBroker::GetPVRManager().GetClient(item);
-
-  std::shared_ptr<CPVRChannel> channel = item.GetPVRChannelInfoTag();
+  const std::shared_ptr<CPVRChannel> channel{item.GetPVRChannelInfoTag()};
   if (channel)
+  {
+    const std::shared_ptr<const CPVRClient> client{CServiceBroker::GetPVRManager().GetClient(item)};
     return client && client->GetClientCapabilities().SupportsTimers() &&
            !CServiceBroker::GetPVRManager().Timers()->IsRecordingOnChannel(*channel);
-
-  const std::shared_ptr<const CPVREpgInfoTag> epg = item.GetEPGInfoTag();
-  if (epg && epg->IsRecordable())
-  {
-    if (epg->IsGapTag())
-    {
-      channel = CServiceBroker::GetPVRManager().ChannelGroups()->GetChannelForEpgTag(epg);
-      if (channel)
-      {
-        return client && client->GetClientCapabilities().SupportsTimers() &&
-               !CServiceBroker::GetPVRManager().Timers()->IsRecordingOnChannel(*channel);
-      }
-    }
-    else
-    {
-      return client && client->GetClientCapabilities().SupportsTimers() &&
-             !CServiceBroker::GetPVRManager().Timers()->GetTimerForEpgTag(epg);
-    }
   }
+
+  const std::shared_ptr<const CPVREpgInfoTag> epgTag{item.GetEPGInfoTag()};
+  if (epgTag && epgTag->IsRecordable())
+  {
+    const std::shared_ptr<const CPVRClient> client{CServiceBroker::GetPVRManager().GetClient(item)};
+    return client && client->GetClientCapabilities().SupportsTimers() &&
+           !CServiceBroker::GetPVRManager().Timers()->GetTimerForEpgTag(epgTag);
+  }
+
   return false;
 }
 
 bool StartRecording::Execute(const CFileItemPtr& item) const
 {
-  const std::shared_ptr<const CPVREpgInfoTag> epgTag = item->GetEPGInfoTag();
-  if (!epgTag || epgTag->IsActive())
-  {
-    // instant recording
-    std::shared_ptr<CPVRChannel> channel;
-    if (epgTag)
-      channel = CServiceBroker::GetPVRManager().ChannelGroups()->GetChannelForEpgTag(epgTag);
+  const std::shared_ptr<CPVRChannel> channel{item->GetPVRChannelInfoTag()};
+  if (channel)
+    return CServiceBroker::GetPVRManager().Get<PVR::GUI::Timers>().SetRecordingOnChannel(channel,
+                                                                                         true);
 
-    if (!channel)
-      channel = item->GetPVRChannelInfoTag();
+  const std::shared_ptr<const CPVREpgInfoTag> epgTag{item->GetEPGInfoTag()};
+  if (epgTag)
+    return CServiceBroker::GetPVRManager().Get<PVR::GUI::Timers>().AddTimer(*item, false);
 
-    if (channel)
-      return CServiceBroker::GetPVRManager().Get<PVR::GUI::Timers>().SetRecordingOnChannel(channel,
-                                                                                           true);
-  }
-
-  return CServiceBroker::GetPVRManager().Get<PVR::GUI::Timers>().AddTimer(*item, false);
+  return false;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -301,9 +329,13 @@ bool StopRecording::IsVisible(const CFileItem& item) const
   const std::shared_ptr<const CPVREpgInfoTag> epg = item.GetEPGInfoTag();
   if (epg && epg->IsGapTag())
   {
-    channel = CServiceBroker::GetPVRManager().ChannelGroups()->GetChannelForEpgTag(epg);
-    if (channel)
-      return CServiceBroker::GetPVRManager().Timers()->IsRecordingOnChannel(*channel);
+    const CDateTime now{CDateTime::GetUTCDateTime()};
+    if (epg->StartAsUTC() <= now && epg->EndAsUTC() >= now)
+    {
+      channel = CServiceBroker::GetPVRManager().ChannelGroups()->GetChannelForEpgTag(epg);
+      if (channel)
+        return CServiceBroker::GetPVRManager().Timers()->IsRecordingOnChannel(*channel);
+    }
   }
 
   return false;
@@ -314,12 +346,16 @@ bool StopRecording::Execute(const CFileItemPtr& item) const
   const std::shared_ptr<const CPVREpgInfoTag> epgTag = item->GetEPGInfoTag();
   if (epgTag && epgTag->IsGapTag())
   {
-    // instance recording
-    const std::shared_ptr<CPVRChannel> channel =
-        CServiceBroker::GetPVRManager().ChannelGroups()->GetChannelForEpgTag(epgTag);
-    if (channel)
-      return CServiceBroker::GetPVRManager().Get<PVR::GUI::Timers>().SetRecordingOnChannel(channel,
-                                                                                           false);
+    const CDateTime now{CDateTime::GetUTCDateTime()};
+    if (epgTag->StartAsUTC() <= now && epgTag->EndAsUTC() >= now)
+    {
+      const std::shared_ptr<CPVRChannel> channel{
+          CServiceBroker::GetPVRManager().ChannelGroups()->GetChannelForEpgTag(epgTag)};
+      if (channel)
+        return CServiceBroker::GetPVRManager().Get<PVR::GUI::Timers>().SetRecordingOnChannel(
+            channel, false);
+    }
+    return false;
   }
 
   return CServiceBroker::GetPVRManager().Get<PVR::GUI::Timers>().StopRecording(*item);
@@ -404,8 +440,8 @@ bool UndeleteRecording::Execute(const CFileItemPtr& item) const
 bool DeleteWatchedRecordings::IsVisible(const CFileItem& item) const
 {
   // recordings folder?
-  if (item.m_bIsFolder && !item.IsParentFolder())
-    return CPVRRecordingsPath(item.GetPath()).IsValid();
+  if (item.m_bIsFolder && !item.IsParentFolder() && CPVRRecordingsPath(item.GetPath()).IsValid())
+    return item.GetProperty("watchedepisodes").asInteger() > 0;
 
   return false;
 }
@@ -701,6 +737,32 @@ bool RenameSearch::Execute(const std::shared_ptr<CFileItem>& item) const
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Choose icon for saved search
+
+bool ChooseIconForSearch::IsVisible(const CFileItem& item) const
+{
+  return item.HasEPGSearchFilter();
+}
+
+bool ChooseIconForSearch::Execute(const std::shared_ptr<CFileItem>& item) const
+{
+  return CServiceBroker::GetPVRManager().Get<PVR::GUI::EPG>().ChooseIconForSavedSearch(*item);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Duplicate a saved search
+
+bool DuplicateSearch::IsVisible(const CFileItem& item) const
+{
+  return item.HasEPGSearchFilter();
+}
+
+bool DuplicateSearch::Execute(const std::shared_ptr<CFileItem>& item) const
+{
+  return CServiceBroker::GetPVRManager().Get<PVR::GUI::EPG>().DuplicateSavedSearch(*item);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Delete saved search
 
 bool DeleteSearch::IsVisible(const CFileItem& item) const
@@ -711,6 +773,19 @@ bool DeleteSearch::IsVisible(const CFileItem& item) const
 bool DeleteSearch::Execute(const std::shared_ptr<CFileItem>& item) const
 {
   return CServiceBroker::GetPVRManager().Get<PVR::GUI::EPG>().DeleteSavedSearch(*item);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Hide channel
+
+bool HideChannel::IsVisible(const CFileItem& item) const
+{
+  return item.IsPVRChannel() && item.GetProperty("hideable").asBoolean(false);
+}
+
+bool HideChannel::Execute(const std::shared_ptr<CFileItem>& item) const
+{
+  return CServiceBroker::GetPVRManager().Get<PVR::GUI::Channels>().HideChannel(*item);
 }
 
 } // namespace CONTEXTMENUITEM
@@ -724,6 +799,7 @@ CPVRContextMenuManager& CPVRContextMenuManager::GetInstance()
 CPVRContextMenuManager::CPVRContextMenuManager()
   : m_items({
         std::make_shared<CONTEXTMENUITEM::PlayEpgTag>(19190), /* Play programme */
+        std::make_shared<CONTEXTMENUITEM::PlayEpgTagFromHere>(),
         std::make_shared<CONTEXTMENUITEM::PlayRecording>(19687), /* Play recording */
         std::make_shared<CONTEXTMENUITEM::ShowInformation>(),
         std::make_shared<CONTEXTMENUITEM::ShowChannelGuide>(19686), /* Channel guide */
@@ -744,7 +820,10 @@ CPVRContextMenuManager::CPVRContextMenuManager()
         std::make_shared<CONTEXTMENUITEM::ExecuteSearch>(137), /* Search */
         std::make_shared<CONTEXTMENUITEM::EditSearch>(21450), /* Edit */
         std::make_shared<CONTEXTMENUITEM::RenameSearch>(118), /* Rename */
+        std::make_shared<CONTEXTMENUITEM::ChooseIconForSearch>(19284), /* Choose icon */
+        std::make_shared<CONTEXTMENUITEM::DuplicateSearch>(19355), /* Duplicate */
         std::make_shared<CONTEXTMENUITEM::DeleteSearch>(117), /* Delete */
+        std::make_shared<CONTEXTMENUITEM::HideChannel>(19054), /* Hide channel */
     })
 {
 }

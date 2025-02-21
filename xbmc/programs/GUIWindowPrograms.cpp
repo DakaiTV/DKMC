@@ -10,6 +10,7 @@
 
 #include "Autorun.h"
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "GUIPassword.h"
 #include "ServiceBroker.h"
 #include "Util.h"
@@ -17,7 +18,7 @@
 #include "dialogs/GUIDialogMediaSource.h"
 #include "guilib/GUIComponent.h"
 #include "guilib/GUIWindowManager.h"
-#include "input/Key.h"
+#include "input/actions/ActionIDs.h"
 #include "media/MediaLockState.h"
 #include "settings/MediaSourceSettings.h"
 #include "utils/StringUtils.h"
@@ -153,7 +154,7 @@ std::string CGUIWindowPrograms::GetStartFolder(const std::string &dir)
     return "androidapp://sources/apps/";
 
   SetupShares();
-  VECSOURCES shares;
+  std::vector<CMediaSource> shares;
   m_rootDir.GetSources(shares);
   bool bIsSourceName = false;
   int iIndex = CUtil::GetMatchingSource(dir, shares, bIsSourceName);

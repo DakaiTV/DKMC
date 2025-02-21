@@ -52,8 +52,9 @@
 					<include content="OSDButton">
 						<param name="texture" value="osd/fullscreen/buttons/rewind.png"/>
 					</include>
-					<onclick>PlayerControl(Rewind)</onclick>
-					<visible>[Player.SeekEnabled + !MusicPlayer.Content(livetv)] + !Player.Paused</visible>
+					<onclick condition="Player.Paused">PlayerControl(Play)</onclick>
+					<onclick condition="!Player.Paused">PlayerControl(Rewind)</onclick>
+					<visible>Player.SeekEnabled + !MusicPlayer.Content(livetv)</visible>
 				</control>
 				<control type="group" id="698">
 					<width>76</width>
@@ -93,8 +94,9 @@
 					<include content="OSDButton">
 						<param name="texture" value="osd/fullscreen/buttons/forward.png"/>
 					</include>
-					<onclick>PlayerControl(Forward)</onclick>
-					<visible>[Player.SeekEnabled + !MusicPlayer.Content(livetv)] + !Player.Paused</visible>
+					<onclick condition="Player.Paused">PlayerControl(Play)</onclick>
+					<onclick condition="!Player.Paused">PlayerControl(Forward)</onclick>
+					<visible>Player.SeekEnabled + !MusicPlayer.Content(livetv)</visible>
 				</control>
 				<control type="radiobutton" id="607">
 					<include content="OSDButton">
@@ -238,7 +240,9 @@
 					<include content="OSDButton">
 						<param name="texture" value="osd/fullscreen/buttons/settings.png"/>
 					</include>
-					<onclick>ActivateWindow(1105)</onclick>
+					<onclick>SetProperty(settingsdialog_content,musicsettings,home)</onclick>
+					<onclick>SetProperty(settingsdialog_header,$LOCALIZE[5],home)</onclick>
+					<onclick>ActivateWindow(1101)</onclick>
 				</control>
 			</control>
 			<control type="label">
@@ -256,18 +260,18 @@
 		<control type="group">
 			<bottom>0</bottom>
 			<height>120</height>
-			<animation type="WindowOpen" condition="!Player.ShowInfo" reversible="False">
+			<animation type="WindowOpen" condition="!Player.ShowInfo" reversible="false">
 				<effect type="fade" start="0" end="100" time="300"/>
 				<effect type="slide" start="0,200" end="0,0" time="300" tween="cubic" easing="out" />
 			</animation>
-			<animation type="WindowClose" condition="!Player.ShowInfo" reversible="False">
+			<animation type="WindowClose" condition="!Player.ShowInfo" reversible="false">
 				<effect type="fade" start="100" end="0" time="300"/>
 				<effect type="slide" start="0,0" end="0,200" time="300" tween="cubic" easing="out" />
 			</animation>
-			<animation type="WindowOpen" condition="Player.ShowInfo" reversible="False">
+			<animation type="WindowOpen" condition="Player.ShowInfo" reversible="false">
 				<effect type="fade" start="0" end="100" time="300"/>
 			</animation>
-			<animation type="WindowClose" condition="Player.ShowInfo" reversible="False">
+			<animation type="WindowClose" condition="Player.ShowInfo" reversible="false">
 				<effect type="fade" start="100" end="0" time="300"/>
 			</animation>
 			<control type="button" id="87">

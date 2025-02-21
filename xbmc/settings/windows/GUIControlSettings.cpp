@@ -9,6 +9,7 @@
 #include "GUIControlSettings.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "Util.h"
 #include "addons/AddonManager.h"
@@ -1172,7 +1173,7 @@ bool CGUIControlButtonSetting::GetPath(const std::shared_ptr<CSettingPath>& path
 
   std::string path = pathSetting->GetValue();
 
-  VECSOURCES shares;
+  std::vector<CMediaSource> shares;
   bool localSharesOnly = false;
   const std::vector<std::string>& sources = pathSetting->GetSources();
   for (const auto& source : sources)
@@ -1181,7 +1182,7 @@ bool CGUIControlButtonSetting::GetPath(const std::shared_ptr<CSettingPath>& path
       localSharesOnly = true;
     else
     {
-      VECSOURCES* sources = CMediaSourceSettings::GetInstance().GetSources(source);
+      std::vector<CMediaSource>* sources = CMediaSourceSettings::GetInstance().GetSources(source);
       if (sources != NULL)
         shares.insert(shares.end(), sources->begin(), sources->end());
     }
@@ -1299,7 +1300,7 @@ CGUIControlEditSetting::CGUIControlEditSetting(CGUIEditControl* pEdit,
   else if (controlFormat == "md5")
     inputType = CGUIEditControl::INPUT_TYPE_PASSWORD_MD5;
 
-  m_pEdit->SetInputType(inputType, heading);
+  m_pEdit->SetInputType(inputType, localizer ? CVariant{localizer->Localize(heading)} : heading);
 
   // this will automatically trigger validation so it must be executed after
   // having set the value of the control based on the value of the setting

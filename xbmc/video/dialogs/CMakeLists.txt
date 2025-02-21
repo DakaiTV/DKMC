@@ -5,7 +5,9 @@ set(SOURCES GUIDialogAudioSettings.cpp
             GUIDialogTeletext.cpp
             GUIDialogVideoBookmarks.cpp
             GUIDialogVideoInfo.cpp
-            GUIDialogVideoVersion.cpp
+            GUIDialogVideoManager.cpp
+            GUIDialogVideoManagerExtras.cpp
+            GUIDialogVideoManagerVersions.cpp
             GUIDialogVideoOSD.cpp
             GUIDialogVideoSettings.cpp)
 
@@ -16,11 +18,13 @@ set(HEADERS GUIDialogAudioSettings.h
             GUIDialogTeletext.h
             GUIDialogVideoBookmarks.h
             GUIDialogVideoInfo.h
-            GUIDialogVideoVersion.h
+            GUIDialogVideoManager.h
+            GUIDialogVideoManagerExtras.h
+            GUIDialogVideoManagerVersions.h
             GUIDialogVideoOSD.h
             GUIDialogVideoSettings.h)
 
-if(TARGET OpenGL::GL OR CORE_SYSTEM_NAME STREQUAL windows OR CORE_SYSTEM_NAME STREQUAL windowsstore)
+if(TARGET ${APP_NAME_LC}::OpenGl OR CORE_SYSTEM_NAME STREQUAL windows OR CORE_SYSTEM_NAME STREQUAL windowsstore)
   list(APPEND SOURCES GUIDialogCMSSettings.cpp)
   list(APPEND HEADERS GUIDialogCMSSettings.h)
 endif()

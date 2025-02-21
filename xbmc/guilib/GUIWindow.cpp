@@ -17,8 +17,10 @@
 #include "GUIWindowManager.h"
 #include "ServiceBroker.h"
 #include "addons/Skin.h"
-#include "input/Key.h"
 #include "input/WindowTranslator.h"
+#include "input/actions/Action.h"
+#include "input/actions/ActionIDs.h"
+#include "input/mouse/MouseEvent.h"
 #include "messaging/ApplicationMessenger.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/SettingsComponent.h"
@@ -31,6 +33,8 @@
 #include "utils/log.h"
 
 #include <mutex>
+
+using namespace KODI;
 
 bool CGUIWindow::icompare::operator()(const std::string &s1, const std::string &s2) const
 {
@@ -333,7 +337,7 @@ void CGUIWindow::DoProcess(unsigned int currentTime, CDirtyRegionList &dirtyregi
   // check if currently focused control can have it
   // and fallback to default control if not
   CGUIControl* focusedControl = GetFocusedControl();
-  if (focusedControl && !focusedControl->CanFocus())
+  if (focusedControl && !focusedControl->CanFocus() && focusedControl->GetID() != m_defaultControl)
     SET_CONTROL_FOCUS(m_defaultControl, 0);
 }
 
@@ -496,7 +500,8 @@ EVENT_RESULT CGUIWindow::OnMouseAction(const CAction &action)
   CServiceBroker::GetWinSystem()->GetGfxContext().InvertFinalCoords(mousePoint.x, mousePoint.y);
 
   // create the mouse event
-  CMouseEvent event(action.GetID(), action.GetHoldTime(), action.GetAmount(2), action.GetAmount(3));
+  MOUSE::CMouseEvent event(action.GetID(), action.GetHoldTime(), action.GetAmount(2),
+                           action.GetAmount(3));
   if (m_exclusiveMouseControl)
   {
     CGUIControl *child = GetControl(m_exclusiveMouseControl);
@@ -512,7 +517,7 @@ EVENT_RESULT CGUIWindow::OnMouseAction(const CAction &action)
   return SendMouseEvent(mousePoint, event);
 }
 
-EVENT_RESULT CGUIWindow::OnMouseEvent(const CPoint &point, const CMouseEvent &event)
+EVENT_RESULT CGUIWindow::OnMouseEvent(const CPoint& point, const MOUSE::CMouseEvent& event)
 {
   if (event.m_id == ACTION_MOUSE_RIGHT_CLICK)
   { // no control found to absorb this click - go to previous menu
@@ -1070,9 +1075,13 @@ void CGUIWindow::RunUnloadActions() const
 void CGUIWindow::ClearBackground()
 {
   m_clearBackground.Update();
-  UTILS::COLOR::Color color = m_clearBackground;
+  KODI::UTILS::COLOR::Color color = m_clearBackground;
   if (color)
     CServiceBroker::GetWinSystem()->GetGfxContext().Clear(color);
+  else if (!CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_guiGeometryClear)
+    CServiceBroker::GetWinSystem()->GetGfxContext().Clear(0xff000000);
+  else
+    CServiceBroker::GetWinSystem()->GetGfxContext().Clear();
 }
 
 void CGUIWindow::SetID(int id)

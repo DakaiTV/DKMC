@@ -69,7 +69,7 @@ bool CGUILabel::SetColor(CGUILabel::COLOR color)
   return changed;
 }
 
-UTILS::COLOR::Color CGUILabel::GetColor() const
+KODI::UTILS::COLOR::Color CGUILabel::GetColor() const
 {
   switch (m_color)
   {
@@ -107,7 +107,7 @@ bool CGUILabel::Process(unsigned int currentTime)
 
 void CGUILabel::Render()
 {
-  UTILS::COLOR::Color color = GetColor();
+  KODI::UTILS::COLOR::Color color = GetColor();
   bool renderSolid = (m_color == COLOR_DISABLED);
   bool overFlows = (m_renderRect.Width() + 0.5f < m_textLayout.GetTextWidth()); // 0.5f to deal with floating point rounding issues
   if (overFlows && m_scrolling && !renderSolid)
@@ -130,9 +130,19 @@ void CGUILabel::Render()
     }
     else
     {
-      align |= XBFONT_TRUNCATED;
+      if (m_overflowType == OVER_FLOW_TRUNCATE_LEFT)
+        align |= XBFONT_TRUNCATED_LEFT;
+      else
+        align |= XBFONT_TRUNCATED;
+
       if (m_label.align & XBFONT_RIGHT)
         align |= XBFONT_RIGHT;
+
+      if (m_label.align & XBFONT_CENTER_X)
+      {
+        posX += m_renderRect.Width() * 0.5f; // hack for centered multiline text, same of above
+        align |= XBFONT_CENTER_X;
+      }
     }
     m_textLayout.Render(posX, posY, m_label.angle, color, m_label.shadowColor, align, m_overflowType == OVER_FLOW_CLIP ? m_textLayout.GetTextWidth() : m_renderRect.Width(), renderSolid);
   }
@@ -168,7 +178,8 @@ bool CGUILabel::SetAlign(uint32_t align)
   return changed;
 }
 
-bool CGUILabel::SetStyledText(const vecText& text, const std::vector<UTILS::COLOR::Color>& colors)
+bool CGUILabel::SetStyledText(const vecText& text,
+                              const std::vector<KODI::UTILS::COLOR::Color>& colors)
 {
   m_textLayout.UpdateStyled(text, colors, m_maxRect.Width());
   m_invalid = false;

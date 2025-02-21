@@ -14,10 +14,13 @@
 #include "guilib/GUIWindowManager.h"
 #include "guilib/LocalizeStrings.h"
 #include "input/WindowTranslator.h"
+#include "music/MusicFileItemClassify.h"
 #include "storage/MediaManager.h"
 #include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
 #include "utils/Variant.h"
+
+using namespace KODI;
 
 namespace CONTEXTMENU
 {
@@ -25,7 +28,7 @@ namespace CONTEXTMENU
   bool CEjectDisk::IsVisible(const CFileItem& item) const
   {
 #ifdef HAS_OPTICAL_DRIVE
-    return item.IsRemovable() && (item.IsDVD() || item.IsCDDA());
+    return item.IsRemovable() && (item.IsDVD() || MUSIC::IsCDDA(item));
 #else
     return false;
 #endif
@@ -43,7 +46,7 @@ namespace CONTEXTMENU
   bool CEjectDrive::IsVisible(const CFileItem& item) const
   {
     // Must be HDD
-    return item.IsRemovable() && !item.IsDVD() && !item.IsCDDA();
+    return item.IsRemovable() && !item.IsDVD() && !MUSIC::IsCDDA(item);
   }
 
   bool CEjectDrive::Execute(const std::shared_ptr<CFileItem>& item) const
@@ -85,7 +88,6 @@ bool CAddRemoveFavourite::IsVisible(const CFileItem& item) const
           !item.IsPath("newplaylist://") && !URIUtils::IsProtocol(item.GetPath(), "favourites") &&
           !URIUtils::IsProtocol(item.GetPath(), "newsmartplaylist") &&
           !URIUtils::IsProtocol(item.GetPath(), "newtag") &&
-          !URIUtils::IsProtocol(item.GetPath(), "newvideoversion") &&
           !URIUtils::IsProtocol(item.GetPath(), "musicsearch") &&
           // Hide this item for all PVR EPG/timers/search except EPG/timer/timer rules/search root
           // folders.

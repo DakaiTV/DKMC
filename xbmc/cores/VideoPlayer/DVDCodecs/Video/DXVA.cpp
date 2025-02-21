@@ -29,6 +29,9 @@
 #include "utils/SystemInfo.h"
 #include "utils/log.h"
 
+#include "platform/win32/WIN32Util.h"
+
+#include <algorithm>
 #include <mutex>
 
 #include <Windows.h>
@@ -341,7 +344,7 @@ bool CContext::CreateContext()
       if (FAILED(pD3DDevice.As(&m_d3d11Debug)))
       {
         CLog::LogF(LOGDEBUG, "unable to create debug interface. Error {}",
-                   DX::GetErrorDescription(hr));
+                   CWIN32Util::FormatHRESULT(hr));
       }
 #endif
     }
@@ -349,7 +352,7 @@ bool CContext::CreateContext()
     {
       CLog::LogF(LOGWARNING,
                  "unable to create device for decoding, fallback to using app device. Error {}",
-                 DX::GetErrorDescription(hr));
+                 CWIN32Util::FormatHRESULT(hr));
       m_sharingAllowed = false;
     }
   }
@@ -600,7 +603,7 @@ bool CContext::CreateSurfaces(const D3D11_VIDEO_DECODER_DESC& format, uint32_t c
   if (FAILED(hr = pD3DDevice->CreateTexture2D(&texDesc, NULL, texture.GetAddressOf())))
   {
     CLog::LogF(LOGERROR, "failed creating decoder texture array. Error {}",
-               DX::GetErrorDescription(hr));
+               CWIN32Util::FormatHRESULT(hr));
     return false;
   }
 
@@ -631,7 +634,7 @@ bool CContext::CreateSurfaces(const D3D11_VIDEO_DECODER_DESC& format, uint32_t c
     hr = m_pD3D11Device->CreateVideoDecoderOutputView(texture.Get(), &vdovDesc, &surfaces[i]);
     if (FAILED(hr))
     {
-      CLog::LogF(LOGERROR, "failed creating surfaces. Error {}", DX::GetErrorDescription(hr));
+      CLog::LogF(LOGERROR, "failed creating surfaces. Error {}", CWIN32Util::FormatHRESULT(hr));
       break;
     }
     if (pD3DDeviceContext1)
@@ -798,7 +801,7 @@ HRESULT CVideoBufferShared::GetResource(ID3D11Resource** ppResource)
     if (FAILED(hr = pD3DDevice->OpenSharedResource(handle, __uuidof(ID3D11Resource), &m_sharedRes)))
     {
       CLog::LogF(LOGDEBUG, "unable to open the shared resource, error description: {}",
-                 DX::GetErrorDescription(hr));
+                 CWIN32Util::FormatHRESULT(hr));
       return hr;
     }
 
@@ -810,18 +813,18 @@ HRESULT CVideoBufferShared::GetResource(ID3D11Resource** ppResource)
       if (FAILED(hr = context1.As(&m_appContext4)))
       {
         CLog::LogF(LOGDEBUG, "ID3D11DeviceContext4 is not available, error description: {}",
-                   DX::GetErrorDescription(hr));
+                   CWIN32Util::FormatHRESULT(hr));
       }
       else if (FAILED(hr = pD3DDevice.As(&device5)))
       {
         CLog::LogF(LOGDEBUG, "ID3D11Device5 is not available, error description: {}",
-                   DX::GetErrorDescription(hr));
+                   CWIN32Util::FormatHRESULT(hr));
         m_appContext4 = nullptr;
       }
       else if (FAILED(hr = device5->OpenSharedFence(m_handleFence, IID_PPV_ARGS(&m_appFence))))
       {
         CLog::LogF(LOGDEBUG, "unable to open the shared fence, error description: {}",
-                   DX::GetErrorDescription(hr));
+                   CWIN32Util::FormatHRESULT(hr));
         m_appContext4 = nullptr;
       }
     }
@@ -833,7 +836,7 @@ HRESULT CVideoBufferShared::GetResource(ID3D11Resource** ppResource)
     if (FAILED(hr = m_appContext4->Wait(m_appFence.Get(), m_fenceValue)))
     {
       CLog::LogF(LOGDEBUG, "error waiting for the fence value, error description: {}",
-                 DX::GetErrorDescription(hr));
+                 CWIN32Util::FormatHRESULT(hr));
     }
   }
 
@@ -874,28 +877,28 @@ void CVideoBufferShared::InitializeFence(CDecoder* decoder)
   if (FAILED(hr = immediateContext.As(&m_deviceContext4)))
   {
     CLog::LogF(LOGDEBUG, "ID3D11DeviceContext4 is not available, error description: {}",
-               DX::GetErrorDescription(hr));
+               CWIN32Util::FormatHRESULT(hr));
     goto error;
   }
 
   if (FAILED(hr = device.As(&d3ddev5)))
   {
     CLog::LogF(LOGDEBUG, "ID3D11Device5 is not available, error description: {}",
-               DX::GetErrorDescription(hr));
+               CWIN32Util::FormatHRESULT(hr));
     goto error;
   }
 
   if (FAILED(hr = d3ddev5->CreateFence(0, D3D11_FENCE_FLAG_SHARED, IID_PPV_ARGS(&m_fence))))
   {
     CLog::LogF(LOGDEBUG, "unable to create ID3D11Fence, error description: {}",
-               DX::GetErrorDescription(hr));
+               CWIN32Util::FormatHRESULT(hr));
     goto error;
   }
 
   if (FAILED(hr = m_fence->CreateSharedHandle(NULL, GENERIC_ALL, NULL, &m_handleFence)))
   {
     CLog::LogF(LOGDEBUG, "unable to create the shared handle of the fence, error description: {}",
-               DX::GetErrorDescription(hr));
+               CWIN32Util::FormatHRESULT(hr));
     goto error;
   }
 
@@ -945,13 +948,15 @@ void CVideoBufferCopy::Initialize(CDecoder* decoder)
 
     if (FAILED(hr = CVideoBuffer::GetResource(&pResource)))
     {
-      CLog::LogF(LOGDEBUG, "unable to get decoder resource. Error {}", DX::GetErrorDescription(hr));
+      CLog::LogF(LOGDEBUG, "unable to get decoder resource. Error {}",
+                 CWIN32Util::FormatHRESULT(hr));
       return;
     }
 
     if (FAILED(hr = pResource.As(&pDecoderTexture)))
     {
-      CLog::LogF(LOGDEBUG, "unable to get decoder texture. Error {}", DX::GetErrorDescription(hr));
+      CLog::LogF(LOGDEBUG, "unable to get decoder texture. Error {}",
+                 CWIN32Util::FormatHRESULT(hr));
       return;
     }
 
@@ -963,20 +968,21 @@ void CVideoBufferCopy::Initialize(CDecoder* decoder)
 
     if (FAILED(hr = pDevice->CreateTexture2D(&desc, nullptr, &pCopyTexture)))
     {
-      CLog::LogF(LOGDEBUG, "unable to create copy texture. Error {}", DX::GetErrorDescription(hr));
+      CLog::LogF(LOGDEBUG, "unable to create copy texture. Error {}",
+                 CWIN32Util::FormatHRESULT(hr));
       return;
     }
     if (FAILED(hr = pCopyTexture.As(&pDXGIResource)))
     {
       CLog::LogF(LOGDEBUG, "unable to get DXGI resource for copy texture. Error {}",
-                 DX::GetErrorDescription(hr));
+                 CWIN32Util::FormatHRESULT(hr));
       return;
     }
 
     HANDLE shared_handle;
     if (FAILED(hr = pDXGIResource->GetSharedHandle(&shared_handle)))
     {
-      CLog::LogF(LOGDEBUG, "unable to get shared handle. Error {}", DX::GetErrorDescription(hr));
+      CLog::LogF(LOGDEBUG, "unable to get shared handle. Error {}", CWIN32Util::FormatHRESULT(hr));
       return;
     }
 
@@ -1376,7 +1382,8 @@ bool CDecoder::Open(AVCodecContext* avctx, AVCodecContext* mainctx, enum AVPixel
     break;
   case AV_CODEC_ID_H264:
     // by specification h264 decoder can hold up to 16 unique refs
-    m_refs += avctx->refs ? avctx->refs : 16;
+    // but use 8 at least to avoid potential issues in some rare streams
+    m_refs += std::max(8, avctx->refs ? avctx->refs : 16);
     break;
   case AV_CODEC_ID_VP9:
     m_refs += 8;

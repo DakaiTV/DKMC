@@ -70,15 +70,16 @@ AC_ARG_WITH([cpu],
   [use_cpu=$withval],
   [use_cpu=auto])
 
-AC_ARG_WITH([ndk-path],
-  [AS_HELP_STRING([--with-ndk-path],
-  [specify path to ndk (required for android only)])],
-  [use_ndk_path=$withval])
-
 AC_ARG_WITH([sdk-path],
   [AS_HELP_STRING([--with-sdk-path],
   [specify path to sdk (required for android only)])],
   [use_sdk_path=$withval])
+
+AC_ARG_WITH([ndk-path],
+  [AS_HELP_STRING([--with-ndk-path],
+  [specify path to ndk (optional for android), default is sdk_path/ndk/27.2.12479018])],
+  [use_ndk_path=$withval],
+  [use_ndk_path=$use_sdk_path/ndk/27.2.12479018])
 
 AC_ARG_WITH([sdk],
   [AS_HELP_STRING([--with-sdk],
@@ -87,9 +88,9 @@ AC_ARG_WITH([sdk],
 
 AC_ARG_WITH([ndk-api],
   [AS_HELP_STRING([--with-ndk-api],
-  [specify ndk level (optional for android), default is 21.])],
+  [specify ndk level (optional for android), default is 24.])],
   [use_ndk_api=$withval],
-  [use_ndk_api=21])
+  [use_ndk_api=24])
 
 AC_ARG_ENABLE([gplv3],
   [AS_HELP_STRING([--enable-gplv3],
@@ -190,17 +191,19 @@ case $build in
 
     # acquire build platform (native) sdk sysroot.
     build_platform=macosx
-    native_sdk_path=[`$use_xcrun --show-sdk-path`]
+    native_sdk_path=[`$use_xcrun --sdk macosx --show-sdk-path`]
     host_sysroot="$native_sdk_path"
     host_includes="${host_includes} -isysroot $native_sdk_path"
 
+    # We only set CC_FOR_BUILD as we require use_build_toolchain to be populated
+    # All other build apps are detected by AC_PATH_PROG further down
     CC_FOR_BUILD=[`$use_xcrun --find clang`]
     use_build_toolchain=[`$CC_FOR_BUILD --version | grep InstalledDir | awk '{ print $2}'`]
 
     # Android NDK currently only x86_64 prebuilts - Arctic Fox 2020.3.1
     android_toolchain_name="darwin-x86_64"
 
-    host_cxxflags="-std=c++17 -stdlib=libc++"
+    host_cxxflags="-std=c++17"
 
     if test "x$prefix" = "xNONE"; then
       prefix=/Users/Shared/xbmc-depends
@@ -263,8 +266,11 @@ case $host in
     esac
   ;;
   *darwin*)
+    # Again we set CC to find toolchain path for use in AC_PATH_TOOL macros further down
     CC=[`$use_xcrun --find clang`]
-    platform_cxx=clang++
+    # May as well just set CXX direct as platform_cxx default is g++. Setting the variable
+    # before AC_PATH_TOOL causes that macro to do nothing and just use the set variable
+    CXX=[`$use_xcrun --find clang++`]
     use_toolchain=[`$CC --version | grep InstalledDir | awk '{ print $2}'`]
 esac
 
@@ -330,6 +336,7 @@ case $host in
         if test "x$use_cpu" = "xarm64-v8a"; then
           platform_cflags="${platform_cflags} -mtune=cortex-a53"
         fi
+        platform_ldflags="${platform_ldflags} -Wl,-z,max-page-size=16384"
         meson_cpu="aarch64"
       ;;
       i*86*-linux-android*)
@@ -397,9 +404,11 @@ case $host in
     case $host in
       *i686*-linux-gnu*|i*86*-*-linux-uclibc*)
         meson_cpu="x86"
+        ffmpeg_cpu="i686"
       ;;
       x86_64*-linux-gnu*|x86_64-*-linux-uclibc*)
         meson_cpu="x86_64"
+        ffmpeg_cpu="x86-64"
       ;;
     esac
     use_cpu=$host_cpu
@@ -409,7 +418,7 @@ case $host in
     platform_cxxflags="$platform_cflags"
     platform_os="linux"
     meson_system="linux"
-    ffmpeg_options_default="--enable-vaapi --enable-vdpau --cpu=$use_cpu"
+    ffmpeg_options_default="--enable-vaapi --enable-vdpau --cpu=$ffmpeg_cpu"
     target_platform="x11 wayland gbm"
   ;;
   *darwin*)
@@ -418,7 +427,6 @@ case $host in
 
     meson_system="darwin"
 
-    platform_cflags="-fheinous-gnu-extensions"
     platform_ldflags="-Wl,-search_paths_first"
 
     case $use_platform in
@@ -493,8 +501,7 @@ case $host in
     platform_min_version="$target_platform-version-min=$target_minver"
 
     platform_includes="-arch $use_cpu -m$platform_min_version -isysroot $use_sdk_path"
-    platform_ldflags="${platform_ldflags} $platform_includes -stdlib=libc++"
-    platform_cxxflags="${platform_cxxflags} -stdlib=libc++"
+    platform_ldflags="${platform_ldflags} $platform_includes"
     deps_dir="${sdk_name}_${use_cpu}-target-${build_type}"
   ;;
   *)
@@ -570,13 +577,15 @@ if test "$platform_os" = "android"; then
     AC_MSG_ERROR("SDK path is required for android")
   fi
 
-  if [ ! test -f $use_sdk_path/tools/bin/sdkmanager ] && [ ! test -f $use_sdk_path/cmdline-tools/bin/sdkmanager ]; then
+  if [ ! test -f $use_sdk_path/tools/bin/sdkmanager ] && [ ! test -f $use_sdk_path/cmdline-tools/bin/sdkmanager ] && [ ! test -f $use_sdk_path/cmdline-tools/latest/bin/sdkmanager ]; then
     AC_MSG_ERROR(verify sdk path)
   fi
 
   if [ ! test -f $use_ndk_path/sources/android/native_app_glue/android_native_app_glue.h ]; then
     AC_MSG_ERROR(verify ndk path)
   fi
+
+  use_ndk_version=[`cat $use_ndk_path/source.properties | grep "Pkg.Revision" | cut -d'=' -f2 | awk '{print $1}'`]
 
   #not all sort versions support -V - probe it...
   SORT_PARAMS=""
@@ -667,22 +676,34 @@ fi
 
 CXXFLAGS="$platform_cxxflags $platform_includes"
 CXX_CACHED="$CXX"
-AX_CXX_COMPILE_STDCXX([17], [noext], [mandatory])
+AX_CXX_COMPILE_STDCXX([20], [noext], [mandatory])
 CXX="$CXX_CACHED"
-platform_cxxflags="${platform_cxxflags} -std=c++17"
 
 if test "$ffmpeg_options" = "default"; then
   ffmpeg_options="$ffmpeg_options_default"
 fi
 
+# Read python major.minor version from native PYTHON-VERSION file
+m4_define([NATIVE_PYTHON_FILE_INPUT],m4_quote(m4_include([native/python3/PYTHON3-VERSION])))
+m4_define([NATIVE_PYTHON_MAJOR_MINOR],m4_bregexp(NATIVE_PYTHON_FILE_INPUT,[VERSION=\([0-9]+\.[0-9]+\)\.[0-9]+\s*?],[\1]))
+native_py_version=m4_defn([NATIVE_PYTHON_MAJOR_MINOR])
+
+# Read python major.minor version from target PYTHON-VERSION file
+m4_define([TARGET_PYTHON_FILE_INPUT],m4_quote(m4_include([target/python3/PYTHON3-VERSION])))
+m4_define([TARGET_PYTHON_MAJOR_MINOR],m4_bregexp(TARGET_PYTHON_FILE_INPUT,[VERSION=\([0-9]+\.[0-9]+\)\.[0-9]+\s*?],[\1]))
+target_py_version=m4_defn([TARGET_PYTHON_MAJOR_MINOR])
+
 if test "$platform_os" = "android"; then
 echo -e
   AC_SUBST(use_sdk_path)
   AC_SUBST(use_ndk_path)
+  AC_SUBST(use_ndk_version)
   AC_SUBST(use_ndk_api)
   AC_SUBST(build_tools_path)
 fi
 
+AC_SUBST(native_py_version)
+AC_SUBST(target_py_version)
 AC_SUBST(meson_system)
 AC_SUBST(meson_cpu)
 AC_SUBST(use_debug)
@@ -696,6 +717,7 @@ AC_SUBST(use_toolchain)
 AC_SUBST(use_build_toolchain)
 AC_SUBST(use_tarballs)
 AC_SUBST(target_platform)
+AC_SUBST(target_minver)
 AC_SUBST(use_firmware)
 AC_SUBST(cross_compiling)
 AC_SUBST(platform_asflags)
@@ -794,6 +816,7 @@ cpp = $MESON_CXX
 ar = '$AR'
 strip = '$STRIP'
 pkgconfig = '$prefix/$tool_dir/bin/pkg-config'
+pkg-config = '$prefix/$tool_dir/bin/pkg-config'
 
 [host_machine]
 system = '$meson_system'

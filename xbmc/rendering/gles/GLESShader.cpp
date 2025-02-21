@@ -48,11 +48,16 @@ void CGLESShader::OnCompiledAndLinked()
   m_hStep   = glGetUniformLocation(ProgramHandle(), "m_step");
   m_hContrast   = glGetUniformLocation(ProgramHandle(), "m_contrast");
   m_hBrightness = glGetUniformLocation(ProgramHandle(), "m_brightness");
+  m_sdrPeak = glGetUniformLocation(ProgramHandle(), "m_sdrPeak");
 
   // Variables passed directly to the Vertex shader
   m_hProj  = glGetUniformLocation(ProgramHandle(), "m_proj");
   m_hModel = glGetUniformLocation(ProgramHandle(), "m_model");
   m_hCoord0Matrix = glGetUniformLocation(ProgramHandle(), "m_coord0Matrix");
+  m_hMatrix = glGetUniformLocation(ProgramHandle(), "m_matrix");
+  m_hShaderClip = glGetUniformLocation(ProgramHandle(), "m_shaderClip");
+  m_hCoordStep = glGetUniformLocation(ProgramHandle(), "m_cordStep");
+  m_hDepth = glGetUniformLocation(ProgramHandle(), "m_depth");
 
   // Vertex attributes
   m_hPos    = glGetAttribLocation(ProgramHandle(),  "m_attrpos");
@@ -166,6 +171,9 @@ bool CGLESShader::OnEnabled()
 
   glUniform1f(m_hBrightness, 0.0f);
   glUniform1f(m_hContrast, 1.0f);
+
+  const float sdrPeak = CServiceBroker::GetWinSystem()->GetGuiSdrPeakLuminance();
+  glUniform1f(m_sdrPeak, sdrPeak);
 
   return true;
 }

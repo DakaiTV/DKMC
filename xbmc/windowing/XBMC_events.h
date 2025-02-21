@@ -9,7 +9,7 @@
 #pragma once
 
 #include "Resolution.h"
-#include "input/XBMC_keyboard.h"
+#include "input/keyboard/XBMC_keyboard.h"
 
 /* Event enumerations */
 typedef enum
@@ -57,8 +57,9 @@ typedef struct XBMC_MouseButtonEvent {
    mode with the new width and height.
  */
 typedef struct XBMC_ResizeEvent {
-	int w;		/* New width */
-	int h;		/* New height */
+  int width; /* New width */
+  int height; /* New height */
+  double scale; /* Scaling factor */
 } XBMC_ResizeEvent;
 
 typedef struct XBMC_MoveEvent {

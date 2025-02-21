@@ -9,6 +9,7 @@
 #include "GUIViewStatePictures.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "filesystem/Directory.h"
 #include "guilib/LocalizeStrings.h"
@@ -70,14 +71,15 @@ std::string CGUIViewStateWindowPictures::GetExtensions()
   return extensions;
 }
 
-VECSOURCES& CGUIViewStateWindowPictures::GetSources()
+std::vector<CMediaSource>& CGUIViewStateWindowPictures::GetSources()
 {
-  VECSOURCES *pictureSources = CMediaSourceSettings::GetInstance().GetSources("pictures");
+  std::vector<CMediaSource>* pictureSources =
+      CMediaSourceSettings::GetInstance().GetSources("pictures");
 
   // Guard against source type not existing
   if (pictureSources == nullptr)
   {
-    static VECSOURCES empty;
+    static std::vector<CMediaSource> empty;
     return empty;
   }
 

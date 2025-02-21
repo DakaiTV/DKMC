@@ -59,16 +59,16 @@ CPVRChannel::CPVRChannel(bool bRadio, const std::string& iconPath)
 CPVRChannel::CPVRChannel(const PVR_CHANNEL& channel, unsigned int iClientId)
   : m_bIsRadio(channel.bIsRadio),
     m_bIsHidden(channel.bIsHidden),
-    m_iconPath(channel.strIconPath,
+    m_iconPath(channel.strIconPath ? channel.strIconPath : "",
                StringUtils::Format(IMAGE_OWNER_PATTERN, channel.bIsRadio ? "radio" : "tv")),
-    m_strChannelName(channel.strChannelName),
+    m_strChannelName(channel.strChannelName ? channel.strChannelName : ""),
     m_bHasArchive(channel.bHasArchive),
     m_bEPGEnabled(!channel.bIsHidden),
     m_iUniqueId(channel.iUniqueId),
     m_iClientId(iClientId),
     m_clientChannelNumber(channel.iChannelNumber, channel.iSubChannelNumber),
-    m_strClientChannelName(channel.strChannelName),
-    m_strMimeType(channel.strMimeType),
+    m_strClientChannelName(channel.strChannelName ? channel.strChannelName : ""),
+    m_strMimeType(channel.strMimeType ? channel.strMimeType : ""),
     m_iClientEncryptionSystem(channel.iEncryptionSystem),
     m_iClientOrder(channel.iOrder),
     m_iClientProviderUid(channel.iClientProviderUid)
@@ -84,22 +84,6 @@ CPVRChannel::~CPVRChannel()
   ResetEPG();
 }
 
-void CPVRChannel::FillAddonData(PVR_CHANNEL& channel) const
-{
-  channel = {};
-  channel.iUniqueId = UniqueID();
-  channel.iChannelNumber = ClientChannelNumber().GetChannelNumber();
-  channel.iSubChannelNumber = ClientChannelNumber().GetSubChannelNumber();
-  strncpy(channel.strChannelName, ClientChannelName().c_str(), sizeof(channel.strChannelName) - 1);
-  strncpy(channel.strIconPath, ClientIconPath().c_str(), sizeof(channel.strIconPath) - 1);
-  channel.iEncryptionSystem = EncryptionSystem();
-  channel.bIsRadio = IsRadio();
-  channel.bIsHidden = IsHidden();
-  strncpy(channel.strMimeType, MimeType().c_str(), sizeof(channel.strMimeType) - 1);
-  channel.iClientProviderUid = ClientProviderUid();
-  channel.bHasArchive = HasArchive();
-}
-
 void CPVRChannel::Serialize(CVariant& value) const
 {
   value["channelid"] = m_iChannelId;
@@ -111,6 +95,7 @@ void CPVRChannel::Serialize(CVariant& value) const
   value["uniqueid"] = m_iUniqueId;
   CDateTime lastPlayed(m_iLastWatched);
   value["lastplayed"] = lastPlayed.IsValid() ? lastPlayed.GetAsDBDate() : "";
+  value["dateadded"] = m_dateTimeAdded.IsValid() ? m_dateTimeAdded.GetAsDBDate() : "";
 
   std::shared_ptr<CPVREpgInfoTag> epg = GetEPGNow();
   if (epg)
@@ -406,6 +391,20 @@ bool CPVRChannel::SetLastWatched(time_t lastWatched, int groupId)
   return false;
 }
 
+bool CPVRChannel::SetDateTimeAdded(const CDateTime& dateTimeAdded)
+{
+  std::unique_lock<CCriticalSection> lock(m_critSection);
+
+  if (m_dateTimeAdded != dateTimeAdded)
+  {
+    m_dateTimeAdded = dateTimeAdded;
+    m_bChanged = true;
+    return true;
+  }
+
+  return false;
+}
+
 /********** Client related channel methods **********/
 
 bool CPVRChannel::SetClientID(int iClientId)
@@ -661,6 +660,8 @@ void CPVRChannel::ToSortable(SortItem& sortable, Field field) const
     sortable[FieldLastPlayed] =
         lastWatched.IsValid() ? lastWatched.GetAsDBDateTime() : StringUtils::Empty;
   }
+  else if (field == FieldDateAdded)
+    sortable[FieldDateAdded] = m_dateTimeAdded.GetAsDBDateTime();
   else if (field == FieldProvider)
     sortable[FieldProvider] = StringUtils::Format("{} {}", m_iClientId, m_iClientProviderUid);
 }
@@ -735,6 +736,12 @@ time_t CPVRChannel::LastWatched() const
 {
   std::unique_lock<CCriticalSection> lock(m_critSection);
   return m_iLastWatched;
+}
+
+CDateTime CPVRChannel::DateTimeAdded() const
+{
+  std::unique_lock<CCriticalSection> lock(m_critSection);
+  return m_dateTimeAdded;
 }
 
 bool CPVRChannel::IsChanged() const

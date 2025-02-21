@@ -12,7 +12,9 @@
 #include "filesystem/IFile.h"
 #include "utils/URIUtils.h"
 #include "utils/log.h"
+#include "video/VideoFileItemClassify.h"
 
+using namespace KODI;
 using namespace XFILE;
 
 CDVDInputStreamFile::CDVDInputStreamFile(const CFileItem& fileitem, unsigned int flags)
@@ -44,8 +46,10 @@ bool CDVDInputStreamFile::Open()
   unsigned int flags = m_flags;
 
   // If this file is audio and/or video (= not a subtitle) flag to caller
-  if (!m_item.IsSubtitle())
+  if (!VIDEO::IsSubtitle(m_item))
     flags |= READ_AUDIO_VIDEO;
+  else
+    flags |= READ_NO_BUFFER; // disable CFileStreamBuffer for subtitles
 
   std::string content = m_item.GetMimeType();
 
@@ -65,7 +69,7 @@ bool CDVDInputStreamFile::Open()
   }
 
   if (m_pFile->GetImplementation() && (content.empty() || content == "application/octet-stream"))
-    m_content = m_pFile->GetImplementation()->GetProperty(XFILE::FILE_PROPERTY_CONTENT_TYPE);
+    m_content = m_pFile->GetImplementation()->GetProperty(XFILE::FileProperty::CONTENT_TYPE);
 
   m_eof = false;
   return true;
@@ -105,8 +109,8 @@ int64_t CDVDInputStreamFile::Seek(int64_t offset, int whence)
 {
   if(!m_pFile) return -1;
 
-  if(whence == SEEK_POSSIBLE)
-    return m_pFile->IoControl(IOCTRL_SEEK_POSSIBLE, NULL);
+  if (whence == DVDSTREAM_SEEK_POSSIBLE)
+    return m_pFile->IoControl(IOControl::SEEK_POSSIBLE, nullptr);
 
   int64_t ret = m_pFile->Seek(offset, whence);
 
@@ -125,7 +129,7 @@ int64_t CDVDInputStreamFile::GetLength()
 
 bool CDVDInputStreamFile::GetCacheStatus(XFILE::SCacheStatus *status)
 {
-  if(m_pFile && m_pFile->IoControl(IOCTRL_CACHE_STATUS, status) >= 0)
+  if (m_pFile && m_pFile->IoControl(IOControl::CACHE_STATUS, status) >= 0)
     return true;
   else
     return false;
@@ -158,7 +162,7 @@ void CDVDInputStreamFile::SetReadRate(uint32_t rate)
   // Increase requested rate by 10%:
   uint32_t maxrate = static_cast<uint32_t>(1.1 * rate);
 
-  if(m_pFile->IoControl(IOCTRL_CACHE_SETRATE, &maxrate) >= 0)
+  if (m_pFile->IoControl(IOControl::CACHE_SETRATE, &maxrate) >= 0)
     CLog::Log(LOGDEBUG,
               "CDVDInputStreamFile::SetReadRate - set cache throttle rate to {} bytes per second",
               maxrate);

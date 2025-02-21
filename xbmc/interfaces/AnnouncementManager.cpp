@@ -18,14 +18,15 @@
 #include "utils/Variant.h"
 #include "utils/log.h"
 #include "video/VideoDatabase.h"
+#include "video/VideoFileItemClassify.h"
 
 #include <memory>
 #include <mutex>
-#include <stdio.h>
 
 #define LOOKUP_PROPERTY "database-lookup"
 
 using namespace ANNOUNCEMENT;
+using namespace KODI;
 
 const std::string CAnnouncementManager::ANNOUNCEMENT_SENDER = "xbmc";
 
@@ -54,11 +55,16 @@ void CAnnouncementManager::Deinitialize()
 
 void CAnnouncementManager::AddAnnouncer(IAnnouncer *listener)
 {
+  return AddAnnouncer(listener, ANNOUNCE_ALL);
+}
+
+void CAnnouncementManager::AddAnnouncer(IAnnouncer* listener, int flagMask)
+{
   if (!listener)
     return;
 
   std::unique_lock<CCriticalSection> lock(m_announcersCritSection);
-  m_announcers.push_back(listener);
+  m_announcers.emplace(listener, flagMask);
 }
 
 void CAnnouncementManager::RemoveAnnouncer(IAnnouncer *listener)
@@ -67,14 +73,7 @@ void CAnnouncementManager::RemoveAnnouncer(IAnnouncer *listener)
     return;
 
   std::unique_lock<CCriticalSection> lock(m_announcersCritSection);
-  for (unsigned int i = 0; i < m_announcers.size(); i++)
-  {
-    if (m_announcers[i] == listener)
-    {
-      m_announcers.erase(m_announcers.begin() + i);
-      return;
-    }
-  }
+  m_announcers.erase(listener);
 }
 
 void CAnnouncementManager::Announce(AnnouncementFlag flag, const std::string& message)
@@ -155,10 +154,14 @@ void CAnnouncementManager::DoAnnounce(AnnouncementFlag flag,
   std::unique_lock<CCriticalSection> lock(m_announcersCritSection);
 
   // Make a copy of announcers. They may be removed or even remove themselves during execution of IAnnouncer::Announce()!
-
-  std::vector<IAnnouncer *> announcers(m_announcers);
-  for (unsigned int i = 0; i < announcers.size(); i++)
-    announcers[i]->Announce(flag, sender, message, data);
+  std::unordered_map<IAnnouncer*, int> announcers{m_announcers};
+  for (const auto& [announcer, flagMask] : announcers)
+  {
+    if (flag & flagMask)
+    {
+      announcer->Announce(flag, sender, message, data);
+    }
+  }
 }
 
 void CAnnouncementManager::DoAnnounce(AnnouncementFlag flag,
@@ -189,8 +192,9 @@ void CAnnouncementManager::DoAnnounce(AnnouncementFlag flag,
 
     if (data.isMember("player") && data["player"].isMember("playerid"))
     {
-      object["player"]["playerid"] =
-          channel->IsRadio() ? PLAYLIST::TYPE_MUSIC : PLAYLIST::TYPE_VIDEO;
+      object["player"]["playerid"] = channel->IsRadio()
+                                         ? static_cast<int>(PLAYLIST::Id::TYPE_MUSIC)
+                                         : static_cast<int>(PLAYLIST::Id::TYPE_VIDEO);
     }
   }
   else if (item->HasVideoInfoTag() && !item->HasPVRRecordingInfoTag())
@@ -296,7 +300,7 @@ void CAnnouncementManager::DoAnnounce(AnnouncementFlag flag,
         object["item"]["artist"] = item->GetMusicInfoTag()->GetArtist();
     }
   }
-  else if (item->IsVideo())
+  else if (VIDEO::IsVideo(*item))
   {
     // video item but has no video info tag.
     type = "movie";

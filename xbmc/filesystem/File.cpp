@@ -66,7 +66,7 @@ bool CFile::Copy(const CURL& url2, const CURL& dest, XFILE::IFileCallback* pCall
   CURL url(url2);
   if (StringUtils::StartsWith(url.Get(), "zip://") || URIUtils::IsInAPK(url.Get()))
     url.SetOptions("?cache=no");
-  if (file.Open(url.Get(), READ_TRUNCATED | READ_CHUNKED))
+  if (file.Open(url.Get(), READ_TRUNCATED | READ_NO_BUFFER))
   {
 
     CFile newFile;
@@ -205,28 +205,29 @@ bool CFile::CURLCreate(const std::string &url)
   return true;
 }
 
-bool CFile::CURLAddOption(XFILE::CURLOPTIONTYPE type, const char* name, const char * value)
+bool CFile::CURLAddOption(CURLOptionType type, const char* name, const char* value)
 {
-  switch (type){
-  case XFILE::CURL_OPTION_CREDENTIALS:
+  switch (type)
   {
-    m_curl.SetUserName(name);
-    m_curl.SetPassword(value);
-    break;
-  }
-  case XFILE::CURL_OPTION_PROTOCOL:
-  case XFILE::CURL_OPTION_HEADER:
-  {
-    m_curl.SetProtocolOption(name, value);
-    break;
-  }
-  case XFILE::CURL_OPTION_OPTION:
-  {
-    m_curl.SetOption(name, value);
-    break;
-  }
-  default:
-    return false;
+    case CURLOptionType::CREDENTIALS:
+    {
+      m_curl.SetUserName(name);
+      m_curl.SetPassword(value);
+      break;
+    }
+    case CURLOptionType::PROTOCOL:
+    case CURLOptionType::HEADER:
+    {
+      m_curl.SetProtocolOption(name, value);
+      break;
+    }
+    case CURLOptionType::OPTION:
+    {
+      m_curl.SetOption(name, value);
+      break;
+    }
+    default:
+      return false;
   }
   return true;
 }
@@ -284,22 +285,23 @@ bool CFile::Open(const CURL& file, const unsigned int flags)
     if (!(m_flags & READ_NO_CACHE))
     {
       const std::string pathToUrl(url.Get());
-      if (URIUtils::IsDVD(pathToUrl) || URIUtils::IsBluray(pathToUrl) ||
+      if (URIUtils::IsDVD(pathToUrl) || URIUtils::IsBlurayPath(pathToUrl) ||
           (m_flags & READ_AUDIO_VIDEO))
       {
         const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
 
-        const int cacheBufferMode = (settings)
-                                        ? settings->GetInt(CSettings::SETTING_FILECACHE_BUFFERMODE)
-                                        : CACHE_BUFFER_MODE_NETWORK;
+        const CacheBufferMode cacheBufferMode =
+            (settings) ? static_cast<CacheBufferMode>(
+                             settings->GetInt(CSettings::SETTING_FILECACHE_BUFFERMODE))
+                       : CacheBufferMode::NETWORK;
 
-        if ((cacheBufferMode == CACHE_BUFFER_MODE_INTERNET &&
+        if ((cacheBufferMode == CacheBufferMode::INTERNET &&
              URIUtils::IsInternetStream(pathToUrl, true)) ||
-            (cacheBufferMode == CACHE_BUFFER_MODE_TRUE_INTERNET &&
+            (cacheBufferMode == CacheBufferMode::TRUE_INTERNET &&
              URIUtils::IsInternetStream(pathToUrl, false)) ||
-            (cacheBufferMode == CACHE_BUFFER_MODE_NETWORK &&
+            (cacheBufferMode == CacheBufferMode::NETWORK &&
              URIUtils::IsNetworkFilesystem(pathToUrl)) ||
-            (cacheBufferMode == CACHE_BUFFER_MODE_ALL &&
+            (cacheBufferMode == CacheBufferMode::ALL &&
              (URIUtils::IsNetworkFilesystem(pathToUrl) || URIUtils::IsHD(pathToUrl))))
         {
           m_flags |= READ_CACHED;
@@ -364,12 +366,7 @@ bool CFile::Open(const CURL& file, const unsigned int flags)
       return false;
     }
 
-    constexpr int64_t len = 200 * 1024 * 1024; // 200 MB
-
-    // Use CFileStreamBuffer for all "big" files (audio/video files) when FileCache is not used
-    // This also makes use of 64K file read chunk size, suitable for localfiles, USB files, etc.
-    // Also enbles basic cache for Blu-Ray but only big .m2ts files (main audio/video files only)
-    if ((m_pFile->GetChunkSize() || m_pFile->GetLength() > len) && !(m_flags & READ_CHUNKED))
+    if (ShouldUseStreamBuffer(url))
     {
       m_pBuffer = std::make_unique<CFileStreamBuffer>(0);
       m_pBuffer->Attach(m_pFile.get());
@@ -386,6 +383,21 @@ bool CFile::Open(const CURL& file, const unsigned int flags)
   XBMCCOMMONS_HANDLE_UNCHECKED
   catch (...) { CLog::Log(LOGERROR, "{} - Unhandled exception", __FUNCTION__); }
   CLog::Log(LOGERROR, "{} - Error opening {}", __FUNCTION__, file.GetRedacted());
+  return false;
+}
+
+bool CFile::ShouldUseStreamBuffer(const CURL& url)
+{
+  if (m_flags & READ_NO_BUFFER)
+    return false;
+
+  if (m_flags & READ_AUDIO_VIDEO || m_pFile->GetChunkSize() > 0)
+    return true;
+
+  // file size > 200 MB but not in optical disk
+  if (m_pFile->GetLength() > 200 * 1024 * 1024 && !URIUtils::IsDVD(url.GetShareName()))
+    return true;
+
   return false;
 }
 
@@ -755,12 +767,44 @@ int64_t CFile::GetPosition() const
   return -1;
 }
 
+bool XFILE::CFile::ReadLine(std::string& line)
+{
+  if (!m_pFile)
+    return false;
+
+  line.clear();
+
+  try
+  {
+    // Read by buffer chunks until to EOL or EOF
+    while (true)
+    {
+      char bufferLine[1025];
+      auto result = ReadLine(bufferLine, sizeof(bufferLine));
+      if (result.code == ReadLineResult::FAILURE)
+        return !line.empty();
+
+      line.insert(line.end(), bufferLine, bufferLine + result.length);
+
+      if (result.code == ReadLineResult::OK)
+        break;
+    }
+
+    return true;
+  }
+  XBMCCOMMONS_HANDLE_UNCHECKED
+  catch (...)
+  {
+    CLog::Log(LOGERROR, "{} - Unhandled exception", __FUNCTION__);
+  }
+  return false;
+}
 
 //*********************************************************************************************
-bool CFile::ReadString(char *szLine, int iLineLength)
+XFILE::CFile::ReadLineResult XFILE::CFile::ReadLine(char* buffer, std::size_t bufferSize)
 {
-  if (!m_pFile || !szLine)
-    return false;
+  if (!m_pFile || !buffer)
+    return {ReadLineResult::FAILURE, 0};
 
   if (m_pBuffer)
   {
@@ -768,50 +812,55 @@ bool CFile::ReadString(char *szLine, int iLineLength)
     CFileStreamBuffer::int_type aByte = m_pBuffer->sgetc();
 
     if(aByte == traits::eof())
-      return false;
+      return {ReadLineResult::FAILURE, 0};
 
-    while(iLineLength>0)
+    for (std::size_t i = 0; i < bufferSize - 1; ++i)
     {
       aByte = m_pBuffer->sbumpc();
 
       if(aByte == traits::eof())
-        break;
+      {
+        buffer[i] = '\0';
+        return {ReadLineResult::OK, i};
+      }
 
       if(aByte == traits::to_int_type('\n'))
       {
         if(m_pBuffer->sgetc() == traits::to_int_type('\r'))
           m_pBuffer->sbumpc();
-        break;
+        buffer[i] = '\0';
+        return {ReadLineResult::OK, i};
       }
 
       if(aByte == traits::to_int_type('\r'))
       {
         if(m_pBuffer->sgetc() == traits::to_int_type('\n'))
           m_pBuffer->sbumpc();
-        break;
+        buffer[i] = '\0';
+        return {ReadLineResult::OK, i};
       }
 
-      *szLine = traits::to_char_type(aByte);
-      szLine++;
-      iLineLength--;
+      buffer[i] = traits::to_char_type(aByte);
     }
 
-    // if we have no space for terminating character we failed
-    if(iLineLength==0)
-      return false;
+    buffer[bufferSize - 1] = 0;
 
-    *szLine = 0;
-
-    return true;
+    return {ReadLineResult::TRUNCATED, bufferSize - 1};
   }
 
   try
   {
-    return m_pFile->ReadString(szLine, iLineLength);
+    const IFile::ReadLineResult result = m_pFile->ReadLine(buffer, bufferSize);
+    if (result.code == IFile::ReadLineResult::FAILURE)
+      return {ReadLineResult::FAILURE, result.length};
+    else if (result.code == IFile::ReadLineResult::TRUNCATED)
+      return {ReadLineResult::TRUNCATED, result.length};
+    else
+      return {ReadLineResult::OK, result.length};
   }
   XBMCCOMMONS_HANDLE_UNCHECKED
   catch (...) { CLog::Log(LOGERROR, "{} - Unhandled exception", __FUNCTION__); }
-  return false;
+  return {ReadLineResult::FAILURE, 0};
 }
 
 ssize_t CFile::Write(const void* lpBuf, size_t uiBufSize)
@@ -936,14 +985,14 @@ bool CFile::SetHidden(const CURL& file, bool hidden)
   return false;
 }
 
-int CFile::IoControl(EIoControl request, void* param)
+int CFile::IoControl(IOControl request, void* param)
 {
   int result = -1;
   if (!m_pFile)
     return -1;
   result = m_pFile->IoControl(request, param);
 
-  if(result == -1 && request == IOCTRL_SEEK_POSSIBLE)
+  if (result == -1 && request == IOControl::SEEK_POSSIBLE)
   {
     if(m_pFile->GetLength() >= 0 && m_pFile->Seek(0, SEEK_CUR) >= 0)
       return 1;
@@ -984,6 +1033,7 @@ ssize_t CFile::LoadFile(const std::string& filename, std::vector<uint8_t>& outpu
 }
 
 ssize_t CFile::LoadFile(const CURL& file, std::vector<uint8_t>& outputBuffer)
+try
 {
   static const size_t max_file_size = 0x7FFFFFFF;
   static const size_t min_chunk_size = 64 * 1024U;
@@ -1047,6 +1097,12 @@ ssize_t CFile::LoadFile(const CURL& file, std::vector<uint8_t>& outputBuffer)
   outputBuffer.resize(total_read);
 
   return total_read;
+}
+catch (const std::bad_alloc&)
+{
+  outputBuffer.clear();
+  CLog::LogF(LOGERROR, "Failed to load {}: out of memory", file.GetFileName());
+  return -1;
 }
 
 double CFile::GetDownloadSpeed()

@@ -29,8 +29,15 @@ CActiveAEResampleFFMPEG::~CActiveAEResampleFFMPEG()
   swr_free(&m_pContext);
 }
 
-bool CActiveAEResampleFFMPEG::Init(SampleConfig dstConfig, SampleConfig srcConfig, bool upmix, bool normalize, double centerMix,
-                                   CAEChannelInfo *remapLayout, AEQuality quality, bool force_resample)
+bool CActiveAEResampleFFMPEG::Init(SampleConfig dstConfig,
+                                   SampleConfig srcConfig,
+                                   bool upmix,
+                                   bool normalize,
+                                   double centerMix,
+                                   CAEChannelInfo* remapLayout,
+                                   AEQuality quality,
+                                   bool force_resample,
+                                   float sublevel)
 {
   m_dst_chan_layout = dstConfig.channel_layout;
   m_dst_channels = dstConfig.channels;
@@ -66,6 +73,62 @@ bool CActiveAEResampleFFMPEG::Init(SampleConfig dstConfig, SampleConfig srcConfi
   AVChannelLayout dstChLayout = {};
   AVChannelLayout srcChLayout = {};
 
+  bool hasMatrix = false;
+  if (remapLayout)
+  {
+    // one-to-one mapping of channels
+    // remapLayout is the layout of the sink, if the channel is in our src layout
+    // the channel is mapped by setting coef 1.0
+    memset(m_rematrix, 0, sizeof(m_rematrix));
+    m_dst_chan_layout = 0;
+    for (unsigned int out=0; out<remapLayout->Count(); out++)
+    {
+      m_dst_chan_layout += static_cast<uint64_t>(1) << out;
+      int idx = CAEUtil::GetAVChannelIndex((*remapLayout)[out], m_src_chan_layout);
+      if (idx >= 0)
+      {
+        m_rematrix[out][idx] = 1.0;
+      }
+    }
+    hasMatrix = true;
+  }
+  // stereo upmix
+  else if (upmix && m_src_channels == 2 && m_dst_channels > 2)
+  {
+    memset(m_rematrix, 0, sizeof(m_rematrix));
+    av_channel_layout_from_mask(&dstChLayout, m_dst_chan_layout);
+    for (int out=0; out<m_dst_channels; out++)
+    {
+      AVChannel outChan = av_channel_layout_channel_from_index(&dstChLayout, out);
+      switch (outChan)
+      {
+        case AV_CHAN_FRONT_LEFT:
+        case AV_CHAN_BACK_LEFT:
+        case AV_CHAN_SIDE_LEFT:
+          m_rematrix[out][0] = 1.0;
+          break;
+        case AV_CHAN_FRONT_RIGHT:
+        case AV_CHAN_BACK_RIGHT:
+        case AV_CHAN_SIDE_RIGHT:
+          m_rematrix[out][1] = 1.0;
+          break;
+        case AV_CHAN_FRONT_CENTER:
+          m_rematrix[out][0] = 0.5;
+          m_rematrix[out][1] = 0.5;
+          break;
+        case AV_CHAN_LOW_FREQUENCY:
+          m_rematrix[out][0] = 0.5;
+          m_rematrix[out][1] = 0.5;
+          break;
+        default:
+          break;
+      }
+    }
+
+    hasMatrix = true;
+    av_channel_layout_uninit(&dstChLayout);
+  }
+
   av_channel_layout_from_mask(&dstChLayout, m_dst_chan_layout);
   av_channel_layout_from_mask(&srcChLayout, m_src_chan_layout);
 
@@ -78,21 +141,33 @@ bool CActiveAEResampleFFMPEG::Init(SampleConfig dstConfig, SampleConfig srcConfi
     return false;
   }
 
-  if(quality == AE_QUALITY_HIGH)
+  if (sublevel > 0.0f)
+    av_opt_set_double(m_pContext, "lfe_mix_level", static_cast<double>(sublevel), 0);
+
+  if (hasMatrix)
+  {
+    if (swr_set_matrix(m_pContext, reinterpret_cast<const double*>(m_rematrix), AE_CH_MAX) < 0)
+    {
+      CLog::Log(LOGERROR, "CActiveAEResampleFFMPEG::Init - setting channel matrix failed");
+      return false;
+    }
+  }
+
+  if (quality == AE_QUALITY_HIGH)
   {
     av_opt_set_double(m_pContext, "cutoff", 1.0, 0);
-    av_opt_set_int(m_pContext,"filter_size", 256, 0);
+    av_opt_set_int(m_pContext, "filter_size", 256, 0);
   }
-  else if(quality == AE_QUALITY_MID)
+  else if (quality == AE_QUALITY_MID)
   {
     // 0.97 is default cutoff so use (1.0 - 0.97) / 2.0 + 0.97
     av_opt_set_double(m_pContext, "cutoff", 0.985, 0);
-    av_opt_set_int(m_pContext,"filter_size", 64, 0);
+    av_opt_set_int(m_pContext, "filter_size", 64, 0);
   }
-  else if(quality == AE_QUALITY_LOW)
+  else if (quality == AE_QUALITY_LOW)
   {
     av_opt_set_double(m_pContext, "cutoff", 0.97, 0);
-    av_opt_set_int(m_pContext,"filter_size", 32, 0);
+    av_opt_set_int(m_pContext, "filter_size", 32, 0);
   }
 
   if (m_dst_fmt == AV_SAMPLE_FMT_S32 || m_dst_fmt == AV_SAMPLE_FMT_S32P)
@@ -103,82 +178,13 @@ bool CActiveAEResampleFFMPEG::Init(SampleConfig dstConfig, SampleConfig srcConfi
   // tell resampler to clamp float values
   // not required for sink stage (remapLayout == true)
   if ((m_dst_fmt == AV_SAMPLE_FMT_FLT || m_dst_fmt == AV_SAMPLE_FMT_FLTP) &&
-      (m_src_fmt == AV_SAMPLE_FMT_FLT || m_src_fmt == AV_SAMPLE_FMT_FLTP) &&
-      !remapLayout && normalize)
+      (m_src_fmt == AV_SAMPLE_FMT_FLT || m_src_fmt == AV_SAMPLE_FMT_FLTP) && !remapLayout &&
+      normalize)
   {
-     av_opt_set_double(m_pContext, "rematrix_maxval", 1.0, 0);
+    av_opt_set_double(m_pContext, "rematrix_maxval", 1.0, 0);
   }
 
   av_opt_set_double(m_pContext, "center_mix_level", centerMix, 0);
-
-  if (remapLayout)
-  {
-    // one-to-one mapping of channels
-    // remapLayout is the layout of the sink, if the channel is in our src layout
-    // the channel is mapped by setting coef 1.0
-    memset(m_rematrix, 0, sizeof(m_rematrix));
-    m_dst_chan_layout = 0;
-    for (unsigned int out=0; out<remapLayout->Count(); out++)
-    {
-      m_dst_chan_layout += ((uint64_t)1) << out;
-      int idx = CAEUtil::GetAVChannelIndex((*remapLayout)[out], m_src_chan_layout);
-      if (idx >= 0)
-      {
-        m_rematrix[out][idx] = 1.0;
-      }
-    }
-
-    av_opt_set_int(m_pContext, "out_channel_count", m_dst_channels, 0);
-    av_opt_set_int(m_pContext, "out_channel_layout", m_dst_chan_layout, 0);
-
-    if (swr_set_matrix(m_pContext, (const double*)m_rematrix, AE_CH_MAX) < 0)
-    {
-      CLog::Log(LOGERROR, "CActiveAEResampleFFMPEG::Init - setting channel matrix failed");
-      return false;
-    }
-  }
-  // stereo upmix
-  else if (upmix && m_src_channels == 2 && m_dst_channels > 2)
-  {
-    memset(m_rematrix, 0, sizeof(m_rematrix));
-    av_channel_layout_uninit(&dstChLayout);
-    av_channel_layout_from_mask(&dstChLayout, m_dst_chan_layout);
-    for (int out=0; out<m_dst_channels; out++)
-    {
-      AVChannel outChan = av_channel_layout_channel_from_index(&dstChLayout, out);
-      switch (outChan)
-      {
-        case AV_CH_FRONT_LEFT:
-        case AV_CH_BACK_LEFT:
-        case AV_CH_SIDE_LEFT:
-          m_rematrix[out][0] = 1.0;
-          break;
-        case AV_CH_FRONT_RIGHT:
-        case AV_CH_BACK_RIGHT:
-        case AV_CH_SIDE_RIGHT:
-          m_rematrix[out][1] = 1.0;
-          break;
-        case AV_CH_FRONT_CENTER:
-          m_rematrix[out][0] = 0.5;
-          m_rematrix[out][1] = 0.5;
-          break;
-        case AV_CH_LOW_FREQUENCY:
-          m_rematrix[out][0] = 0.5;
-          m_rematrix[out][1] = 0.5;
-          break;
-        default:
-          break;
-      }
-    }
-
-    av_channel_layout_uninit(&dstChLayout);
-
-    if (swr_set_matrix(m_pContext, (const double*)m_rematrix, AE_CH_MAX) < 0)
-    {
-      CLog::Log(LOGERROR, "CActiveAEResampleFFMPEG::Init - setting channel matrix failed");
-      return false;
-    }
-  }
 
   if(swr_init(m_pContext) < 0)
   {

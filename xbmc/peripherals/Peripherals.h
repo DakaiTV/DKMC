@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2018 Team Kodi
+ *  Copyright (C) 2005-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -8,16 +8,18 @@
 
 #pragma once
 
-#include "IEventScannerCallback.h"
 #include "bus/PeripheralBus.h"
 #include "devices/Peripheral.h"
+#include "guilib/IMsgTargetCallback.h"
 #include "interfaces/IAnnouncer.h"
 #include "messaging/IMessageTarget.h"
+#include "peripherals/events/interfaces/IEventScannerCallback.h"
 #include "settings/lib/ISettingCallback.h"
 #include "threads/CriticalSection.h"
 #include "threads/Thread.h"
 #include "utils/Observer.h"
 
+#include <atomic>
 #include <memory>
 #include <vector>
 
@@ -27,6 +29,7 @@ class CSetting;
 class CSettingsCategory;
 class CAction;
 class CKey;
+class CEvent;
 
 namespace tinyxml2
 {
@@ -50,11 +53,15 @@ namespace PERIPHERALS
 {
 class CEventScanner;
 
+/*!
+ * \ingroup peripherals
+ */
 class CPeripherals : public ISettingCallback,
                      public Observable,
                      public KODI::MESSAGING::IMessageTarget,
                      public IEventScannerCallback,
-                     public ANNOUNCEMENT::IAnnouncer
+                     public ANNOUNCEMENT::IAnnouncer,
+                     public IMsgTargetCallback
 {
 public:
   explicit CPeripherals(CInputManager& inputManager,
@@ -335,20 +342,44 @@ public:
                 const std::string& message,
                 const CVariant& data) override;
 
+  // Implementation of IMsgTargetCallback
+  bool OnMessage(CGUIMessage& message) override;
+
   /*!
    * \brief Access the input manager passed to the constructor
    */
-  CInputManager& GetInputManager() { return m_inputManager; }
+  CInputManager& GetInputManager()
+  {
+    return m_inputManager;
+  }
 
   /*!
    * \brief Access controller profiles through the construction parameter
    */
-  KODI::GAME::CControllerManager& GetControllerProfiles() { return m_controllerProfiles; }
+  KODI::GAME::CControllerManager& GetControllerProfiles()
+  {
+    return m_controllerProfiles;
+  }
 
   /*!
    * \brief Get a mutex that allows for add-on install tasks to block on each other
    */
-  CCriticalSection& GetAddonInstallMutex() { return m_addonInstallMutex; }
+  CCriticalSection& GetAddonInstallMutex()
+  {
+    return m_addonInstallMutex;
+  }
+
+  /*!
+   * \brief Get the current activation of a peripheral
+   *
+   * \param peripheralPath The peripherals:// URI of the peripheral's location
+   *
+   * \return The current activation, on a scale of 0.0 to 1.0
+   */
+  float GetPeripheralActivation(const std::string& peripheralPath) const;
+
+  // GUI functions
+  bool WaitForGUI();
 
 private:
   bool LoadMappings();
@@ -371,5 +402,7 @@ private:
   mutable CCriticalSection m_critSectionBusses;
   mutable CCriticalSection m_critSectionMappings;
   CCriticalSection m_addonInstallMutex;
+  std::atomic<bool> m_guiReady{false};
+  std::unique_ptr<CEvent> m_guiReadyEvent;
 };
 } // namespace PERIPHERALS

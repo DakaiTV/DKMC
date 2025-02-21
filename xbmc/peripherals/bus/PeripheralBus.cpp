@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2018 Team Kodi
+ *  Copyright (C) 2005-2024 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -9,6 +9,7 @@
 #include "PeripheralBus.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "guilib/LocalizeStrings.h"
 #include "peripherals/Peripherals.h"
 #include "peripherals/devices/Peripheral.h"
@@ -99,10 +100,10 @@ void CPeripheralBus::UnregisterRemovedDevices(const PeripheralScanResults& resul
         features.size() > 1 || (features.size() == 1 && features.at(0) != FEATURE_UNKNOWN);
     if (peripheral->Type() != PERIPHERAL_UNKNOWN || peripheralHasFeatures)
     {
-      CLog::Log(LOGINFO, "{} - device removed from {}/{}: {} ({}:{})", __FUNCTION__,
-                PeripheralTypeTranslator::TypeToString(peripheral->Type()), peripheral->Location(),
-                peripheral->DeviceName(), peripheral->VendorIdAsString(),
-                peripheral->ProductIdAsString());
+      CLog::Log(LOGINFO, "{} - {} device removed from {}: {} ({}:{})", __FUNCTION__,
+                PeripheralTypeTranslator::TypeToString(peripheral->Type()),
+                peripheral->FileLocation(), peripheral->DeviceName(),
+                peripheral->VendorIdAsString(), peripheral->ProductIdAsString());
       peripheral->OnDeviceRemoved();
     }
 
@@ -311,17 +312,24 @@ void CPeripheralBus::GetDirectory(const std::string& strPath, CFileItemList& ite
                                 PeripheralTypeTranslator::TypeToString(peripheral->Type()));
 
     std::string strVersion(peripheral->GetVersionInfo());
-    if (strVersion.empty())
-      strVersion = g_localizeStrings.Get(13205);
 
-    std::string strDetails = StringUtils::Format("{} {}", g_localizeStrings.Get(24051), strVersion);
+    std::string strDetails;
+
     if (peripheral->GetBusType() == PERIPHERAL_BUS_CEC && !peripheral->GetSettingBool("enabled"))
       strDetails =
           StringUtils::Format("{}: {}", g_localizeStrings.Get(126), g_localizeStrings.Get(13106));
 
+    if (strDetails.empty())
+    {
+      std::string strVersion(peripheral->GetVersionInfo());
+      if (!strVersion.empty())
+        strDetails = StringUtils::Format("{} {}", g_localizeStrings.Get(24051), strVersion);
+    }
+
     peripheralFile->SetProperty("version", strVersion);
     peripheralFile->SetLabel2(strDetails);
-    peripheralFile->SetArt("icon", "DefaultAddon.png");
+    peripheralFile->SetArt("icon", peripheral->GetIcon());
+
     items.Add(peripheralFile);
   }
 }

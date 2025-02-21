@@ -9,14 +9,18 @@
 #include "GroupUtils.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "filesystem/MultiPathDirectory.h"
 #include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
 #include "video/VideoDbUrl.h"
+#include "video/VideoFileItemClassify.h"
 #include "video/VideoInfoTag.h"
 
 #include <map>
 #include <set>
+
+using namespace KODI;
 
 using SetMap = std::map<int, std::set<CFileItemPtr> >;
 
@@ -121,13 +125,12 @@ bool GroupUtils::Group(GroupBy groupBy, const std::string &baseDir, const CFileI
           iWatched++;
 
         // handle resume points
-        CBookmark bookmark = movieInfo->GetResumePoint();
-        if (bookmark.IsSet())
+        if (movieInfo->GetResumePoint().IsPartWay())
           inProgress++;
 
         //accumulate the path for a multipath construction
         CFileItem video(movieInfo->m_basePath, false);
-        if (video.IsVideo())
+        if (VIDEO::IsVideo(video))
           pathSet.insert(URIUtils::GetParentPath(movieInfo->m_basePath));
         else
           pathSet.insert(movieInfo->m_basePath);
@@ -142,7 +145,8 @@ bool GroupUtils::Group(GroupBy groupBy, const std::string &baseDir, const CFileI
       pItem->SetProperty("watched", iWatched);
       pItem->SetProperty("unwatched", (int)set->second.size() - iWatched);
       pItem->SetProperty("inprogress", inProgress);
-      pItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, setInfo->GetPlayCount() > 0);
+      pItem->SetOverlayImage(setInfo->GetPlayCount() > 0 ? CGUIListItem::ICON_OVERLAY_WATCHED
+                                                         : CGUIListItem::ICON_OVERLAY_UNWATCHED);
 
       groupedItems.Add(pItem);
     }

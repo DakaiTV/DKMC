@@ -9,9 +9,13 @@
 #include "PlayListFactory.h"
 
 #include "FileItem.h"
+#include "URL.h"
+#include "network/NetworkFileItemClassify.h"
+#include "playlists/PlayListASX.h"
 #include "playlists/PlayListB4S.h"
 #include "playlists/PlayListM3U.h"
 #include "playlists/PlayListPLS.h"
+#include "playlists/PlayListRAM.h"
 #include "playlists/PlayListURL.h"
 #include "playlists/PlayListWPL.h"
 #include "playlists/PlayListXML.h"
@@ -19,7 +23,21 @@
 #include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
 
-using namespace PLAYLIST;
+namespace KODI::PLAYLIST
+{
+
+CPlayList* CPlayListFactory::Create(const CURL& url)
+{
+  CFileItem item{url.Get(), false};
+
+  if (url.HasOption("mimetype"))
+  {
+    item.SetContentLookup(false);
+    item.SetMimeType(url.GetOption("mimetype"));
+  }
+
+  return Create(item);
+}
 
 CPlayList* CPlayListFactory::Create(const std::string& filename)
 {
@@ -29,7 +47,7 @@ CPlayList* CPlayListFactory::Create(const std::string& filename)
 
 CPlayList* CPlayListFactory::Create(const CFileItem& item)
 {
-  if (item.IsInternetStream())
+  if (NETWORK::IsInternetStream(item))
   {
     // Ensure the MIME type has been retrieved for http:// and shout:// streams
     if (item.GetMimeType().empty())
@@ -71,7 +89,8 @@ CPlayList* CPlayListFactory::Create(const CFileItem& item)
   std::string extension = URIUtils::GetExtension(path);
   StringUtils::ToLower(extension);
 
-  if (extension == ".m3u" || (extension == ".m3u8" && !item.IsInternetStream()) || extension == ".strm")
+  if (extension == ".m3u" || (extension == ".m3u8" && !NETWORK::IsInternetStream(item)) ||
+      extension == ".strm")
     return new CPlayListM3U();
 
   if (extension == ".pls")
@@ -120,7 +139,7 @@ bool CPlayListFactory::IsPlaylist(const CFileItem& item)
 */
 
   // online m3u8 files are hls:// -- do not treat as playlist
-  if (item.IsInternetStream() && item.IsType(".m3u8"))
+  if (NETWORK::IsInternetStream(item) && item.IsType(".m3u8"))
     return false;
 
   if(strMimeType == "audio/x-pn-realaudio"
@@ -143,3 +162,4 @@ bool CPlayListFactory::IsPlaylist(const std::string& filename)
                      ".m3u|.m3u8|.b4s|.pls|.strm|.wpl|.asx|.ram|.url|.pxml|.xspf");
 }
 
+} // namespace KODI::PLAYLIST

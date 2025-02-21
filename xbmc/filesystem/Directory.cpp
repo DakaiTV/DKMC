@@ -12,6 +12,7 @@
 #include "DirectoryFactory.h"
 #include "FileDirectoryFactory.h"
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "PasswordManager.h"
 #include "ServiceBroker.h"
 #include "URL.h"
@@ -19,13 +20,17 @@
 #include "dialogs/GUIDialogBusy.h"
 #include "guilib/GUIWindowManager.h"
 #include "messaging/ApplicationMessenger.h"
+#include "music/MusicFileItemClassify.h"
+#include "playlists/PlayListFileItemClassify.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
 #include "utils/Job.h"
 #include "utils/JobManager.h"
 #include "utils/URIUtils.h"
 #include "utils/log.h"
+#include "video/VideoFileItemClassify.h"
 
+using namespace KODI;
 using namespace XFILE;
 using namespace std::chrono_literals;
 
@@ -282,7 +287,8 @@ bool CDirectory::GetDirectory(const CURL& url,
 
     //  Should any of the files we read be treated as a directory?
     //  Disable for database folders, as they already contain the extracted items
-    if (!(hints.flags & DIR_FLAG_NO_FILE_DIRS) && !items.IsMusicDb() && !items.IsVideoDb() && !items.IsSmartPlayList())
+    if (!(hints.flags & DIR_FLAG_NO_FILE_DIRS) && !MUSIC::IsMusicDb(items) &&
+        !VIDEO::IsVideoDb(items) && !PLAYLIST::IsSmartPlayList(items))
       FilterFileDirectories(items, hints.mask);
 
     // Correct items for path substitution
@@ -305,11 +311,13 @@ bool CDirectory::GetDirectory(const CURL& url,
   return false;
 }
 
-bool CDirectory::EnumerateDirectory(const std::string& path,
-                                    DirectoryEnumerationCallback callback,
-                                    bool fileOnly /* = false */,
-                                    const std::string& mask /* = "" */,
-                                    int flags /* = DIR_FLAG_DEFAULTS */)
+bool CDirectory::EnumerateDirectory(
+    const std::string& path,
+    const DirectoryEnumerationCallback& callback,
+    const DirectoryFilter& filter /* = [](const std::shared_ptr<CFileItem>&) {return true;} */,
+    bool fileOnly /* = false */,
+    const std::string& mask /* = "" */,
+    int flags /* = DIR_FLAG_DEFAULTS */)
 {
   CFileItemList items;
 
@@ -327,12 +335,12 @@ bool CDirectory::EnumerateDirectory(const std::string& path,
   // process all directories
   for (const auto& item : items)
   {
-    if (item->m_bIsFolder)
+    if (item->m_bIsFolder && filter(item))
     {
       if (!fileOnly)
         callback(item);
 
-      if (!EnumerateDirectory(item->GetPath(), callback, fileOnly, mask, flags))
+      if (!EnumerateDirectory(item->GetPath(), callback, filter, fileOnly, mask, flags))
         return false;
     }
   }
@@ -464,7 +472,8 @@ void CDirectory::FilterFileDirectories(CFileItemList &items, const std::string &
   for (int i=0; i< items.Size(); ++i)
   {
     CFileItemPtr pItem=items[i];
-    auto mode = expandImages && pItem->IsDiscImage() ? EFILEFOLDER_TYPE_ONBROWSE : EFILEFOLDER_TYPE_ALWAYS;
+    auto mode =
+        expandImages && pItem->IsDiscImage() ? FileFolderType::ONBROWSE : FileFolderType::ALWAYS;
     if (!pItem->m_bIsFolder && pItem->IsFileFolder(mode))
     {
       std::unique_ptr<IFileDirectory> pDirectory(CFileDirectoryFactory::Create(pItem->GetURL(),pItem.get(),mask));

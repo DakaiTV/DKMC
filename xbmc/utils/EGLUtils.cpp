@@ -14,10 +14,13 @@
 #include "log.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/SettingsComponent.h"
+#include "utils/Geometry.h"
 
 #include <map>
 
+#include <EGL/egl.h>
 #include <EGL/eglext.h>
+#include <EGL/eglplatform.h>
 
 namespace
 {
@@ -115,7 +118,8 @@ void EglErrorCallback(EGLenum error,
     typeStr = eglType->second;
   }
 
-  CLog::Log(LOGDEBUG, "EGL Debugging:\nError: {}\nCommand: {}\nType: {}\nMessage: {}", errorStr, command, typeStr, message);
+  CLog::Log(LOGDEBUG, "EGL Debugging:\nError: {}\nCommand: {}\nType: {}\nMessage: {}", errorStr,
+            command, typeStr, message ? message : "");
 }
 
 std::set<std::string> CEGLUtils::GetClientExtensions()
@@ -184,7 +188,8 @@ CEGLContextUtils::CEGLContextUtils(EGLenum platform, std::string const& platform
     eglDebugMessageControl(EglErrorCallback, eglDebugAttribs);
   }
 
-  m_platformSupported = CEGLUtils::HasClientExtension("EGL_EXT_platform_base") && CEGLUtils::HasClientExtension(platformExtension);
+  m_platformSupported = CEGLUtils::HasClientExtension("EGL_EXT_platform_base") &&
+                        CEGLUtils::HasClientExtension(platformExtension);
 }
 
 bool CEGLContextUtils::IsPlatformSupported() const
@@ -290,11 +295,6 @@ bool CEGLContextUtils::ChooseConfig(EGLint renderableType, EGLint visualId, bool
   }
 
   EGLint surfaceType = EGL_WINDOW_BIT;
-  // for the non-trivial dirty region modes, we need the EGL buffer to be preserved across updates
-  int guiAlgorithmDirtyRegions = CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_guiAlgorithmDirtyRegions;
-  if (guiAlgorithmDirtyRegions == DIRTYREGION_SOLVER_COST_REDUCTION ||
-      guiAlgorithmDirtyRegions == DIRTYREGION_SOLVER_UNION)
-    surfaceType |= EGL_SWAP_BEHAVIOR_PRESERVED_BIT;
 
   CEGLAttributesVec attribs;
   attribs.Add({{EGL_RED_SIZE, 8},
@@ -427,6 +427,21 @@ bool CEGLContextUtils::CreateContext(CEGLAttributesVec contextAttribs)
     return false;
   }
 
+  m_eglUploadContext =
+      eglCreateContext(m_eglDisplay, m_eglConfig, m_eglContext, contextAttribs.Get());
+
+  if (m_eglUploadContext == EGL_NO_CONTEXT)
+    CLog::Log(LOGWARNING, "Failed to create EGL upload context");
+
+  m_bufferAgeSupport = CEGLUtils::HasExtension(m_eglDisplay, "EGL_EXT_buffer_age");
+
+  if (CEGLUtils::HasExtension(m_eglDisplay, "EGL_KHR_partial_update"))
+  {
+    m_partialUpdateSupport = true;
+    m_eglSetDamageRegionKHR =
+        reinterpret_cast<PFNEGLSETDAMAGEREGIONKHRPROC>(eglGetProcAddress("eglSetDamageRegionKHR"));
+  }
+
   return true;
 }
 
@@ -452,17 +467,6 @@ void CEGLContextUtils::SurfaceAttrib()
   if (m_eglDisplay == EGL_NO_DISPLAY || m_eglSurface == EGL_NO_SURFACE)
   {
     throw std::logic_error("Setting surface attributes requires a surface");
-  }
-
-  // for the non-trivial dirty region modes, we need the EGL buffer to be preserved across updates
-  int guiAlgorithmDirtyRegions = CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_guiAlgorithmDirtyRegions;
-  if (guiAlgorithmDirtyRegions == DIRTYREGION_SOLVER_COST_REDUCTION ||
-      guiAlgorithmDirtyRegions == DIRTYREGION_SOLVER_UNION)
-  {
-    if (eglSurfaceAttrib(m_eglDisplay, m_eglSurface, EGL_SWAP_BEHAVIOR, EGL_BUFFER_PRESERVED) != EGL_TRUE)
-    {
-      CEGLUtils::Log(LOGERROR, "failed to set EGL_BUFFER_PRESERVED swap behavior");
-    }
   }
 }
 
@@ -564,6 +568,12 @@ void CEGLContextUtils::DestroyContext()
     eglDestroyContext(m_eglDisplay, m_eglContext);
     m_eglContext = EGL_NO_CONTEXT;
   }
+
+  if (m_eglUploadContext)
+  {
+    eglDestroyContext(m_eglDisplay, m_eglUploadContext);
+    m_eglUploadContext = EGL_NO_CONTEXT;
+  }
 }
 
 void CEGLContextUtils::DestroySurface()
@@ -595,4 +605,114 @@ bool CEGLContextUtils::TrySwapBuffers()
   }
 
   return (eglSwapBuffers(m_eglDisplay, m_eglSurface) == EGL_TRUE);
+}
+
+bool CEGLContextUtils::BindTextureUploadContext()
+{
+  if (m_eglDisplay == EGL_NO_DISPLAY || m_eglUploadContext == EGL_NO_CONTEXT)
+  {
+    CLog::LogF(LOGERROR, "No texture upload context found.");
+    return false;
+  }
+
+  m_textureUploadLock.lock();
+
+  if (!eglMakeCurrent(m_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, m_eglUploadContext))
+  {
+    m_textureUploadLock.unlock();
+    CLog::LogF(LOGERROR, "Couldn't bind texture upload context.");
+    return false;
+  }
+
+  return true;
+}
+
+bool CEGLContextUtils::UnbindTextureUploadContext()
+{
+  if (m_eglDisplay == EGL_NO_DISPLAY || m_eglUploadContext == EGL_NO_CONTEXT)
+  {
+    CLog::LogF(LOGERROR, "No texture upload context found.");
+    m_textureUploadLock.unlock();
+    return false;
+  }
+
+  if (!eglMakeCurrent(m_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT))
+  {
+    CLog::LogF(LOGERROR, "Couldn't release texture upload context");
+    m_textureUploadLock.unlock();
+    return false;
+  }
+
+  m_textureUploadLock.unlock();
+
+  return true;
+}
+
+bool CEGLContextUtils::HasContext()
+{
+  return eglGetCurrentContext() != EGL_NO_CONTEXT;
+}
+
+void CEGLContextUtils::SetDamagedRegions(const CDirtyRegionList& dirtyRegions)
+{
+  if (!m_partialUpdateSupport)
+    return;
+
+  using Rect = std::array<EGLint, 4>;
+  EGLBoolean damageRegionsResult = EGL_FALSE;
+  if (dirtyRegions.empty())
+  {
+    // add a single (empty) entry, otherwise the whole frame gets rendered
+    static Rect zeroRect{};
+    damageRegionsResult = m_eglSetDamageRegionKHR(m_eglDisplay, m_eglSurface, zeroRect.data(), 1);
+  }
+  else
+  {
+    EGLint height = 1080;
+    if (eglQuerySurface(m_eglDisplay, m_eglSurface, EGL_HEIGHT, &height) != EGL_TRUE &&
+        !m_damageRegionError)
+    {
+      CLog::LogF(LOGERROR, "eglQuerySurface failed ({:#x})", eglGetError());
+      m_damageRegionError = true;
+    }
+
+    std::vector<Rect> rects;
+    rects.reserve(dirtyRegions.size());
+    for (const auto& region : dirtyRegions)
+    {
+      rects.push_back({static_cast<EGLint>(std::round(region.x1)),
+                       static_cast<EGLint>(std::round(height - region.y2)),
+                       static_cast<EGLint>(std::round(region.Width())),
+                       static_cast<EGLint>(std::round(region.Height()))});
+    }
+    damageRegionsResult = m_eglSetDamageRegionKHR(
+        m_eglDisplay, m_eglSurface, reinterpret_cast<EGLint*>(rects.data()), rects.size());
+  }
+
+  if (damageRegionsResult != EGL_TRUE && !m_damageRegionError)
+  {
+    CLog::LogF(LOGERROR, "Setting damaged region failed ({:#x})", eglGetError());
+    m_damageRegionError = true;
+  }
+}
+
+int CEGLContextUtils::GetBufferAge()
+{
+#ifdef EGL_BUFFER_AGE_KHR
+  if (m_partialUpdateSupport)
+  {
+    EGLint age;
+    eglQuerySurface(m_eglDisplay, m_eglSurface, EGL_BUFFER_AGE_KHR, &age);
+    return static_cast<int>(age);
+  }
+#endif
+#ifdef EGL_BUFFER_AGE_EXT
+  if (m_bufferAgeSupport)
+  {
+    EGLint age;
+    eglQuerySurface(m_eglDisplay, m_eglSurface, EGL_BUFFER_AGE_EXT, &age);
+    return static_cast<int>(age);
+  }
+#endif
+  return 2;
 }

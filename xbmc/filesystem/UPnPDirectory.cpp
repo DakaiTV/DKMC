@@ -13,6 +13,7 @@
 #include "UPnPDirectory.h"
 
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "ServiceBroker.h"
 #include "URL.h"
 #include "network/upnp/UPnP.h"
@@ -186,7 +187,7 @@ CUPnPDirectory::GetDirectory(const CURL& url, CFileItemList &items)
     CUPnP* upnp = CUPnP::GetInstance();
 
     /* upnp should never be cached, it has internal cache */
-    items.SetCacheToDisc(CFileItemList::CACHE_NEVER);
+    items.SetCacheToDisc(CFileItemList::CacheType::NEVER);
 
     // We accept upnp://devuuid/[item_id/]
     NPT_String path = url.Get().c_str();

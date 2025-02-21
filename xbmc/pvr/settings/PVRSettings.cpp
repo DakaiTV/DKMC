@@ -198,7 +198,8 @@ bool CPVRSettings::IsSettingVisible(const std::string& condition,
     // Setting is only visible if exactly one PVR client is enabled or
     // the expert setting to always use backend numbers is enabled
     const auto& settings = CServiceBroker::GetSettingsComponent()->GetSettings();
-    int enabledClientAmount = CServiceBroker::GetPVRManager().Clients()->EnabledClientAmount();
+    const size_t enabledClientAmount =
+        CServiceBroker::GetPVRManager().Clients()->EnabledClientAmount();
 
     return enabledClientAmount == 1 ||
            (settings->GetBool(CSettings::SETTING_PVRMANAGER_USEBACKENDCHANNELNUMBERSALWAYS) &&
@@ -211,7 +212,7 @@ bool CPVRSettings::IsSettingVisible(const std::string& condition,
   }
   else if (settingId == CSettings::SETTING_PVRMANAGER_CLIENTPRIORITIES)
   {
-    // Setting is only visible if more than one PVR client is enabeld.
+    // Setting is only visible if more than one PVR client is enabled.
     return CServiceBroker::GetPVRManager().Clients()->EnabledClientAmount() > 1;
   }
   else

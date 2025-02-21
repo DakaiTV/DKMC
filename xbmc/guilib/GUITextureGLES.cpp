@@ -10,6 +10,7 @@
 
 #include "ServiceBroker.h"
 #include "Texture.h"
+#include "guilib/TextureFormats.h"
 #include "rendering/gles/RenderSystemGLES.h"
 #include "utils/GLUtils.h"
 #include "utils/MathUtils.h"
@@ -35,6 +36,9 @@ CGUITextureGLES::CGUITextureGLES(
   : CGUITexture(posX, posY, width, height, texture)
 {
   m_renderSystem = dynamic_cast<CRenderSystemGLES*>(CServiceBroker::GetRenderSystem());
+  unsigned int major, minor;
+  m_renderSystem->GetRenderVersion(major, minor);
+  m_isGLES20 = major == 2;
 }
 
 CGUITextureGLES* CGUITextureGLES::Clone() const
@@ -42,14 +46,12 @@ CGUITextureGLES* CGUITextureGLES::Clone() const
   return new CGUITextureGLES(*this);
 }
 
-void CGUITextureGLES::Begin(UTILS::COLOR::Color color)
+void CGUITextureGLES::Begin(KODI::UTILS::COLOR::Color color)
 {
   CTexture* texture = m_texture.m_textures[m_currentFrame].get();
   texture->LoadToGPU();
   if (m_diffuse.size())
     m_diffuse.m_textures[0]->LoadToGPU();
-
-  texture->BindToUnit(0);
 
   // Setup Colors
   m_col[0] = KODI::UTILS::GL::GetChannelFromARGB(KODI::UTILS::GL::ColorChannel::R, color);
@@ -65,33 +67,63 @@ void CGUITextureGLES::Begin(UTILS::COLOR::Color color)
   }
 
   bool hasAlpha = m_texture.m_textures[m_currentFrame]->HasAlpha() || m_col[3] < 255;
+  const bool hasBlendColor =
+      m_col[0] != 255 || m_col[1] != 255 || m_col[2] != 255 || m_col[3] != 255;
 
   if (m_diffuse.size())
   {
-    if (m_col[0] == 255 && m_col[1] == 255 && m_col[2] == 255 && m_col[3] == 255 )
+    if (m_isGLES20 && (texture->GetSwizzle() == KD_TEX_SWIZ_111R ||
+                       m_diffuse.m_textures[0]->GetSwizzle() == KD_TEX_SWIZ_111R))
     {
-      m_renderSystem->EnableGUIShader(ShaderMethodGLES::SM_MULTI);
+      if (texture->GetSwizzle() == KD_TEX_SWIZ_111R &&
+          m_diffuse.m_textures[0]->GetSwizzle() == KD_TEX_SWIZ_111R)
+        m_renderSystem->EnableGUIShader(ShaderMethodGLES::SM_MULTI_111R_111R_BLENDCOLOR);
+      else if (hasBlendColor)
+        m_renderSystem->EnableGUIShader(ShaderMethodGLES::SM_MULTI_RGBA_111R_BLENDCOLOR);
+      else
+        m_renderSystem->EnableGUIShader(ShaderMethodGLES::SM_MULTI_RGBA_111R);
+    }
+    else if (hasBlendColor)
+    {
+      m_renderSystem->EnableGUIShader(ShaderMethodGLES::SM_MULTI_BLENDCOLOR);
     }
     else
     {
-      m_renderSystem->EnableGUIShader(ShaderMethodGLES::SM_MULTI_BLENDCOLOR);
+      m_renderSystem->EnableGUIShader(ShaderMethodGLES::SM_MULTI);
     }
 
     hasAlpha |= m_diffuse.m_textures[0]->HasAlpha();
 
-    m_diffuse.m_textures[0]->BindToUnit(1);
-
-  }
-  else
-  {
-    if (m_col[0] == 255 && m_col[1] == 255 && m_col[2] == 255 && m_col[3] == 255)
+    // We don't need a 111R_RGBA version of the GLES 2.0 shaders, so in the
+    // unlikely event of having an alpha-only texture, switch with the
+    // diffuse.
+    if (texture->GetSwizzle() == KD_TEX_SWIZ_111R)
     {
-      m_renderSystem->EnableGUIShader(ShaderMethodGLES::SM_TEXTURE_NOBLEND);
+      texture->BindToUnit(1);
+      m_diffuse.m_textures[0]->BindToUnit(0);
     }
     else
     {
+      texture->BindToUnit(0);
+      m_diffuse.m_textures[0]->BindToUnit(1);
+    }
+  }
+  else
+  {
+    if (m_isGLES20 && texture->GetSwizzle() == KD_TEX_SWIZ_111R)
+    {
+      m_renderSystem->EnableGUIShader(ShaderMethodGLES::SM_TEXTURE_111R);
+    }
+    else if (hasBlendColor)
+    {
       m_renderSystem->EnableGUIShader(ShaderMethodGLES::SM_TEXTURE);
     }
+    else
+    {
+      m_renderSystem->EnableGUIShader(ShaderMethodGLES::SM_TEXTURE_NOBLEND);
+    }
+
+    texture->BindToUnit(0);
   }
 
   if ( hasAlpha )
@@ -114,14 +146,19 @@ void CGUITextureGLES::End()
     GLint tex0Loc = m_renderSystem->GUIShaderGetCoord0();
     GLint tex1Loc = m_renderSystem->GUIShaderGetCoord1();
     GLint uniColLoc = m_renderSystem->GUIShaderGetUniCol();
+    GLint depthLoc = m_renderSystem->GUIShaderGetDepth();
 
     if(uniColLoc >= 0)
     {
       glUniform4f(uniColLoc,(m_col[0] / 255.0f), (m_col[1] / 255.0f), (m_col[2] / 255.0f), (m_col[3] / 255.0f));
     }
 
+    glUniform1f(depthLoc, m_depth);
+
     if(m_diffuse.size())
     {
+      if (m_texture.m_textures[m_currentFrame]->GetSwizzle() == KD_TEX_SWIZ_111R)
+        std::swap(tex0Loc, tex1Loc);
       glVertexAttribPointer(tex1Loc, 2, GL_FLOAT, 0, sizeof(PackedVertex), (char*)&m_packedVertices[0] + offsetof(PackedVertex, u2));
       glEnableVertexAttribArray(tex1Loc);
     }
@@ -232,9 +269,11 @@ void CGUITextureGLES::Draw(float *x, float *y, float *z, const CRect &texture, c
 }
 
 void CGUITextureGLES::DrawQuad(const CRect& rect,
-                               UTILS::COLOR::Color color,
+                               KODI::UTILS::COLOR::Color color,
                                CTexture* texture,
-                               const CRect* texCoords)
+                               const CRect* texCoords,
+                               const float depth,
+                               const bool blending)
 {
   CRenderSystemGLES *renderSystem = dynamic_cast<CRenderSystemGLES*>(CServiceBroker::GetRenderSystem());
   if (texture)
@@ -243,8 +282,15 @@ void CGUITextureGLES::DrawQuad(const CRect& rect,
     texture->BindToUnit(0);
   }
 
-  glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
-  glEnable(GL_BLEND);          // Turn Blending On
+  if (blending)
+  {
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_BLEND);
+  }
+  else
+  {
+    glDisable(GL_BLEND);
+  }
 
   VerifyGLState();
 
@@ -261,6 +307,7 @@ void CGUITextureGLES::DrawQuad(const CRect& rect,
   GLint posLoc   = renderSystem->GUIShaderGetPos();
   GLint tex0Loc  = renderSystem->GUIShaderGetCoord0();
   GLint uniColLoc= renderSystem->GUIShaderGetUniCol();
+  GLint depthLoc = renderSystem->GUIShaderGetDepth();
 
   glVertexAttribPointer(posLoc,  3, GL_FLOAT, 0, 0, ver);
   if (texture)
@@ -277,6 +324,7 @@ void CGUITextureGLES::DrawQuad(const CRect& rect,
   col[3] = KODI::UTILS::GL::GetChannelFromARGB(KODI::UTILS::GL::ColorChannel::A, color);
 
   glUniform4f(uniColLoc, col[0] / 255.0f, col[1] / 255.0f, col[2] / 255.0f, col[3] / 255.0f);
+  glUniform1f(depthLoc, depth);
 
   ver[0][0] = ver[3][0] = rect.x1;
   ver[0][1] = ver[1][1] = rect.y1;

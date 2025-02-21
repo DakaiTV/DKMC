@@ -24,7 +24,6 @@
 
 #include <algorithm>
 #include <cassert>
-#include <chrono>
 #include <inttypes.h>
 #include <memory>
 
@@ -33,7 +32,6 @@
 #endif
 
 using namespace XFILE;
-using namespace std::chrono_literals;
 
 class CWriteRate
 {
@@ -103,8 +101,10 @@ bool CFileCache::Open(const CURL& url)
 
   CLog::Log(LOGDEBUG, "CFileCache::{} - <{}> opening", __FUNCTION__, m_sourcePath);
 
-  // opening the source file.
-  if (!m_source.Open(url.Get(), READ_NO_CACHE | READ_TRUNCATED | READ_CHUNKED))
+  // Opening the source file.
+  // The READ_NO_CACHE and READ_NO_BUFFER flags are required to avoid create other instances of
+  // FileCache or StreamBuffer since CFile::Open is called again in loop
+  if (!m_source.Open(url.Get(), READ_NO_CACHE | READ_TRUNCATED | READ_NO_BUFFER))
   {
     CLog::Log(LOGERROR, "CFileCache::{} - <{}> failed to open", __FUNCTION__, m_sourcePath);
     Close();
@@ -118,13 +118,13 @@ bool CFileCache::Open(const CURL& url)
   const unsigned int cacheMemSize =
       settings->GetInt(CSettings::SETTING_FILECACHE_MEMORYSIZE) * 1024 * 1024;
 
-  m_source.IoControl(IOCTRL_SET_CACHE, this);
+  m_source.IoControl(IOControl::SET_CACHE, this);
 
   bool retry = false;
-  m_source.IoControl(IOCTRL_SET_RETRY, &retry); // We already handle retrying ourselves
+  m_source.IoControl(IOControl::SET_RETRY, &retry); // We already handle retrying ourselves
 
   // check if source can seek
-  m_seekPossible = m_source.IoControl(IOCTRL_SEEK_POSSIBLE, NULL);
+  m_seekPossible = m_source.IoControl(IOControl::SEEK_POSSIBLE, NULL);
 
   // Determine the best chunk size we can use
   m_chunkSize = CFile::DetermineChunkSize(m_source.GetChunkSize(),
@@ -142,6 +142,7 @@ bool CFileCache::Open(const CURL& url)
       // Use cache on disk
       m_pCache = std::make_unique<CSimpleFileCache>();
       m_forwardCacheSize = 0;
+      m_maxForward = m_fileSize;
     }
     else
     {
@@ -184,6 +185,7 @@ bool CFileCache::Open(const CURL& url)
 
       m_pCache = std::make_unique<CCircularCache>(front, back);
       m_forwardCacheSize = front;
+      m_maxForward = m_forwardCacheSize;
     }
 
     if (m_flags & READ_MULTI_STREAM)
@@ -237,7 +239,9 @@ void CFileCache::Process()
   if (!settings)
     return;
 
-  const float readFactor = settings->GetInt(CSettings::SETTING_FILECACHE_READFACTOR) / 100.0f;
+  float readFactor = settings->GetInt(CSettings::SETTING_FILECACHE_READFACTOR) / 100.0f;
+
+  const bool useAdaptativeReadFactor = (readFactor < 1.0f);
 
   CWriteRate limiter;
   CWriteRate average;
@@ -262,7 +266,7 @@ void CFileCache::Process()
         {
           CLog::Log(LOGERROR, "CFileCache::{} - <{}> error {} seeking. Seek returned {}",
                     __FUNCTION__, m_sourcePath, GetLastError(), m_nSeekResult);
-          m_seekPossible = m_source.IoControl(IOCTRL_SEEK_POSSIBLE, NULL);
+          m_seekPossible = m_source.IoControl(IOControl::SEEK_POSSIBLE, NULL);
           sourceSeekFailed = true;
         }
       }
@@ -289,6 +293,14 @@ void CFileCache::Process()
       m_seekEnded.Set();
     }
 
+    // variable read factor based on cache level
+    if (useAdaptativeReadFactor)
+    {
+      // cache level [0.0 - 1.0]
+      const double level = static_cast<double>(m_writePos - m_readPos) / m_maxForward;
+      readFactor = static_cast<float>(level * -2.5 + 4.0); // read factor [4.0x - 1.5x]
+    }
+
     while (m_writeRate)
     {
       if (m_writePos - m_readPos < m_writeRate * readFactor)
@@ -300,7 +312,7 @@ void CFileCache::Process()
       if (limiter.Rate(m_writePos) < m_writeRate * readFactor)
         break;
 
-      if (m_seekEvent.Wait(100ms))
+      if (m_seekEvent.Wait(m_processWait))
       {
         if (!m_bStop)
           m_seekEvent.Set();
@@ -600,13 +612,12 @@ const std::string CFileCache::GetProperty(XFILE::FileProperty type, const std::s
   return m_source.GetImplementation()->GetProperty(type, name);
 }
 
-int CFileCache::IoControl(EIoControl request, void* param)
+int CFileCache::IoControl(IOControl request, void* param)
 {
-  if (request == IOCTRL_CACHE_STATUS)
+  if (request == IOControl::CACHE_STATUS)
   {
     SCacheStatus* status = (SCacheStatus*)param;
-    status->maxforward =
-        (m_forwardCacheSize != 0) ? m_forwardCacheSize : static_cast<uint64_t>(m_fileSize);
+    status->maxforward = m_maxForward;
     status->forward = m_pCache->WaitForData(0, 0ms);
     status->maxrate = m_writeRate;
     status->currate = m_writeRateActual;
@@ -615,13 +626,25 @@ int CFileCache::IoControl(EIoControl request, void* param)
     return 0;
   }
 
-  if (request == IOCTRL_CACHE_SETRATE)
+  if (request == IOControl::CACHE_SETRATE)
   {
     m_writeRate = *static_cast<uint32_t*>(param);
+
+    const double mBits = m_writeRate / 1024.0 / 1024.0 * 8.0; // Mbit/s
+
+    // calculates wait time inversely proportional to the bitrate
+    // and limited between 30 - 100 ms
+    const int wait = std::clamp(static_cast<int>(110.0 - mBits), 30, 100);
+
+    m_processWait = std::chrono::milliseconds(wait);
+
+    CLog::Log(LOGDEBUG,
+              "CFileCache::IoControl - setting maxRate to {:.2f} Mbit/s with processWait of {} ms",
+              mBits, wait);
     return 0;
   }
 
-  if (request == IOCTRL_SEEK_POSSIBLE)
+  if (request == IOControl::SEEK_POSSIBLE)
     return m_seekPossible;
 
   return -1;

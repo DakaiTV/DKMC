@@ -14,7 +14,7 @@
 #include "utils/Variant.h"
 #include "utils/log.h"
 
-using namespace VIDEO;
+using namespace KODI;
 using namespace KODI::MESSAGING;
 using namespace std::chrono_literals;
 
@@ -71,7 +71,7 @@ void CVideoInfoDownloader::Process()
     return;
   }
 
-  if (!m_url.HasUrls())
+  if (!m_url.HasUrls() && m_uniqueIDs.empty())
   {
     // empty url when it's not supposed to be..
     // this might happen if the previously scraped item was removed from the site (see ticket #10537)
@@ -220,8 +220,8 @@ bool CVideoInfoDownloader::GetEpisodeDetails(const CScraperUrl &url,
 }
 
 bool CVideoInfoDownloader::GetEpisodeList(const CScraperUrl& url,
-                                          EPISODELIST& movieDetails,
-                                          CGUIDialogProgress *pProgress /* = NULL */)
+                                          VIDEO::EPISODELIST& movieDetails,
+                                          CGUIDialogProgress* pProgress /* = NULL */)
 {
   //CLog::Log(LOGDEBUG,"CVideoInfoDownloader::GetDetails({})", url.m_strURL);
   m_url = url;

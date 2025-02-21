@@ -8,9 +8,7 @@
 
 #pragma once
 
-namespace VIDEO
-{
-namespace GUILIB
+namespace KODI::VIDEO::GUILIB
 {
 // Note: Do not change the numerical values of the elements. Some of them are used as values for
 //       the integer settings SETTING_MYVIDEOS_SELECTACTION and SETTING_MYVIDEOS_PLAYACTION.
@@ -20,10 +18,9 @@ enum Action
   ACTION_PLAY_OR_RESUME = 1, // if resume is possible, ask user. play from beginning otherwise
   ACTION_RESUME = 2, // resume if possibly, play from beginning otherwise
   ACTION_INFO = 3,
-  ACTION_MORE = 4,
+  // 4 unused
   ACTION_PLAY_FROM_BEGINNING = 5, // play from beginning, also if resume would be possible
-  ACTION_PLAYPART = 6,
+  // 6 unused
   ACTION_QUEUE = 7,
 };
-} // namespace GUILIB
-} // namespace VIDEO
+} // namespace KODI::VIDEO::GUILIB

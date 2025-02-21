@@ -10,6 +10,8 @@
 
 #include "pvr/channels/PVRChannelGroup.h"
 
+struct PVR_CHANNEL_GROUP;
+
 namespace PVR
 {
 
@@ -33,6 +35,17 @@ public:
   CPVRChannelGroupFromClient(const PVR_CHANNEL_GROUP& group,
                              int clientID,
                              const std::shared_ptr<const CPVRChannelGroup>& allChannelsGroup);
+
+  /*!
+   * @brief Get the group's origin.
+   * @return The origin.
+   */
+  Origin GetOrigin() const override { return Origin::CLIENT; }
+
+  /*!
+   * @brief Return the type of this group.
+   */
+  int GroupType() const override { return PVR_GROUP_TYPE_CLIENT; }
 
   /*!
    * @brief Check whether this group could be deleted by the user.
@@ -64,11 +77,5 @@ public:
    * @return True on success, false otherwise.
    */
   bool UpdateFromClients(const std::vector<std::shared_ptr<CPVRClient>>& clients) override;
-
-private:
-  /*!
-   * @brief Return the type of this group.
-   */
-  int GroupType() const override { return PVR_GROUP_TYPE_REMOTE; }
 };
 } // namespace PVR

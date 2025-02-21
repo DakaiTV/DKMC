@@ -10,6 +10,7 @@
 
 #include "AutoSwitch.h"
 #include "FileItem.h"
+#include "FileItemList.h"
 #include "GUIPassword.h"
 #include "PlayListPlayer.h"
 #include "ServiceBroker.h"
@@ -30,6 +31,7 @@
 #include "guilib/TextureManager.h"
 #include "music/GUIViewStateMusic.h"
 #include "pictures/GUIViewStatePictures.h"
+#include "playlists/PlayListFileItemClassify.h"
 #include "profiles/ProfileManager.h"
 #include "programs/GUIViewStatePrograms.h"
 #include "pvr/windows/GUIViewStatePVR.h"
@@ -50,7 +52,7 @@ using namespace ADDON;
 using namespace PVR;
 
 std::string CGUIViewState::m_strPlaylistDirectory;
-VECSOURCES CGUIViewState::m_sources;
+std::vector<CMediaSource> CGUIViewState::m_sources;
 
 CGUIViewState* CGUIViewState::GetViewState(int windowId, const CFileItemList& items)
 {
@@ -74,8 +76,7 @@ CGUIViewState* CGUIViewState::GetViewState(int windowId, const CFileItemList& it
   if (url.IsProtocol("musicsearch"))
     return new CGUIViewStateMusicSearch(items);
 
-  if (items.IsSmartPlayList() || url.IsProtocol("upnp") ||
-      items.IsLibraryFolder())
+  if (PLAYLIST::IsSmartPlayList(items) || url.IsProtocol("upnp") || items.IsLibraryFolder())
   {
     if (items.GetContent() == "songs" ||
         items.GetContent() == "albums" ||
@@ -94,7 +95,7 @@ CGUIViewState* CGUIViewState::GetViewState(int windowId, const CFileItemList& it
   if (url.IsProtocol("library"))
     return new CGUIViewStateLibrary(items);
 
-  if (items.IsPlayList())
+  if (PLAYLIST::IsPlayList(items))
   {
     // Playlists (like .strm) can be music or video type
     if (windowId == WINDOW_VIDEO_NAV)
@@ -145,6 +146,9 @@ CGUIViewState* CGUIViewState::GetViewState(int windowId, const CFileItemList& it
   if (windowId == WINDOW_TV_SEARCH)
     return new CGUIViewStateWindowPVRSearch(windowId, items);
 
+  if (windowId == WINDOW_TV_PROVIDERS)
+    return new CGUIViewStateWindowPVRProviders(windowId, items);
+
   if (windowId == WINDOW_RADIO_CHANNELS)
       return new CGUIViewStateWindowPVRChannels(windowId, items);
 
@@ -162,6 +166,9 @@ CGUIViewState* CGUIViewState::GetViewState(int windowId, const CFileItemList& it
 
   if (windowId == WINDOW_RADIO_SEARCH)
     return new CGUIViewStateWindowPVRSearch(windowId, items);
+
+  if (windowId == WINDOW_RADIO_PROVIDERS)
+    return new CGUIViewStateWindowPVRProviders(windowId, items);
 
   if (windowId == WINDOW_PICTURES)
     return new CGUIViewStateWindowPictures(items);
@@ -189,7 +196,7 @@ CGUIViewState::CGUIViewState(const CFileItemList& items) : m_items(items)
 {
   m_currentViewAsControl = 0;
   m_currentSortMethod = 0;
-  m_playlist = PLAYLIST::TYPE_NONE;
+  m_playlist = PLAYLIST::Id::TYPE_NONE;
 }
 
 CGUIViewState::~CGUIViewState() = default;
@@ -455,15 +462,15 @@ std::string CGUIViewState::GetExtensions()
   return "";
 }
 
-VECSOURCES& CGUIViewState::GetSources()
+std::vector<CMediaSource>& CGUIViewState::GetSources()
 {
   return m_sources;
 }
 
 void CGUIViewState::AddLiveTVSources()
 {
-  VECSOURCES *sources = CMediaSourceSettings::GetInstance().GetSources("video");
-  for (IVECSOURCES it = sources->begin(); it != sources->end(); ++it)
+  std::vector<CMediaSource>* sources = CMediaSourceSettings::GetInstance().GetSources("video");
+  for (std::vector<CMediaSource>::iterator it = sources->begin(); it != sources->end(); ++it)
   {
     if (URIUtils::IsLiveTV((*it).strPath))
     {
@@ -491,10 +498,10 @@ void CGUIViewState::SetSortOrder(SortOrder sortOrder)
 
 bool CGUIViewState::AutoPlayNextVideoItem() const
 {
-  if (GetPlaylist() != PLAYLIST::TYPE_VIDEO)
+  if (GetPlaylist() != PLAYLIST::Id::TYPE_VIDEO)
     return false;
 
-  return VIDEO_UTILS::IsAutoPlayNextItem(m_items.GetContent());
+  return VIDEO::UTILS::IsAutoPlayNextItem(m_items.GetContent());
 }
 
 void CGUIViewState::LoadViewState(const std::string &path, int windowID)
@@ -580,9 +587,9 @@ CGUIViewStateFromItems::CGUIViewStateFromItems(const CFileItemList &items) : CGU
     {
       const auto plugin = std::static_pointer_cast<CPluginSource>(addon);
       if (plugin->Provides(CPluginSource::AUDIO))
-        m_playlist = PLAYLIST::TYPE_MUSIC;
+        m_playlist = PLAYLIST::Id::TYPE_MUSIC;
       if (plugin->Provides(CPluginSource::VIDEO))
-        m_playlist = PLAYLIST::TYPE_VIDEO;
+        m_playlist = PLAYLIST::Id::TYPE_VIDEO;
     }
   }
 

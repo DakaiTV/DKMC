@@ -15,6 +15,8 @@
 
 #define MAX_PATH_SIZE 1024
 
+class CFileItem;
+class CFileItemList;
 class CueReader;
 
 class CCueDocument
@@ -37,11 +39,14 @@ public:
   bool ParseTag(const std::string &strContent);
   void GetSongs(VECSONGS &songs);
   std::string GetMediaPath();
-  std::string GetMediaTitle();
+  const std::string& GetMediaTitle() const { return m_strAlbum; }
   void GetMediaFiles(std::vector<std::string>& mediaFiles);
   void UpdateMediaFile(const std::string& oldMediaFile, const std::string& mediaFile);
   bool IsOneFilePerTrack() const;
   bool IsLoaded() const;
+
+  bool LoadTracks(CFileItemList& scannedItems, const CFileItem& item);
+
 private:
   void Clear();
   bool Parse(CueReader& reader, const std::string& strFile = std::string());

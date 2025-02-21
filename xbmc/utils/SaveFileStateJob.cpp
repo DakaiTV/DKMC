@@ -15,7 +15,6 @@
 #include "URIUtils.h"
 #include "URL.h"
 #include "Util.h"
-#include "application/ApplicationComponents.h"
 #include "application/ApplicationStackHelper.h"
 #include "guilib/GUIComponent.h"
 #include "guilib/GUIMessage.h"
@@ -23,11 +22,18 @@
 #include "interfaces/AnnouncementManager.h"
 #include "log.h"
 #include "music/MusicDatabase.h"
+#include "music/MusicFileItemClassify.h"
 #include "music/tags/MusicInfoTag.h"
 #include "network/upnp/UPnP.h"
+#include "pvr/PVRManager.h"
+#include "pvr/guilib/PVRGUIActionsRecordings.h"
 #include "utils/Variant.h"
 #include "video/Bookmark.h"
 #include "video/VideoDatabase.h"
+#include "video/VideoFileItemClassify.h"
+
+using namespace KODI;
+using namespace KODI::VIDEO;
 
 void CSaveFileState::DoWork(CFileItem& item,
                             CBookmark& bookmark,
@@ -35,15 +41,25 @@ void CSaveFileState::DoWork(CFileItem& item,
 {
   std::string progressTrackingFile = item.GetPath();
 
-  if (item.HasVideoInfoTag() && StringUtils::StartsWith(item.GetVideoInfoTag()->m_strFileNameAndPath, "removable://"))
-    progressTrackingFile = item.GetVideoInfoTag()->m_strFileNameAndPath; // this variable contains removable:// suffixed by disc label+uniqueid or is empty if label not uniquely identified
-  else if (item.HasVideoInfoTag() && item.IsVideoDb())
-    progressTrackingFile = item.GetVideoInfoTag()->m_strFileNameAndPath; // we need the file url of the video db item to create the bookmark
+  if (item.HasVideoInfoTag() &&
+      StringUtils::StartsWith(item.GetVideoInfoTag()->m_strFileNameAndPath, "removable://"))
+    progressTrackingFile =
+        item.GetVideoInfoTag()
+            ->m_strFileNameAndPath; // this variable contains removable:// suffixed by disc label+uniqueid or is empty if label not uniquely identified
+  else if (URIUtils::IsBlurayPath(item.GetDynPath()) &&
+           (item.GetVideoContentType() == VideoDbContentType::MOVIES ||
+            item.GetVideoContentType() == VideoDbContentType::EPISODES))
+    progressTrackingFile = item.GetDynPath();
+  else if (item.HasVideoInfoTag() && IsVideoDb(item))
+    progressTrackingFile =
+        item.GetVideoInfoTag()
+            ->m_strFileNameAndPath; // we need the file url of the video db item to create the bookmark
   else if (item.HasProperty("original_listitem_url"))
   {
     // only use original_listitem_url for Python, UPnP and Bluray sources
     std::string original = item.GetProperty("original_listitem_url").asString();
-    if (URIUtils::IsPlugin(original) || URIUtils::IsUPnP(original) || URIUtils::IsBluray(item.GetPath()))
+    if (URIUtils::IsPlugin(original) || URIUtils::IsUPnP(original) ||
+        URIUtils::IsBlurayPath(item.GetPath()))
       progressTrackingFile = original;
   }
 
@@ -57,7 +73,7 @@ void CSaveFileState::DoWork(CFileItem& item,
       return;
     }
 #endif
-    if (item.IsVideo())
+    if (IsVideo(item))
     {
       std::string redactPath = CURL::GetRedacted(progressTrackingFile);
       CLog::Log(LOGDEBUG, "{} - Saving file state for video item {}", __FUNCTION__, redactPath);
@@ -70,6 +86,8 @@ void CSaveFileState::DoWork(CFileItem& item,
       }
       else
       {
+        //! @todo check possible failure of BeginTransaction
+        //! todo catch and handle errors and commit/rollback the transaction appropriately
         videodatabase.BeginTransaction();
 
         if (URIUtils::IsPlugin(progressTrackingFile) && !(item.HasVideoInfoTag() && item.GetVideoInfoTag()->m_iDbId >= 0))
@@ -89,6 +107,7 @@ void CSaveFileState::DoWork(CFileItem& item,
         // No resume & watched status for livetv
         if (!item.IsLiveTV())
         {
+          //! @todo handle db failures to maintain data integrity
           if (updatePlayCount)
           {
             // no watched for not yet finished pvr recordings
@@ -100,12 +119,16 @@ void CSaveFileState::DoWork(CFileItem& item,
               // consider this item as played
               const CDateTime newLastPlayed = videodatabase.IncrementPlayCount(item);
 
-              item.SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, true);
+              item.SetOverlayImage(CGUIListItem::ICON_OVERLAY_WATCHED);
               updateListing = true;
 
               if (item.HasVideoInfoTag())
               {
-                item.GetVideoInfoTag()->IncrementPlayCount();
+                if (item.IsPVRRecording())
+                  CServiceBroker::GetPVRManager().Get<PVR::GUI::Recordings>().IncrementPlayCount(
+                      item);
+                else
+                  item.GetVideoInfoTag()->IncrementPlayCount();
 
                 if (newLastPlayed.IsValid())
                   item.GetVideoInfoTag()->m_lastPlayed = newLastPlayed;
@@ -150,8 +173,10 @@ void CSaveFileState::DoWork(CFileItem& item,
             updateListing = true;
           }
         }
+        videodatabase.CommitTransaction();
 
-        if (item.HasVideoInfoTag() && item.GetVideoInfoTag()->HasStreamDetails())
+        if (item.HasVideoInfoTag() && item.GetVideoInfoTag()->HasStreamDetails() &&
+            !item.IsLiveTV())
         {
           CFileItem dbItem(item);
 
@@ -159,12 +184,36 @@ void CSaveFileState::DoWork(CFileItem& item,
           if (!videodatabase.GetStreamDetails(dbItem) ||
               dbItem.GetVideoInfoTag()->m_streamDetails != item.GetVideoInfoTag()->m_streamDetails)
           {
-            videodatabase.SetStreamDetailsForFile(item.GetVideoInfoTag()->m_streamDetails, progressTrackingFile);
-            updateListing = true;
+            videodatabase.BeginTransaction();
+
+            if (videodatabase.SetStreamDetailsForFile(item.GetVideoInfoTag()->m_streamDetails,
+                                                      progressTrackingFile))
+            {
+              videodatabase.CommitTransaction();
+              updateListing = true;
+            }
+            else
+            {
+              videodatabase.RollbackTransaction();
+            }
           }
         }
 
-        videodatabase.CommitTransaction();
+        // See if idFile needs updating
+        const CVideoInfoTag* tag{item.HasVideoInfoTag() ? item.GetVideoInfoTag() : nullptr};
+
+        if (tag && URIUtils::IsBlurayPath(item.GetDynPath()) &&
+            tag->m_strFileNameAndPath != item.GetDynPath())
+        {
+          videodatabase.BeginTransaction();
+          // tag->m_iFileId contains the idFile originally played and may be different to the idFile
+          // in the movie table entry if it's a non-default video version
+          if (videodatabase.SetFileForMedia(item.GetDynPath(), item.GetVideoContentType(),
+                                            tag->m_iDbId, tag->m_iFileId))
+            videodatabase.CommitTransaction();
+          else
+            videodatabase.RollbackTransaction();
+        }
 
         if (updateListing)
         {
@@ -189,7 +238,7 @@ void CSaveFileState::DoWork(CFileItem& item,
       }
     }
 
-    if (item.IsAudio())
+    if (MUSIC::IsAudio(item))
     {
       std::string redactPath = CURL::GetRedacted(progressTrackingFile);
       CLog::Log(LOGDEBUG, "{} - Saving file state for audio item {}", __FUNCTION__, redactPath);
@@ -212,7 +261,7 @@ void CSaveFileState::DoWork(CFileItem& item,
 
           // UPnP announce resume point changes to clients
           // however not if playcount is modified as that already announces
-          if (item.IsMusicDb())
+          if (MUSIC::IsMusicDb(item))
           {
             CVariant data;
             data["id"] = item.GetMusicInfoTag()->GetDatabaseId();
@@ -223,7 +272,7 @@ void CSaveFileState::DoWork(CFileItem& item,
         }
       }
 
-      if (item.IsAudioBook())
+      if (MUSIC::IsAudioBook(item))
       {
         musicdatabase.Open();
         musicdatabase.SetResumeBookmarkForAudioBook(
