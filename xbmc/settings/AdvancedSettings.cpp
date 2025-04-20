@@ -326,6 +326,8 @@ void CAdvancedSettings::Initialize()
   m_bVideoScannerIgnoreErrors = false;
   m_iVideoLibraryDateAdded = 1; // prefer mtime over ctime and current time
 
+  m_caseSensitiveLocalArtMatch = true; // case sensitive local art matching
+
   m_iEpgUpdateCheckInterval = 300; /* Check every X seconds, if EPG data need to be updated. This does not mean that
                                       every X seconds an EPG update is actually triggered, it's just the interval how
                                       often to check whether an update should be triggered. If this value is greater
@@ -825,6 +827,7 @@ void CAdvancedSettings::ParseSettingsFile(const std::string &file)
     XMLUtils::GetBoolean(pElement, "importwatchedstate", m_bVideoLibraryImportWatchedState);
     XMLUtils::GetBoolean(pElement, "importresumepoint", m_bVideoLibraryImportResumePoint);
     XMLUtils::GetInt(pElement, "dateadded", m_iVideoLibraryDateAdded);
+    XMLUtils::GetBoolean(pElement, "casesensitivelocalartmatch", m_caseSensitiveLocalArtMatch);
   }
 
   pElement = pRootElement->FirstChildElement("videoscanner");
@@ -1104,7 +1107,7 @@ void CAdvancedSettings::ParseSettingsFile(const std::string &file)
         std::string name  = XMLUtils::GetAttribute(element, "name");
         std::string value = element->FirstChild()->ValueStr();
         if (!name.empty())
-          CDNSNameCache::Add(name, value);
+          CServiceBroker::GetDNSNameCache()->AddPermanent(name, value);
       }
       element = element->NextSiblingElement("entry");
     }
@@ -1161,6 +1164,7 @@ void CAdvancedSettings::ParseSettingsFile(const std::string &file)
     XMLUtils::GetString(pDatabase, "ca", m_databaseVideo.ca);
     XMLUtils::GetString(pDatabase, "capath", m_databaseVideo.capath);
     XMLUtils::GetString(pDatabase, "ciphers", m_databaseVideo.ciphers);
+    XMLUtils::GetUInt(pDatabase, "connecttimeout", m_databaseVideo.connecttimeout, 1, 300);
     XMLUtils::GetBoolean(pDatabase, "compression", m_databaseVideo.compression);
   }
 
@@ -1178,6 +1182,7 @@ void CAdvancedSettings::ParseSettingsFile(const std::string &file)
     XMLUtils::GetString(pDatabase, "ca", m_databaseMusic.ca);
     XMLUtils::GetString(pDatabase, "capath", m_databaseMusic.capath);
     XMLUtils::GetString(pDatabase, "ciphers", m_databaseMusic.ciphers);
+    XMLUtils::GetUInt(pDatabase, "connecttimeout", m_databaseMusic.connecttimeout, 1, 300);
     XMLUtils::GetBoolean(pDatabase, "compression", m_databaseMusic.compression);
   }
 
@@ -1195,6 +1200,7 @@ void CAdvancedSettings::ParseSettingsFile(const std::string &file)
     XMLUtils::GetString(pDatabase, "ca", m_databaseTV.ca);
     XMLUtils::GetString(pDatabase, "capath", m_databaseTV.capath);
     XMLUtils::GetString(pDatabase, "ciphers", m_databaseTV.ciphers);
+    XMLUtils::GetUInt(pDatabase, "connecttimeout", m_databaseTV.connecttimeout, 1, 300);
     XMLUtils::GetBoolean(pDatabase, "compression", m_databaseTV.compression);
   }
 
@@ -1212,6 +1218,7 @@ void CAdvancedSettings::ParseSettingsFile(const std::string &file)
     XMLUtils::GetString(pDatabase, "ca", m_databaseEpg.ca);
     XMLUtils::GetString(pDatabase, "capath", m_databaseEpg.capath);
     XMLUtils::GetString(pDatabase, "ciphers", m_databaseEpg.ciphers);
+    XMLUtils::GetUInt(pDatabase, "connecttimeout", m_databaseEpg.connecttimeout, 1, 300);
     XMLUtils::GetBoolean(pDatabase, "compression", m_databaseEpg.compression);
   }
 

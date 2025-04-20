@@ -22,11 +22,7 @@ namespace KODI::VIDEO
 
 bool IsBDFile(const CFileItem& item)
 {
-  const std::string strFileName = URIUtils::GetFileName(item.GetDynPath());
-  return (StringUtils::EqualsNoCase(strFileName, "index.bdmv") ||
-          StringUtils::EqualsNoCase(strFileName, "MovieObject.bdmv") ||
-          StringUtils::EqualsNoCase(strFileName, "INDEX.BDM") ||
-          StringUtils::EqualsNoCase(strFileName, "MOVIEOBJ.BDM"));
+  return URIUtils::IsBDFile(item.GetDynPath());
 }
 
 bool IsDiscStub(const CFileItem& item)
@@ -128,9 +124,9 @@ bool IsVideoAssetFile(const CFileItem& item)
   if (item.m_bIsFolder || !IsVideoDb(item))
     return false;
 
-  // @todo maybe in the future look for prefix videodb://movies/videoversions in path instead
   // @todo better encoding of video assets as path, they won't always be tied with movies.
-  return CURL(item.GetPath()).HasOption("videoversionid");
+  const CURL url{item.GetPath()};
+  return (url.HasOption("videoversionid") || url.HasOption("assetType"));
 }
 
 bool IsVideoDb(const CFileItem& item)

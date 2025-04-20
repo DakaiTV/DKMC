@@ -401,7 +401,8 @@ PLT_MediaObject* CUPnPServer::Build(const std::shared_ptr<CFileItem>& item,
 
           if (params.GetMovieId() >= 0)
             db.GetMovieInfo(static_cast<const char*>(path), *item->GetVideoInfoTag(),
-                            params.GetMovieId(), params.GetVideoVersionId());
+                            params.GetMovieId(), params.GetVideoVersionId(),
+                            params.GetVideoAssetId());
           else if (params.GetMVideoId() >= 0)
             db.GetMusicVideoInfo((const char*)path, *item->GetVideoInfoTag(), params.GetMVideoId());
           else if (params.GetEpisodeId() >= 0)
@@ -485,11 +486,11 @@ PLT_MediaObject* CUPnPServer::Build(const std::shared_ptr<CFileItem>& item,
   {
     // remap Root virtualpath://upnproot/ to id "0"
     const NPT_String encodedRootObjectId = EncodeObjectId("virtualpath://upnproot/");
-    if (StringUtils::EqualsNoCase(object->m_ObjectID, encodedRootObjectId))
+    if (StringUtils::EqualsNoCase(object->m_ObjectID.GetChars(), encodedRootObjectId.GetChars()))
       object->m_ObjectID = EncodeObjectId("0");
 
     // remap Parent Root virtualpath://upnproot/ to id "0"
-    if (StringUtils::EqualsNoCase(object->m_ParentID, encodedRootObjectId))
+    if (StringUtils::EqualsNoCase(object->m_ParentID.GetChars(), encodedRootObjectId.GetChars()))
       object->m_ParentID = EncodeObjectId("0");
   }
 

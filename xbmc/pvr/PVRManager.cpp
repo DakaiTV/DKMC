@@ -451,9 +451,6 @@ void CPVRManager::SetState(CPVRManager::ManagerState state)
   PVREvent event;
   switch (state)
   {
-    case ManagerState::STATE_ERROR:
-      event = PVREvent::ManagerError;
-      break;
     case ManagerState::STATE_STOPPED:
       event = PVREvent::ManagerStopped;
       break;
@@ -462,9 +459,6 @@ void CPVRManager::SetState(CPVRManager::ManagerState state)
       break;
     case ManagerState::STATE_STOPPING:
       event = PVREvent::ManagerStopped;
-      break;
-    case ManagerState::STATE_INTERRUPTED:
-      event = PVREvent::ManagerInterrupted;
       break;
     case ManagerState::STATE_STARTED:
       event = PVREvent::ManagerStarted;
@@ -528,6 +522,12 @@ void CPVRManager::Process()
 
   while (IsStarted() && m_addons->HasCreatedClients() && !bRestart)
   {
+    if (IsSleeping())
+    {
+      CThread::Sleep(1s);
+      continue;
+    }
+
     // In case any new client connected, load from db and fetch data update from new client(s)
     UpdateComponents(ManagerState::STATE_STARTED);
 
@@ -587,8 +587,6 @@ void CPVRManager::Process()
   m_epgContainer->Stop();
   m_guiInfo->Stop();
 
-  SetState(ManagerState::STATE_INTERRUPTED);
-
   UnloadComponents();
   m_database->Close();
 
@@ -634,14 +632,18 @@ void CPVRManager::OnSleep()
 
   SetWakeupCommand();
 
-  m_epgContainer->OnSystemSleep();
-  m_addons->OnSystemSleep();
+  CPowerState::OnSleep();
+  m_epgContainer->OnSleep();
+  m_timers->OnSleep();
+  m_addons->OnSleep();
 }
 
 void CPVRManager::OnWake()
 {
-  m_addons->OnSystemWake();
-  m_epgContainer->OnSystemWake();
+  m_addons->OnWake();
+  m_timers->OnWake();
+  m_epgContainer->OnWake();
+  CPowerState::OnWake();
 
   PublishEvent(PVREvent::SystemWake);
 

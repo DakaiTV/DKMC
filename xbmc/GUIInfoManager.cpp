@@ -4690,6 +4690,9 @@ const infomap container_ints[] = {{ "row",              CONTAINER_ROW },
 ///       - <b>directors</b>
 ///       - <b>sets</b>
 ///       - <b>tags</b>
+///       - <b>videoversions</b>
+///       - <b>videoassets</b>
+///       - <b>videoextras</b>
 ///     @note These currently only work in the Video and Music
 ///     Library or unless a Plugin has set the value) also available are
 ///     Addons true when a list of add-ons is shown LiveTV true when a
@@ -5848,6 +5851,15 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
 ///     movie in a container.
 ///     <p>
 ///   }
+///   \table_row3{   <b>`ListItem.DecodedFileNameAndPath`</b>,
+///                  \anchor ListItem_DecodedFileNameAndPath
+///                  _string_,
+///     @return The full path with filename of the currently selected song or
+///     movie in a container decoded - made more human readable.
+///     For example bluray://smb%3A%2F%2Fsomepath%2Fmovie.iso/BDMV/PLAYLIST/00000.mpls
+///     becomes bluray://smb://somepath/movie.iso/BDMV/PLAYLIST/00000.mpls
+///     <p>
+///   }
 ///   \table_row3{   <b>`ListItem.FileExtension`</b>,
 ///                  \anchor ListItem_FileExtension
 ///                  _string_,
@@ -6277,12 +6289,20 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
 ///                  _string_,
 ///     @return The audio codec of the currently selected video. Common values:
 ///       - <b>aac</b>
+///       - <b>aac_lc</b>
+///       - <b>he_aac</b>
+///       - <b>he_aac_v2</b>
+///       - <b>aac_ssr</b>
+///       - <b>aac_ltp</b>
 ///       - <b>ac3</b>
 ///       - <b>cook</b>
 ///       - <b>dca</b>
 ///       - <b>dtshd_hra</b>
 ///       - <b>dtshd_ma</b>
+///       - <b>dtshd_ma_x</b>
+///       - <b>dtshd_ma_x_imax</b>
 ///       - <b>eac3</b>
+///       - <b>eac3_ddp_atmos</b>
 ///       - <b>mp1</b>
 ///       - <b>mp2</b>
 ///       - <b>mp3</b>
@@ -6290,6 +6310,7 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
 ///       - <b>pcm_s16le</b>
 ///       - <b>pcm_u8</b>
 ///       - <b>truehd</b>
+///       - <b>truehd_atmos</b>
 ///       - <b>vorbis</b>
 ///       - <b>wmapro</b>
 ///       - <b>wmav2</b>
@@ -7292,6 +7313,7 @@ const infomap listitem_labels[]= {{ "thumb",            LISTITEM_THUMB },
                                   { "disctitle",        LISTITEM_DISC_TITLE },
                                   { "filename",         LISTITEM_FILENAME },
                                   { "filenameandpath",  LISTITEM_FILENAME_AND_PATH },
+                                  { "decodedfilenameandpath", LISTITEM_DECODED_FILENAME_AND_PATH },
                                   { "fileextension",    LISTITEM_FILE_EXTENSION },
                                   { "filenamenoextension",  LISTITEM_FILENAME_NO_EXTENSION },
                                   { "date",             LISTITEM_DATE },

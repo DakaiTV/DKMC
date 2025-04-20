@@ -370,7 +370,6 @@ void CDirectoryProvider::OnPVRManagerEvent(const PVR::PVREvent& event)
   if (URIUtils::IsProtocol(m_currentUrl, "pvr"))
   {
     if (event == PVR::PVREvent::ManagerStarted || event == PVR::PVREvent::ManagerStopped ||
-        event == PVR::PVREvent::ManagerError || event == PVR::PVREvent::ManagerInterrupted ||
         event == PVR::PVREvent::RecordingsInvalidated ||
         event == PVR::PVREvent::TimersInvalidated ||
         event == PVR::PVREvent::ChannelGroupsInvalidated ||
@@ -469,9 +468,6 @@ bool CDirectoryProvider::OnClick(const std::shared_ptr<CGUIListItem>& item)
   // video select action setting is for files only, except exec func is playmedia...
   if (targetItem->HasVideoInfoTag() && (!targetItem->m_bIsFolder || isPlayMedia))
   {
-    // play the given/default video version, even if multiple versions are available
-    targetItem->SetProperty("has_resolved_video_asset", true);
-
     const std::string targetWindow{GetTarget(*targetItem)};
     if (!targetWindow.empty())
       targetItem->SetProperty("targetwindow", targetWindow);

@@ -33,6 +33,8 @@ namespace ADDON
 class DatabaseSettings
 {
 public:
+  static constexpr unsigned int DEFAULT_CONNECT_TIMEOUT = 5; // secs
+
   DatabaseSettings() { Reset(); }
   void Reset()
   {
@@ -47,6 +49,7 @@ public:
     ca.clear();
     capath.clear();
     ciphers.clear();
+    connecttimeout = DEFAULT_CONNECT_TIMEOUT;
     compression = false;
   };
   std::string type;
@@ -60,6 +63,7 @@ public:
   std::string ca;
   std::string capath;
   std::string ciphers;
+  unsigned int connecttimeout{DEFAULT_CONNECT_TIMEOUT};
   bool compression;
 };
 
@@ -268,6 +272,8 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
 
     bool m_bVideoScannerIgnoreErrors;
     int m_iVideoLibraryDateAdded;
+
+    bool m_caseSensitiveLocalArtMatch{true};
 
     std::set<std::string> m_vecTokens;
 

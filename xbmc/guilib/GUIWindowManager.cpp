@@ -297,8 +297,6 @@ void CGUIWindowManager::CreateWindows()
   Add(new CGUIDialogVideoInfo);
   Add(new CGUIDialogVideoManagerVersions);
   Add(new CGUIDialogVideoManagerExtras);
-  Add(new CGUIDialogSelect(WINDOW_DIALOG_SELECT_VIDEO_VERSION));
-  Add(new CGUIDialogSelect(WINDOW_DIALOG_SELECT_VIDEO_EXTRA));
   Add(new CGUIDialogSelect(WINDOW_DIALOG_SELECT_VIDEO_STREAM));
   Add(new CGUIDialogSelect(WINDOW_DIALOG_SELECT_AUDIO_STREAM));
   Add(new CGUIDialogSelect(WINDOW_DIALOG_SELECT_SUBTITLE_STREAM));
@@ -343,8 +341,6 @@ bool CGUIWindowManager::DestroyWindows()
     DestroyWindow(WINDOW_MUSIC_NAV);
     DestroyWindow(WINDOW_DIALOG_MUSIC_INFO);
     DestroyWindow(WINDOW_DIALOG_VIDEO_INFO);
-    DestroyWindow(WINDOW_DIALOG_SELECT_VIDEO_EXTRA);
-    DestroyWindow(WINDOW_DIALOG_SELECT_VIDEO_VERSION);
     DestroyWindow(WINDOW_DIALOG_MANAGE_VIDEO_EXTRAS);
     DestroyWindow(WINDOW_DIALOG_MANAGE_VIDEO_VERSIONS);
     DestroyWindow(WINDOW_VIDEO_PLAYLIST);
@@ -1607,7 +1603,7 @@ int CGUIWindowManager::GetTopmostModalDialog(bool ignoreClosing /*= false*/) con
   return GetTopmostDialog(true, ignoreClosing);
 }
 
-void CGUIWindowManager::SendThreadMessage(CGUIMessage& message, int window /*= 0*/)
+void CGUIWindowManager::SendThreadMessage(const CGUIMessage& message, int window /*= 0*/)
 {
   std::unique_lock<CCriticalSection> lock(m_critSection);
 

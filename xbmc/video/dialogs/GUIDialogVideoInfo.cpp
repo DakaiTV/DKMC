@@ -691,7 +691,8 @@ void CGUIDialogVideoInfo::OnSearchItemFound(const CFileItem* pItem)
   CVideoInfoTag movieDetails;
   if (type == VideoDbContentType::MOVIES)
     db.GetMovieInfo(pItem->GetPath(), movieDetails, pItem->GetVideoInfoTag()->m_iDbId,
-                    pItem->GetVideoInfoTag()->GetAssetInfo().GetId());
+                    pItem->GetVideoInfoTag()->GetAssetInfo().GetId(),
+                    pItem->GetVideoInfoTag()->m_iFileId);
   if (type == VideoDbContentType::EPISODES)
     db.GetEpisodeInfo(pItem->GetPath(), movieDetails, pItem->GetVideoInfoTag()->m_iDbId);
   if (type == VideoDbContentType::TVSHOWS)
@@ -770,9 +771,6 @@ void CGUIDialogVideoInfo::Play(bool resume)
   // close our dialog
   Close(true);
 
-  // play the current video version, even if multiple versions are available
-  m_movieItem->SetProperty("has_resolved_video_asset", true);
-
   if (resume)
   {
     KODI::VIDEO::GUILIB::CVideoPlayActionProcessor proc{m_movieItem};
@@ -799,8 +797,6 @@ void CGUIDialogVideoInfo::Play(bool resume)
       }
     }
   }
-
-  m_movieItem->ClearProperty("has_resolved_video_asset");
 }
 
 namespace
@@ -1223,7 +1219,7 @@ bool CGUIDialogVideoInfo::UpdateVideoItemTitle(const std::shared_ptr<CFileItem>&
   if (mediaType == MediaTypeMovie)
   {
     database.GetMovieInfo("", detail, iDbId, pItem->GetVideoInfoTag()->GetAssetInfo().GetId(),
-                          VideoDbDetailsNone);
+                          pItem->GetVideoInfoTag()->m_iFileId, VideoDbDetailsNone);
     title = detail.m_strTitle;
   }
   else if (mediaType == MediaTypeVideoCollection)
@@ -2007,7 +2003,7 @@ bool CGUIDialogVideoInfo::UpdateVideoItemSortTitle(const std::shared_ptr<CFileIt
   VideoDbContentType iType = pItem->GetVideoContentType();
   if (iType == VideoDbContentType::MOVIES)
     database.GetMovieInfo("", detail, iDbId, pItem->GetVideoInfoTag()->GetAssetInfo().GetId(),
-                          VideoDbDetailsNone);
+                          pItem->GetVideoInfoTag()->m_iFileId, VideoDbDetailsNone);
   else if (iType == VideoDbContentType::TVSHOWS)
     database.GetTvShowInfo(pItem->GetVideoInfoTag()->m_strFileNameAndPath, detail, iDbId, 0, VideoDbDetailsNone);
 
