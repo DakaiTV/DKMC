@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.18)
 if(WIN32)
   # Version 3.20 is required for multi-config generator expressions to work
   cmake_minimum_required(VERSION 3.20)
@@ -116,7 +116,8 @@ dependent_option(ENABLE_INTERNAL_FLATBUFFERS "Enable internal flatbuffers?")
 dependent_option(ENABLE_INTERNAL_FMT "Enable internal fmt?")
 dependent_option(ENABLE_INTERNAL_NFS "Enable internal libnfs?")
 dependent_option(ENABLE_INTERNAL_PCRE2 "Enable internal pcre2?")
-dependent_option(ENABLE_INTERNAL_RapidJSON "Enable internal rapidjson?")
+dependent_option(ENABLE_INTERNAL_NLOHMANNJSON "Enable internal nlohmannjson?")
+dependent_option(ENABLE_INTERNAL_XSLT "Enable internal libxslt?")
 
 # If ENABLE_INTERNAL_FMT is ON, we force ENABLE_INTERNAL_SPDLOG ON as it has a hard
 # dependency on fmt
@@ -138,7 +139,6 @@ if(UNIX)
   option(ENABLE_INTERNAL_FSTRCMP "Enable internal fstrcmp?" OFF)
   option(ENABLE_INTERNAL_DAV1D "Enable internal dav1d?" OFF)
   option(ENABLE_INTERNAL_GTEST "Enable internal gtest?" OFF)
-  option(ENABLE_INTERNAL_UDFREAD "Enable internal udfread?" OFF)
 endif()
 
 # System options
@@ -241,7 +241,7 @@ set(required_deps ASS>=0.15.0
                   Lzo2
                   OpenSSL>=1.1.0
                   PCRE2
-                  RapidJSON>=1.0.2
+                  NlohmannJSON>=3.2.0
                   Spdlog
                   Sqlite3
                   TagLib>=1.9.0
@@ -565,7 +565,7 @@ endif()
 
 # testing
 if(HOST_CAN_EXECUTE_TARGET AND ENABLE_TESTING)
-  find_package(Gtest 1.10.0 REQUIRED)
+  find_package(Gtest 1.10.0 REQUIRED ${SEARCH_QUIET})
 
   copy_files_from_filelist_to_buildtree(${CMAKE_SOURCE_DIR}/cmake/installdata/test-reference-data.txt NO_INSTALL)
   add_executable(${APP_NAME_LC}-test EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/xbmc/test/xbmc-test.cpp ${test_sources})
@@ -614,7 +614,7 @@ if(HOST_CAN_EXECUTE_TARGET AND ENABLE_TESTING)
 endif()
 
 # Documentation
-find_package(Doxygen)
+find_package(Doxygen ${SEARCH_QUIET})
 if(DOXYGEN_FOUND)
   add_custom_target(doc
                     COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_SOURCE_DIR}/docs/doxygen/Doxyfile.doxy

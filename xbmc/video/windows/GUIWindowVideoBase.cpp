@@ -169,7 +169,8 @@ bool CGUIWindowVideoBase::OnMessage(CGUIMessage& message)
         }
         else if (iAction == ACTION_SHOW_INFO)
         {
-          return OnItemInfo(iItem);
+          OnItemInfo(iItem);
+          return true;
         }
         else if (iAction == ACTION_PLAYER_PLAY)
         {
@@ -357,11 +358,14 @@ bool CGUIWindowVideoBase::OnItemInfo(const CFileItem& fileItem)
 //     and show the information.
 // 6.  Check for a refresh, and if so, go to 3.
 
-bool CGUIWindowVideoBase::ShowInfo(const CFileItemPtr& item2, const ScraperPtr& info2)
+CGUIWindowVideoBase::ShowInfoResult CGUIWindowVideoBase::ShowInfo(
+    const std::shared_ptr<CFileItem>& item2, const std::shared_ptr<ADDON::CScraper>& info2)
 {
+  using enum CGUIWindowVideoBase::ShowInfoResult;
+
   CGUIDialogVideoInfo* pDlgInfo = CServiceBroker::GetGUI()->GetWindowManager().GetWindow<CGUIDialogVideoInfo>(WINDOW_DIALOG_VIDEO_INFO);
   if (!pDlgInfo)
-    return false;
+    return RESULT_ERROR;
 
   const ScraperPtr& info(info2); // use this as nfo might change it..
   CFileItemPtr item(item2); // we might replace item..
@@ -412,7 +416,7 @@ bool CGUIWindowVideoBase::ShowInfo(const CFileItemPtr& item2, const ScraperPtr& 
           {
             CLog::Log(LOGERROR, "{}: could not add episode [{}]. tvshow does not exist yet..",
                       __FUNCTION__, item->GetPath());
-            return false;
+            return RESULT_ERROR;
           }
         }
       }
@@ -440,10 +444,11 @@ bool CGUIWindowVideoBase::ShowInfo(const CFileItemPtr& item2, const ScraperPtr& 
     pDlgInfo->SetMovie(item.get());
     pDlgInfo->Open();
     if (pDlgInfo->HasUpdatedUserrating())
-      return true;
+      return RESULT_OK_UPDATED;
     needsRefresh = pDlgInfo->NeedRefresh();
     if (!needsRefresh)
-      return (pDlgInfo->HasUpdatedThumb() || pDlgInfo->HasUpdatedItems());
+      return (pDlgInfo->HasUpdatedThumb() || pDlgInfo->HasUpdatedItems()) ? RESULT_OK_UPDATED
+                                                                          : RESULT_OK_NOT_UPDATED;
     // check if the item in the video info dialog has changed and if so, get the new item
     else if (pDlgInfo->GetCurrentListItem() != NULL)
     {
@@ -464,15 +469,15 @@ bool CGUIWindowVideoBase::ShowInfo(const CFileItemPtr& item2, const ScraperPtr& 
 
   // quietly return if Internet lookups are disabled
   if (!profileManager->GetCurrentProfile().canWriteDatabases() && !g_passwordManager.bMasterUser)
-    return false;
+    return RESULT_ERROR;
 
   if (!info)
-    return false;
+    return RESULT_ERROR;
 
   if (CVideoLibraryQueue::GetInstance().IsScanningLibrary())
   {
     HELPERS::ShowOKDialogText(CVariant{13346}, CVariant{14057});
-    return false;
+    return RESULT_ERROR;
   }
 
   bool listNeedsUpdating = false;
@@ -506,22 +511,37 @@ bool CGUIWindowVideoBase::ShowInfo(const CFileItemPtr& item2, const ScraperPtr& 
     listNeedsUpdating = true;
   } while (needsRefresh);
 
-  return listNeedsUpdating;
+  return listNeedsUpdating ? RESULT_OK_UPDATED : RESULT_OK_NOT_UPDATED;
 }
 
 bool CGUIWindowVideoBase::ShowInfoAndRefresh(const CFileItemPtr& item, const ScraperPtr& info)
 {
-  const int ret{ShowInfo(item, info)};
-
-  // Test IsActive() since we can be called from other windows (music, home) we need this check
-  if (ret && IsActive())
+  const ShowInfoResult result{ShowInfo(item, info)};
+  switch (result)
   {
-    const int itemNumber{m_viewControl.GetSelectedItem()};
-    Refresh();
-    m_viewControl.SetSelectedItem(itemNumber);
+    using enum ShowInfoResult;
+
+    case RESULT_ERROR:
+      return false;
+    case RESULT_OK_NOT_UPDATED:
+      return true;
+    case RESULT_OK_UPDATED:
+    {
+      // Test IsActive() since we can be called from other windows (music, home) we need this check
+      if (IsActive())
+      {
+        const int selectedItem{m_viewControl.GetSelectedItem()};
+        Refresh();
+        m_viewControl.SetSelectedItem(selectedItem);
+      }
+      return true;
+    }
+    default:
+      break;
   }
 
-  return ret;
+  CLog::LogF(LOGWARNING, "Unhandled ShowInfoResult value treated as error.");
+  return false;
 }
 
 void CGUIWindowVideoBase::OnQueueItem(int iItem, bool first)
@@ -807,7 +827,6 @@ void CGUIWindowVideoBase::GetContextButtons(int itemNumber, CContextButtons &but
 bool CGUIWindowVideoBase::OnContextButton(int itemNumber, CONTEXT_BUTTON button)
 {
   CFileItemPtr item;
-  m_forceSelection = false;
   if (itemNumber >= 0 && itemNumber < m_vecItems->Size())
     item = m_vecItems->Get(itemNumber);
   switch (button)
@@ -862,7 +881,7 @@ bool CGUIWindowVideoBase::OnContextButton(int itemNumber, CONTEXT_BUTTON button)
     return OnPlayMedia(itemNumber);
   case CONTEXT_BUTTON_CHOOSE_PLAYLIST:
   {
-    m_forceSelection = true;
+    item->SetProperty("force_playlist_selection", true);
     return OnPlayMedia(itemNumber);
   }
   default:
@@ -902,7 +921,10 @@ bool CGUIWindowVideoBase::OnPlayMedia(const std::shared_ptr<CFileItem>& pItem,
   if (m_thumbLoader.IsLoading())
     m_thumbLoader.StopAsync();
 
-  CServiceBroker::GetPlaylistPlayer().Play(itemCopy, player, m_forceSelection);
+  CServiceBroker::GetPlaylistPlayer().Play(itemCopy, player);
+
+  // Reset force selection flag
+  pItem->ClearProperty("force_playlist_selection");
 
   const auto& components = CServiceBroker::GetAppComponents();
   const auto appPlayer = components.GetComponent<CApplicationPlayer>();
@@ -1040,8 +1062,6 @@ bool CGUIWindowVideoBase::PlayItem(const std::shared_ptr<CFileItem>& pItem,
     }
     return true;
   }
-
-  m_forceSelection = false;
 
   //! @todo get rid of "videos with versions as folder" hack!
   if (pItem->m_bIsFolder && !pItem->IsPlugin() &&

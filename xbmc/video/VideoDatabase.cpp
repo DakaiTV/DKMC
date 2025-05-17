@@ -1265,6 +1265,38 @@ int CVideoDatabase::GetAndFillFileId(CVideoInfoTag& details)
   return details.m_iFileId;
 }
 
+std::string CVideoDatabase::GetRemovableBlurayPath(std::string originalPath)
+{
+  try
+  {
+    if (nullptr == m_pDB)
+      return {};
+    if (nullptr == m_pDS)
+      return {};
+
+    std::string path, filename;
+    SplitPath(originalPath, path, filename);
+    path = URIUtils::AddFileToFolder(path, "PLAYLIST", "");
+
+    if (const int idPath{GetPathId(path)}; idPath >= 0)
+    {
+      m_pDS->query(PrepareSQL("select strFilename from files where idPath=%i", idPath));
+      if (m_pDS->num_rows() > 0)
+      {
+        const std::string newPath{
+            URIUtils::AddFileToFolder(path, m_pDS->fv("strFilename").get_asString())};
+        m_pDS->close();
+        return newPath;
+      }
+    }
+  }
+  catch (...)
+  {
+    CLog::LogF(LOGERROR, "({}) failed", originalPath);
+  }
+  return {};
+}
+
 //********************************************************************************************************************************
 int CVideoDatabase::GetMovieId(const std::string& strFilenameAndPath)
 {
@@ -3031,7 +3063,7 @@ bool CVideoDatabase::SetFileForMedia(const std::string& fileAndPath,
                                      int mediaId,
                                      int oldIdFile)
 {
-  if (mediaId < 0 || oldIdFile < 0)
+  if ((mediaId < 0 && type != VideoDbContentType::UNKNOWN) || oldIdFile < 0)
     return false;
 
   switch (type)
@@ -3040,6 +3072,8 @@ bool CVideoDatabase::SetFileForMedia(const std::string& fileAndPath,
       return SetFileForMovie(fileAndPath, mediaId, oldIdFile);
     case VideoDbContentType::EPISODES:
       return SetFileForEpisode(fileAndPath, mediaId, oldIdFile);
+    case VideoDbContentType::UNKNOWN:
+      return SetFileForUnknown(fileAndPath, oldIdFile); // Used for removable blurays
     default:
       CLog::LogF(LOGDEBUG, "unsupported media type {}", type);
       return false;
@@ -3101,6 +3135,32 @@ bool CVideoDatabase::SetFileForMovie(const std::string& fileAndPath, int idMovie
   {
     CLog::LogF(LOGERROR, " idFile {}, fileAndPath {}, idMovie {}, oldIdFile {} - failed", idFile,
                fileAndPath, idMovie, oldIdFile);
+  }
+  return false;
+}
+
+bool CVideoDatabase::SetFileForUnknown(const std::string& fileAndPath, int oldIdFile)
+{
+  assert(m_pDB->in_transaction());
+
+  const int idFile{AddFile(fileAndPath)};
+  if (idFile < 0)
+    return false;
+
+  try
+  {
+    std::string sql{
+        PrepareSQL("UPDATE streamdetails SET idFile=%i WHERE idFile=%i AND NOT EXISTS (SELECT 1 "
+                   "FROM streamdetails WHERE idFile=%i)",
+                   idFile, oldIdFile, idFile)};
+    m_pDS->exec(sql);
+
+    return DeleteFile(oldIdFile);
+  }
+  catch (...)
+  {
+    CLog::LogF(LOGERROR, " idFile {}, fileAndPath {}, oldIdFile {} - failed", idFile, fileAndPath,
+               oldIdFile);
   }
   return false;
 }
@@ -3412,6 +3472,64 @@ bool CVideoDatabase::SetStreamDetailsForFileId(const CStreamDetails& details, in
     CLog::Log(LOGERROR, "{} ({}) failed", __FUNCTION__, idFile);
   }
   return false;
+}
+
+std::vector<CVideoDatabase::PlaylistInfo> CVideoDatabase::GetPlaylistsByPath(
+    const std::string& path)
+{
+  std::vector<PlaylistInfo> playlists{};
+
+  try
+  {
+    if (!m_pDB || !m_pDS)
+      return playlists;
+
+    const std::string strSQL{PrepareSQL(
+        "SELECT files.strFilename, files.idFile, episode.idEpisode, vv.idMedia FROM files "
+        "LEFT JOIN episode ON episode.idFile=files.idFile "
+        "LEFT JOIN videoversion vv ON vv.idFile = files.idFile AND vv.media_type='%s' "
+        "INNER JOIN path ON path.idPath=files.idPath "
+        "WHERE path.strPath='%s'",
+        MediaTypeMovie, path.c_str())};
+    m_pDS->query(strSQL);
+
+    while (!m_pDS->eof())
+    {
+      const int filenameIndex{m_pDS->fieldIndex("strFilename")};
+      std::string filename{m_pDS->fv(filenameIndex).get_asString()};
+      if (StringUtils::EndsWithNoCase(filename, ".mpls"))
+      {
+        const int idFileIndex{m_pDS->fieldIndex("idFile")};
+        const int idEpisodeIndex{m_pDS->fieldIndex("idEpisode")};
+        const int idMovieIndex{m_pDS->fieldIndex("idMedia")};
+        const int idEpisode{m_pDS->fv(idEpisodeIndex).get_asInt()};
+        const int idMovie{m_pDS->fv(idMovieIndex).get_asInt()};
+        filename.erase(filename.size() - 5); // remove extension
+        if (filename.size() == 5)
+        {
+          if (idEpisode > 0)
+            playlists.emplace_back(PlaylistInfo{.playlist = std::stoi(filename),
+                                                .idFile = m_pDS->fv(idFileIndex).get_asInt(),
+                                                .mediaType = VideoDbContentType::EPISODES,
+                                                .idMedia = idEpisode});
+          if (idMovie > 0)
+            playlists.emplace_back(PlaylistInfo{.playlist = std::stoi(filename),
+                                                .idFile = m_pDS->fv(idFileIndex).get_asInt(),
+                                                .mediaType = VideoDbContentType::MOVIES,
+                                                .idMedia = idMovie});
+        }
+      }
+      m_pDS->next();
+    }
+    m_pDS->close();
+
+    return playlists;
+  }
+  catch (const std::exception& e)
+  {
+    CLog::LogF(LOGERROR, "failed - path {} - error {}", path, e.what());
+  }
+  return {};
 }
 
 //********************************************************************************************************************************
@@ -6698,11 +6816,39 @@ void CVideoDatabase::UpdateTables(int iVersion)
         "UPDATE videoversiontype SET itemType = itemType + 1  WHERE itemType IN (%i, %i)",
         VIDEOASSETTYPE_VERSION_OLD, VIDEOASSETTYPE_EXTRA_OLD));
   }
+
+  if (iVersion < 135)
+  {
+    // Fix PVR recording path encoding bug.
+    m_pDS->query("SELECT idPath, strPath FROM path WHERE strPath LIKE 'pvr://recordings/%'");
+    while (!m_pDS->eof())
+    {
+      std::string fixedPath{m_pDS->fv(1).get_asString()};
+      fixedPath.erase(0, 17); // Omit "pvr://recordings/".
+
+      // Fix special case where ? contained in directory names was treated as URL parameter.
+      const size_t pos{fixedPath.find("/?")};
+      if (pos != std::string::npos)
+        fixedPath.erase(pos, 1);
+
+      std::vector<std::string> segments{StringUtils::Split(fixedPath, "/")};
+      for (auto& segment : segments)
+        segment = CURL::Encode(segment);
+
+      fixedPath = "pvr://recordings/";
+      fixedPath += StringUtils::Join(segments, "/");
+
+      m_pDS2->exec(PrepareSQL("UPDATE path SET strPath='%s' WHERE idPath=%i", fixedPath.c_str(),
+                              m_pDS->fv(0).get_asInt()));
+      m_pDS->next();
+    }
+    m_pDS->close();
+  }
 }
 
 int CVideoDatabase::GetSchemaVersion() const
 {
-  return 134;
+  return 135;
 }
 
 bool CVideoDatabase::LookupByFolders(const std::string &path, bool shows)

@@ -56,6 +56,9 @@
 #include "events/EventLog.h"
 #include "events/NotificationEvent.h"
 #include "favourites/FavouritesService.h"
+#ifdef HAVE_LIBBLURAY
+#include "filesystem/BlurayDiscCache.h"
+#endif
 #include "filesystem/Directory.h"
 #include "filesystem/DirectoryCache.h"
 #include "filesystem/DirectoryFactory.h"
@@ -353,6 +356,10 @@ bool CApplication::Create()
   // application inbound service
   m_pAppPort = std::make_shared<CAppInboundProtocol>(*this);
   CServiceBroker::RegisterAppPort(m_pAppPort);
+
+#ifdef HAVE_LIBBLURAY
+  CServiceBroker::RegisterBlurayDiscCache(std::make_shared<CBlurayDiscCache>());
+#endif
 
   if (!m_ServiceManager->InitStageTwo(
           settingsComponent->GetProfileManager()->GetProfileUserDataFolder()))
@@ -1931,6 +1938,10 @@ bool CApplication::Cleanup()
     if (m_ServiceManager)
       m_ServiceManager->DeinitStageThree();
 
+#ifdef HAVE_LIBBLURAY
+    CServiceBroker::UnregisterBlurayDiscCache();
+#endif
+
     CServiceBroker::UnregisterSpeechRecognition();
 
     CLog::Log(LOGINFO, "unload skin");
@@ -2328,10 +2339,7 @@ bool CApplication::PlayStack(CFileItem& item, bool bRestart)
   return PlayFile(selectedStackPart, "", true);
 }
 
-bool CApplication::PlayFile(CFileItem item,
-                            const std::string& player,
-                            bool bRestart /* = false */,
-                            bool forceSelection /* = false */)
+bool CApplication::PlayFile(CFileItem item, const std::string& player, bool bRestart /* = false */)
 {
   // Ensure the MIME type has been retrieved for http:// and shout:// streams
   if (item.GetMimeType().empty())
@@ -2359,6 +2367,10 @@ bool CApplication::PlayFile(CFileItem item,
 
   if (PLAYLIST::IsPlayList(item))
     return false;
+
+  // Get bluray:// path for resolution
+  if (item.HasVideoInfoTag() && item.GetVideoInfoTag()->GetPath().starts_with("bluray://"))
+    item.SetDynPath(item.GetVideoInfoTag()->m_strFileNameAndPath);
 
   // Translate/Resolve the url if needed - recursively, but only limited times.
   std::string lastDynPath{item.GetDynPath()};
@@ -2413,10 +2425,15 @@ bool CApplication::PlayFile(CFileItem item,
       CVideoDatabase dbs;
       dbs.Open();
 
-      std::string path = item.GetPath();
-      std::string videoInfoTagPath(item.GetVideoInfoTag()->m_strFileNameAndPath);
-      if (videoInfoTagPath.starts_with("removable://") || VIDEO::IsVideoDb(item))
-        path = videoInfoTagPath;
+      std::string path{item.GetPath()};
+      if (item.HasVideoInfoTag())
+      {
+        std::string videoInfoTagPath(item.GetVideoInfoTag()->m_strFileNameAndPath);
+        // removable:// may be embedded in bluray:// path
+        if (CURL::Decode(videoInfoTagPath).find("removable://") != std::string::npos ||
+            VIDEO::IsVideoDb(item))
+          path = videoInfoTagPath;
+      }
 
       // Note that we need to load the tag from database also if the item already has a tag,
       // because for example the (full) video info for strm files will be loaded here.
@@ -2484,9 +2501,10 @@ bool CApplication::PlayFile(CFileItem item,
   }
 
   // a disc image might be Blu-Ray disc
-  if (!(options.startpercent > 0.0 || options.starttime > 0.0) &&
-      (VIDEO::IsBDFile(item) || item.IsDiscImage() ||
-       (forceSelection && URIUtils::IsBlurayPath(item.GetDynPath()))))
+  if ((!(options.startpercent > 0.0 || options.starttime > 0.0) &&
+       (VIDEO::IsBDFile(item) || ::UTILS::DISCS::IsBlurayDiscImage(item))) ||
+      (item.GetProperty("force_playlist_selection").asBoolean(false) &&
+       URIUtils::IsBlurayPath(item.GetDynPath())))
   {
     // No video selection when using external or remote players (they handle it if supported)
     const bool isSimpleMenuAllowed = [&]()
@@ -2504,8 +2522,11 @@ bool CApplication::PlayFile(CFileItem item,
     if (isSimpleMenuAllowed)
     {
       // Check if we must show the simplified bd menu.
-      if (!CGUIDialogSimpleMenu::ShowPlaySelection(item, forceSelection))
+      if (!CGUIDialogSimpleMenu::ShowPlaylistSelection(item))
         return true;
+
+      // Reset any resume state as new playlist chosen
+      options = {};
     }
   }
 

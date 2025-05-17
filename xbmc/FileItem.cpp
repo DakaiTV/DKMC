@@ -1377,6 +1377,7 @@ bool CFileItem::IsSamePath(const CFileItem *item) const
           return myTag->m_iFileId == otherTag->m_iFileId;
         return true;
       }
+      return false;
     }
   }
   if (MUSIC::IsMusicDb(*this) && HasMusicInfoTag())
@@ -1400,7 +1401,8 @@ bool CFileItem::IsSamePath(const CFileItem *item) const
       dbItem.SetProperty("item_start", item->GetProperty("item_start"));
     return IsSamePath(&dbItem);
   }
-  if (VIDEO::IsVideoDb(*item) && item->HasVideoInfoTag())
+  if (VIDEO::IsVideoDb(*item) && item->HasVideoInfoTag() &&
+      !URIUtils::IsBlurayPath(item->GetDynPath()))
   {
     CFileItem dbItem(item->GetVideoInfoTag()->m_strFileNameAndPath, false);
     if (item->HasProperty("item_start"))
@@ -2343,14 +2345,21 @@ const std::shared_ptr<PVR::CPVRChannel> CFileItem::GetPVRChannelInfoTag() const
 VideoDbContentType CFileItem::GetVideoContentType() const
 {
   VideoDbContentType type = VideoDbContentType::MOVIES;
-  if (HasVideoInfoTag() && GetVideoInfoTag()->m_type == MediaTypeTvShow)
-    type = VideoDbContentType::TVSHOWS;
-  if (HasVideoInfoTag() && GetVideoInfoTag()->m_type == MediaTypeEpisode)
-    return VideoDbContentType::EPISODES;
-  if (HasVideoInfoTag() && GetVideoInfoTag()->m_type == MediaTypeMusicVideo)
-    return VideoDbContentType::MUSICVIDEOS;
-  if (HasVideoInfoTag() && GetVideoInfoTag()->m_type == MediaTypeAlbum)
-    return VideoDbContentType::MUSICALBUMS;
+  if (HasVideoInfoTag())
+  {
+    const auto& tag{GetVideoInfoTag()};
+    if (tag->m_type == MediaTypeTvShow)
+      type = VideoDbContentType::TVSHOWS;
+    if (tag->m_type == MediaTypeEpisode)
+      return VideoDbContentType::EPISODES;
+    if (tag->m_type == MediaTypeMusicVideo)
+      return VideoDbContentType::MUSICVIDEOS;
+    if (tag->m_type == MediaTypeAlbum)
+      return VideoDbContentType::MUSICALBUMS;
+    if (tag->m_strFileNameAndPath.starts_with("bluray://removable"))
+      // cannot tell if a removable bluray is a movie or a tv show
+      return VideoDbContentType::UNKNOWN;
+  }
 
   CVideoDatabaseDirectory dir;
   VIDEODATABASEDIRECTORY::CQueryParams params;

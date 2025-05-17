@@ -13,64 +13,44 @@ if(NOT TARGET ${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME})
   include(cmake/scripts/common/ModuleHelpers.cmake)
 
   set(${CMAKE_FIND_PACKAGE_NAME}_MODULE_LC udfread)
+  set(${CMAKE_FIND_PACKAGE_NAME}_SEARCH_NAME libudfread)
+
+  SETUP_BUILD_VARS()
 
   SETUP_FIND_SPECS()
 
-  # Windows only provides a cmake config. This is custom to us
-  find_package(libudfread ${CONFIG_${CMAKE_FIND_PACKAGE_NAME}_FIND_SPEC} CONFIG ${SEARCH_QUIET}
-                          HINTS ${DEPENDS_PATH}/lib/cmake
-                          ${${CORE_PLATFORM_NAME_LC}_SEARCH_CONFIG})
+  SEARCH_EXISTING_PACKAGES()
 
-  # fallback to pkgconfig for non windows platforms
-  if(NOT libudfread_FOUND)
-    find_package(PkgConfig ${SEARCH_QUIET})
+  if(TARGET libudfread::libudfread)
+    get_target_property(UDFREAD_LIBRARY libudfread::libudfread IMPORTED_LOCATION_RELWITHDEBINFO)
+    get_target_property(UDFREAD_INCLUDE_DIR libudfread::libudfread INTERFACE_INCLUDE_DIRECTORIES)
+  elseif(TARGET PkgConfig::${${CMAKE_FIND_PACKAGE_NAME}_SEARCH_NAME})
+    # First item is the full path of the library file found
+    # pkg_check_modules does not populate a variable of the found library explicitly
+    list(GET ${${CMAKE_FIND_PACKAGE_NAME}_SEARCH_NAME}_LINK_LIBRARIES 0 ${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_LIBRARY)
 
-    if(PKG_CONFIG_FOUND AND NOT (WIN32 OR WINDOWSSTORE))
-      pkg_check_modules(libudfread libudfread${PC_${CMAKE_FIND_PACKAGE_NAME}_FIND_SPEC} ${SEARCH_QUIET} IMPORTED_TARGET)
-    endif()
+    get_target_property(${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_INCLUDE_DIR PkgConfig::${${CMAKE_FIND_PACKAGE_NAME}_SEARCH_NAME} INTERFACE_INCLUDE_DIRECTORIES)
+    set(${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_VERSION ${${${CMAKE_FIND_PACKAGE_NAME}_SEARCH_NAME}_VERSION})
   endif()
-
-  # Check for existing UDFREAD. If version >= UDFREAD-VERSION file version, dont build
-  # A corner case, but if a linux/freebsd user WANTS to build internal udfread, build anyway
-  if((libudfread_VERSION VERSION_LESS ${${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_VER} AND ENABLE_INTERNAL_UDFREAD) OR
-     ((CORE_SYSTEM_NAME STREQUAL linux OR CORE_SYSTEM_NAME STREQUAL freebsd) AND ENABLE_INTERNAL_UDFREAD))
-    buildudfread()
-  else()
-    if(TARGET libudfread::libudfread)
-      get_target_property(UDFREAD_LIBRARY_RELEASE libudfread::libudfread IMPORTED_LOCATION_RELWITHDEBINFO)
-      get_target_property(UDFREAD_INCLUDE_DIR libudfread::libudfread INTERFACE_INCLUDE_DIRECTORIES)
-    elseif(TARGET PkgConfig::libudfread)
-      # First item is the full path of the library file found
-      # pkg_check_modules does not populate a variable of the found library explicitly
-      list(GET libudfread_LINK_LIBRARIES 0 UDFREAD_LIBRARY_RELEASE)
-
-      get_target_property(UDFREAD_INCLUDE_DIR PkgConfig::libudfread INTERFACE_INCLUDE_DIRECTORIES)
-      set(UDFREAD_VERSION ${libudfread_VERSION})
-    endif()
-  endif()
-
-  include(SelectLibraryConfigurations)
-  select_library_configurations(UDFREAD)
-  unset(UDFREAD_LIBRARIES)
 
   find_package_handle_standard_args(Udfread
-                                    REQUIRED_VARS UDFREAD_LIBRARY UDFREAD_INCLUDE_DIR
-                                    VERSION_VAR UDFREAD_VERSION)
+                                    REQUIRED_VARS ${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_LIBRARY ${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_INCLUDE_DIR
+                                    VERSION_VAR ${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_VERSION)
 
-  if(UDFREAD_FOUND)
+  if(Udfread_FOUND)
+    set(${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_COMPILE_DEFINITIONS HAS_UDFREAD)
+
     # windows cmake config populated target
-    if(TARGET libudfread::libudfread AND NOT TARGET udfread_build)
+    if(TARGET libudfread::libudfread)
       add_library(${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME} ALIAS libudfread::libudfread)
       add_library(LIBRARY::${CMAKE_FIND_PACKAGE_NAME} ALIAS libudfread::libudfread)
-      set_target_properties(libudfread::libudfread PROPERTIES
-                                                   INTERFACE_COMPILE_DEFINITIONS HAS_UDFREAD)
     # pkgconfig populated target that is sufficient version
-    elseif(TARGET PkgConfig::libudfread AND NOT TARGET udfread_build)
-      add_library(${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME} ALIAS PkgConfig::libudfread)
-      add_library(LIBRARY::${CMAKE_FIND_PACKAGE_NAME} ALIAS PkgConfig::libudfread)
-      set_target_properties(PkgConfig::libudfread PROPERTIES
-                                                  INTERFACE_COMPILE_DEFINITIONS HAS_UDFREAD)
+    elseif(TARGET PkgConfig::${${CMAKE_FIND_PACKAGE_NAME}_SEARCH_NAME})
+      add_library(${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME} ALIAS PkgConfig::${${CMAKE_FIND_PACKAGE_NAME}_SEARCH_NAME})
+      add_library(LIBRARY::${CMAKE_FIND_PACKAGE_NAME} ALIAS PkgConfig::${${CMAKE_FIND_PACKAGE_NAME}_SEARCH_NAME})
     endif()
+
+    ADD_TARGET_COMPILE_DEFINITION()
   else()
     if(Udfread_FIND_REQUIRED)
       message(FATAL_ERROR "Udfread libraries were not found.")

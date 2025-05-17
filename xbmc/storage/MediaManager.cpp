@@ -35,6 +35,9 @@
 #include "addons/VFSEntry.h"
 #include "dialogs/GUIDialogKaiToast.h"
 #include "dialogs/GUIDialogPlayEject.h"
+#ifdef HAVE_LIBBLURAY
+#include "filesystem/BlurayDiscCache.h"
+#endif
 #include "messaging/helpers/DialogOKHelper.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/MediaSourceSettings.h"
@@ -46,6 +49,7 @@
 #include "utils/XBMCTinyXML2.h"
 #include "utils/XMLUtils.h"
 #include "utils/log.h"
+#include "video/VideoDatabase.h"
 
 #include <string>
 #include <vector>
@@ -595,11 +599,38 @@ std::string CMediaManager::GetDiskUniqueId(const std::string& devicePath)
     return "";
   }
 
-  std::string strID = StringUtils::Format("removable://{}_{}", info.name, info.serial);
+  std::string strID{StringUtils::Format("removable://{}_{}", info.name, info.serial)};
+  if (info.type == UTILS::DISCS::DiscType::BLURAY)
+  {
+    CURL url("bluray://");
+    url.SetHostName(strID);
+    url.SetFileName(URIUtils::AddFileToFolder("BDMV", "index.bdmv"));
+    strID = url.Get();
+  }
   CLog::Log(LOGDEBUG, "GetDiskUniqueId: Got ID {} for disc with path {}", strID,
             CURL::GetRedacted(mediaPath));
 
   return strID;
+}
+
+bool CMediaManager::HasMediaBlurayPlaylist(const std::string& devicePath)
+{
+#ifdef HAVE_LIBBLURAY
+  const std::string mediaPath{TranslateDevicePath(devicePath)};
+  UTILS::DISCS::DiscInfo info{GetDiscInfo(mediaPath)};
+  if (!info.empty() && info.type == UTILS::DISCS::DiscType::BLURAY)
+  {
+    const std::string blurayPath{GetDiskUniqueId()};
+    CVideoDatabase db;
+    if (db.Open())
+    {
+      const std::string path{db.GetRemovableBlurayPath(blurayPath)};
+      db.Close();
+      return !path.empty();
+    }
+  }
+#endif
+  return false;
 }
 
 std::string CMediaManager::GetDiscPath()
@@ -783,6 +814,10 @@ void CMediaManager::RemoveDiscInfo(const std::string& devicePath)
   auto it = m_mapDiscInfo.find(strDevice);
   if (it != m_mapDiscInfo.end())
     m_mapDiscInfo.erase(it);
+
+#ifdef HAVE_LIBBLURAY
+  CServiceBroker::GetBlurayDiscCache()->ClearDisc(strDevice);
+#endif
 }
 
 bool CMediaManager::playStubFile(const CFileItem& item)

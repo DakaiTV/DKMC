@@ -11,11 +11,14 @@
 #include "ContextMenuManager.h"
 #include "FileItem.h"
 #include "ServiceBroker.h"
+#include "addons/AddonEvents.h"
 #include "addons/AddonManager.h"
+#include "addons/RepositoryUpdater.h"
 #include "favourites/FavouritesService.h"
 #include "filesystem/Directory.h"
 #include "guilib/LocalizeStrings.h"
 #include "interfaces/AnnouncementManager.h"
+#include "interfaces/IAnnouncer.h"
 #include "music/MusicFileItemClassify.h"
 #include "music/MusicThumbLoader.h"
 #include "pictures/PictureThumbLoader.h"
@@ -41,6 +44,7 @@
 #include "video/guilib/VideoPlayActionProcessor.h"
 #include "video/guilib/VideoSelectActionProcessor.h"
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -50,6 +54,169 @@ using namespace KODI;
 using namespace KODI::MESSAGING;
 using namespace KODI::UTILS::GUILIB;
 using namespace PVR;
+
+class CDirectoryProvider::CSubscriber : public ANNOUNCEMENT::IAnnouncer
+{
+public:
+  explicit CSubscriber(ISubscriberCallback& invalidate) : m_callback(invalidate)
+  {
+    CServiceBroker::GetAnnouncementManager()->AddAnnouncer(
+        this, ANNOUNCEMENT::VideoLibrary | ANNOUNCEMENT::AudioLibrary | ANNOUNCEMENT::Player |
+                  ANNOUNCEMENT::GUI);
+  }
+  ~CSubscriber() override { CServiceBroker::GetAnnouncementManager()->RemoveAnnouncer(this); }
+
+  virtual bool IsReadyToUse() const { return true; }
+
+protected:
+  bool OnEventPublished(Topic topic = Topic::UNSPECIFIED)
+  {
+    return m_callback.OnEventPublished(topic);
+  }
+
+private:
+  CSubscriber() = delete;
+
+  // IAnnouncer implementation
+  void Announce(ANNOUNCEMENT::AnnouncementFlag flag,
+                const std::string& sender,
+                const std::string& message,
+                const CVariant& data) override
+  {
+    if (flag & ANNOUNCEMENT::VideoLibrary && OnEventPublished(Topic::VIDEO_LIBRARY))
+      return;
+
+    if (flag & ANNOUNCEMENT::AudioLibrary && OnEventPublished(Topic::AUDIO_LIBRARY))
+      return;
+
+    if (flag & ANNOUNCEMENT::Player)
+    {
+      if (message == "OnPlay" || message == "OnResume" || message == "OnStop")
+        OnEventPublished(Topic::PLAYER);
+    }
+    else
+    {
+      // if we're in a database transaction, don't bother doing anything just yet
+      if (data.isMember("transaction") && data["transaction"].asBoolean())
+        return;
+
+      // if there was a database update, we set the update state
+      // to PENDING to fire off a new job in the next update
+      if (message == "OnScanFinished" || message == "OnCleanFinished" || message == "OnUpdate" ||
+          message == "OnRemove" || message == "OnRefresh")
+        OnEventPublished();
+    }
+  }
+
+  CCriticalSection m_critSection;
+  ISubscriberCallback& m_callback;
+};
+
+namespace
+{
+class CAddonsSubscriber : public CDirectoryProvider::CSubscriber
+{
+public:
+  explicit CAddonsSubscriber(ISubscriberCallback& invalidate)
+    : CDirectoryProvider::CSubscriber(invalidate)
+  {
+    CServiceBroker::GetAddonMgr().Events().Subscribe(this, &CAddonsSubscriber::OnAddonEvent);
+    CServiceBroker::GetRepositoryUpdater().Events().Subscribe(
+        this, &CAddonsSubscriber::OnAddonRepositoryEvent);
+  }
+  ~CAddonsSubscriber() override
+  {
+    CServiceBroker::GetRepositoryUpdater().Events().Unsubscribe(this);
+    CServiceBroker::GetAddonMgr().Events().Unsubscribe(this);
+  }
+
+private:
+  void OnAddonEvent(const ADDON::AddonEvent& event)
+  {
+    if (typeid(event) == typeid(ADDON::AddonEvents::Enabled) ||
+        typeid(event) == typeid(ADDON::AddonEvents::Disabled) ||
+        typeid(event) == typeid(ADDON::AddonEvents::ReInstalled) ||
+        typeid(event) == typeid(ADDON::AddonEvents::UnInstalled) ||
+        typeid(event) == typeid(ADDON::AddonEvents::MetadataChanged) ||
+        typeid(event) == typeid(ADDON::AddonEvents::AutoUpdateStateChanged))
+    {
+      OnEventPublished();
+    }
+  }
+
+  void OnAddonRepositoryEvent(const ADDON::CRepositoryUpdater::RepositoryUpdated& event)
+  {
+    OnEventPublished();
+  }
+};
+
+class CPVRSubscriber : public CDirectoryProvider::CSubscriber
+{
+public:
+  explicit CPVRSubscriber(ISubscriberCallback& invalidate)
+    : CDirectoryProvider::CSubscriber(invalidate)
+  {
+    CServiceBroker::GetPVRManager().Events().Subscribe(this, &CPVRSubscriber::OnPVRManagerEvent);
+  }
+  ~CPVRSubscriber() override { CServiceBroker::GetPVRManager().Events().Unsubscribe(this); }
+
+  bool IsReadyToUse() const override { return m_pvrStarted.test(); }
+
+private:
+  void OnPVRManagerEvent(const PVR::PVREvent& event)
+  {
+    if (event == PVR::PVREvent::ManagerStarted)
+      m_pvrStarted.test_and_set();
+    else if (event == PVR::PVREvent::ManagerStarting || event == PVR::PVREvent::ManagerStopping ||
+             event == PVR::PVREvent::ManagerStopped)
+      m_pvrStarted.clear();
+
+    if (!m_pvrStarted.test())
+      return;
+
+    using enum PVR::PVREvent;
+    if (event == ManagerStarted || event == ManagerStopped || event == RecordingsInvalidated ||
+        event == TimersInvalidated || event == ChannelGroupsInvalidated ||
+        event == SavedSearchesInvalidated || event == ClientsInvalidated ||
+        event == ClientsPrioritiesInvalidated)
+    {
+      OnEventPublished();
+    }
+  }
+
+  std::atomic_flag m_pvrStarted{};
+};
+
+class CFavouritesSubscriber : public CDirectoryProvider::CSubscriber
+{
+public:
+  explicit CFavouritesSubscriber(ISubscriberCallback& invalidate)
+    : CDirectoryProvider::CSubscriber(invalidate)
+  {
+    CServiceBroker::GetFavouritesService().Events().Subscribe(
+        this, &CFavouritesSubscriber::OnFavouritesEvent);
+  }
+  ~CFavouritesSubscriber() override
+  {
+    CServiceBroker::GetFavouritesService().Events().Unsubscribe(this);
+  }
+
+private:
+  void OnFavouritesEvent(const CFavouritesService::FavouritesUpdated& event) { OnEventPublished(); }
+};
+
+std::unique_ptr<CDirectoryProvider::CSubscriber> GetSubscriber(const std::string& url,
+                                                               ISubscriberCallback& invalidate)
+{
+  if (URIUtils::IsProtocol(url, "addons"))
+    return std::make_unique<CAddonsSubscriber>(invalidate);
+  else if (URIUtils::IsProtocol(url, "pvr"))
+    return std::make_unique<CPVRSubscriber>(invalidate);
+  else if (URIUtils::IsProtocol(url, "favourites"))
+    return std::make_unique<CFavouritesSubscriber>(invalidate);
+  else
+    return std::make_unique<CDirectoryProvider::CSubscriber>(invalidate);
+}
 
 class CDirectoryJob : public CJob
 {
@@ -66,15 +233,16 @@ public:
       m_limit(limit),
       m_browse(browse),
       m_parentID(parentID)
-  { }
+  {
+  }
   ~CDirectoryJob() override = default;
 
   const char* GetType() const override { return "directory"; }
-  bool operator==(const CJob *job) const override
+  bool operator==(const CJob* job) const override
   {
-    if (strcmp(job->GetType(),GetType()) == 0)
+    if (strcmp(job->GetType(), GetType()) == 0)
     {
-      const CDirectoryJob* dirJob = dynamic_cast<const CDirectoryJob*>(job);
+      const auto* dirJob = dynamic_cast<const CDirectoryJob*>(job);
       if (dirJob && dirJob->m_url == m_url)
         return true;
     }
@@ -96,16 +264,16 @@ public:
         m_items.reserve(limit + 1);
       else
         m_items.reserve(limit);
-      // convert to CGUIStaticItem's and set visibility and targets
+
       for (int i = 0; i < limit; i++)
       {
-        CGUIStaticItemPtr item(new CGUIStaticItem(*items[i]));
+        auto item{std::make_shared<CGUIStaticItem>(*items[i])};
         if (item->HasProperty("node.visible"))
           item->SetVisibleCondition(item->GetProperty("node.visible").asString(), m_parentID);
 
-        getThumbLoader(item)->LoadItem(item.get());
+        GetThumbLoader(item)->LoadItem(item.get());
 
-        m_items.push_back(item);
+        m_items.emplace_back(std::move(item));
       }
 
       if (items.HasProperty("node.target"))
@@ -133,82 +301,86 @@ public:
     return true;
   }
 
-  std::shared_ptr<CThumbLoader> getThumbLoader(const CGUIStaticItemPtr& item)
+  std::shared_ptr<CThumbLoader> GetThumbLoader(const std::shared_ptr<CGUIStaticItem>& item)
   {
+    using enum InfoTagType;
+
     if (VIDEO::IsVideo(*item))
     {
-      initThumbLoader<CVideoThumbLoader>(InfoTagType::VIDEO);
+      InitThumbLoader<CVideoThumbLoader>(VIDEO);
       return m_thumbloaders[InfoTagType::VIDEO];
     }
     if (MUSIC::IsAudio(*item))
     {
-      initThumbLoader<CMusicThumbLoader>(InfoTagType::AUDIO);
+      InitThumbLoader<CMusicThumbLoader>(AUDIO);
       return m_thumbloaders[InfoTagType::AUDIO];
     }
     if (item->IsPicture())
     {
-      initThumbLoader<CPictureThumbLoader>(InfoTagType::PICTURE);
+      InitThumbLoader<CPictureThumbLoader>(PICTURE);
       return m_thumbloaders[InfoTagType::PICTURE];
     }
     if (item->IsPVRChannelGroup())
     {
-      initThumbLoader<CPVRThumbLoader>(InfoTagType::PVR);
-      return m_thumbloaders[InfoTagType::PVR];
+      InitThumbLoader<CPVRThumbLoader>(PVR);
+      return m_thumbloaders[PVR];
     }
-    initThumbLoader<CProgramThumbLoader>(InfoTagType::PROGRAM);
-    return m_thumbloaders[InfoTagType::PROGRAM];
+    InitThumbLoader<CProgramThumbLoader>(PROGRAM);
+    return m_thumbloaders[PROGRAM];
   }
 
   template<class CThumbLoaderClass>
-  void initThumbLoader(InfoTagType type)
+  void InitThumbLoader(InfoTagType type)
   {
-    if (!m_thumbloaders.count(type))
+    if (!m_thumbloaders.contains(type))
     {
-      std::shared_ptr<CThumbLoader> thumbLoader = std::make_shared<CThumbLoaderClass>();
+      auto thumbLoader{std::make_shared<CThumbLoaderClass>()};
       thumbLoader->OnLoaderStart();
-      m_thumbloaders.insert(make_pair(type, thumbLoader));
+      m_thumbloaders.insert({type, std::move(thumbLoader)});
     }
   }
 
-  const std::vector<CGUIStaticItemPtr> &GetItems() const { return m_items; }
-  const std::string &GetTarget() const { return m_target; }
-  std::vector<InfoTagType> GetItemTypes(std::vector<InfoTagType> &itemTypes) const
+  const std::vector<CGUIStaticItemPtr>& GetItems() const { return m_items; }
+  const std::string& GetTarget() const { return m_target; }
+  std::vector<InfoTagType> GetItemTypes(std::vector<InfoTagType>& itemTypes) const
   {
     itemTypes.clear();
-    for (const auto& i : m_thumbloaders)
-      itemTypes.push_back(i.first);
+    for (const auto& [type, _] : m_thumbloaders)
+      itemTypes.emplace_back(type);
     return itemTypes;
   }
+
 private:
   std::string m_url;
   std::string m_target;
   SortDescription m_sort;
-  unsigned int m_limit;
+  unsigned int m_limit{10};
   CDirectoryProvider::BrowseMode m_browse{CDirectoryProvider::BrowseMode::AUTO};
   int m_parentID;
   std::vector<CGUIStaticItemPtr> m_items;
-  std::map<InfoTagType, std::shared_ptr<CThumbLoader> > m_thumbloaders;
+  std::map<InfoTagType, std::shared_ptr<CThumbLoader>> m_thumbloaders;
 };
+} // unnamed namespace
 
 CDirectoryProvider::CDirectoryProvider(const TiXmlElement* element, int parentID)
-  : IListProvider(parentID)
+  : IListProvider(parentID), m_nextJobTimer(this)
 {
   assert(element);
   if (!element->NoChildren())
   {
-    const char *target = element->Attribute("target");
+    const char* target = element->Attribute("target");
     if (target)
       m_target.SetLabel(target, "", parentID);
 
-    const char *sortMethod = element->Attribute("sortby");
+    const char* sortMethod = element->Attribute("sortby");
     if (sortMethod)
       m_sortMethod.SetLabel(sortMethod, "", parentID);
 
-    const char *sortOrder = element->Attribute("sortorder");
+    const char* sortOrder = element->Attribute("sortorder");
     if (sortOrder)
       m_sortOrder.SetLabel(sortOrder, "", parentID);
 
-    const char *limit = element->Attribute("limit");
+    const char* limit = element->Attribute("limit");
     if (limit)
       m_limit.SetLabel(limit, "", parentID);
 
@@ -221,8 +393,9 @@ CDirectoryProvider::CDirectoryProvider(const TiXmlElement* element, int parentID
 }
 
 CDirectoryProvider::CDirectoryProvider(const CDirectoryProvider& other)
-  : IListProvider(other.m_parentID),
-    m_updateState(INVALIDATED),
+  : IListProvider(other),
+    m_updateState(UpdateState::INVALIDATED),
+    m_nextJobTimer(this),
     m_url(other.m_url),
     m_target(other.m_target),
     m_sortMethod(other.m_sortMethod),
@@ -247,6 +420,20 @@ std::unique_ptr<IListProvider> CDirectoryProvider::Clone()
   return std::make_unique<CDirectoryProvider>(*this);
 }
 
+void CDirectoryProvider::StartDirectoryJob()
+{
+  std::unique_lock lock(m_section);
+  m_jobPending = false;
+  m_lastJobStartedAt = std::chrono::system_clock::now();
+  m_nextJobTimer.Stop();
+
+  CLog::Log(LOGDEBUG, "CDirectoryProvider[{}]: refreshing...", m_currentUrl);
+  m_jobID = CServiceBroker::GetJobManager()->AddJob(
+      new CDirectoryJob(m_currentUrl, m_target.GetLabel(GetParentId(), false), m_currentSort,
+                        m_currentLimit, m_currentBrowse, GetParentId()),
+      this);
+}
+
 bool CDirectoryProvider::Update(bool forceRefresh)
 {
   // we never need to force refresh here
@@ -260,78 +447,50 @@ bool CDirectoryProvider::Update(bool forceRefresh)
   fireJob |= UpdateBrowse();
   fireJob &= !m_currentUrl.empty();
 
-  std::unique_lock<CCriticalSection> lock(m_section);
-  if (m_updateState == INVALIDATED)
+  std::unique_lock lock(m_section);
+  if (m_updateState == UpdateState::INVALIDATED)
     fireJob = true;
-  else if (m_updateState == DONE)
+  else if (m_updateState == UpdateState::DONE)
     changed = true;
 
-  m_updateState = OK;
+  m_updateState = UpdateState::OK;
 
   if (fireJob)
   {
-    CLog::Log(LOGDEBUG, "CDirectoryProvider[{}]: refreshing..", m_currentUrl);
     if (m_jobID)
-      CServiceBroker::GetJobManager()->CancelJob(m_jobID);
-    m_jobID = CServiceBroker::GetJobManager()->AddJob(
-        new CDirectoryJob(m_currentUrl, m_target.GetLabel(m_parentID, false), m_currentSort,
-                          m_currentLimit, m_currentBrowse, m_parentID),
-        this);
+    {
+      // Ignore update request for now.
+      // We will start another update job once the currently running has finished.
+      m_jobPending = true;
+      changed = false;
+    }
+    else
+    {
+      if (m_jobPending)
+      {
+        // Ignore the update request.
+        // We already have scheduled another update job.
+        changed = false;
+      }
+      else
+      {
+        // Start a new update job.
+        StartDirectoryJob();
+      }
+    }
   }
 
   if (!changed)
   {
-    for (auto& i : m_items)
-      changed |= i->UpdateVisibility(m_parentID);
+    for (const auto& i : m_items)
+      changed |= i->UpdateVisibility(GetParentId());
   }
   return changed; //! @todo Also returned changed if properties are changed (if so, need to update scroll to letter).
 }
 
-void CDirectoryProvider::Announce(ANNOUNCEMENT::AnnouncementFlag flag,
-                                  const std::string& sender,
-                                  const std::string& message,
-                                  const CVariant& data)
-{
-  {
-    std::unique_lock<CCriticalSection> lock(m_section);
-    // we don't need to refresh anything if there are no fitting
-    // items in this list provider for the announcement flag
-    if (((flag & ANNOUNCEMENT::VideoLibrary) &&
-         (std::find(m_itemTypes.begin(), m_itemTypes.end(), InfoTagType::VIDEO) == m_itemTypes.end())) ||
-        ((flag & ANNOUNCEMENT::AudioLibrary) &&
-         (std::find(m_itemTypes.begin(), m_itemTypes.end(), InfoTagType::AUDIO) == m_itemTypes.end())))
-      return;
-
-    if (flag & ANNOUNCEMENT::Player)
-    {
-      if (message == "OnPlay" || message == "OnResume" || message == "OnStop")
-      {
-        if (m_currentSort.sortBy ==
-                SortByNone || // not nice, but many directories that need to be refreshed on start/stop have no special sort order (e.g. in progress movies)
-            m_currentSort.sortBy == SortByLastPlayed ||
-            m_currentSort.sortBy == SortByDateAdded || m_currentSort.sortBy == SortByPlaycount ||
-            m_currentSort.sortBy == SortByLastUsed)
-          m_updateState = INVALIDATED;
-      }
-    }
-    else
-    {
-      // if we're in a database transaction, don't bother doing anything just yet
-      if (data.isMember("transaction") && data["transaction"].asBoolean())
-        return;
-
-      // if there was a database update, we set the update state
-      // to PENDING to fire off a new job in the next update
-      if (message == "OnScanFinished" || message == "OnCleanFinished" || message == "OnUpdate" ||
-          message == "OnRemove" || message == "OnRefresh")
-        m_updateState = INVALIDATED;
-    }
-  }
-}
-
 void CDirectoryProvider::Fetch(std::vector<std::shared_ptr<CGUIListItem>>& items)
 {
-  std::unique_lock<CCriticalSection> lock(m_section);
+  std::unique_lock lock(m_section);
   items.clear();
   for (const auto& i : m_items)
   {
@@ -340,60 +499,16 @@ void CDirectoryProvider::Fetch(std::vector<std::shared_ptr<CGUIListItem>>& items
   }
 }
 
-void CDirectoryProvider::OnAddonEvent(const ADDON::AddonEvent& event)
-{
-  std::unique_lock<CCriticalSection> lock(m_section);
-  if (URIUtils::IsProtocol(m_currentUrl, "addons"))
-  {
-    if (typeid(event) == typeid(ADDON::AddonEvents::Enabled) ||
-        typeid(event) == typeid(ADDON::AddonEvents::Disabled) ||
-        typeid(event) == typeid(ADDON::AddonEvents::ReInstalled) ||
-        typeid(event) == typeid(ADDON::AddonEvents::UnInstalled) ||
-        typeid(event) == typeid(ADDON::AddonEvents::MetadataChanged) ||
-        typeid(event) == typeid(ADDON::AddonEvents::AutoUpdateStateChanged))
-      m_updateState = INVALIDATED;
-  }
-}
-
-void CDirectoryProvider::OnAddonRepositoryEvent(const ADDON::CRepositoryUpdater::RepositoryUpdated& event)
-{
-  std::unique_lock<CCriticalSection> lock(m_section);
-  if (URIUtils::IsProtocol(m_currentUrl, "addons"))
-  {
-    m_updateState = INVALIDATED;
-  }
-}
-
-void CDirectoryProvider::OnPVRManagerEvent(const PVR::PVREvent& event)
-{
-  std::unique_lock<CCriticalSection> lock(m_section);
-  if (URIUtils::IsProtocol(m_currentUrl, "pvr"))
-  {
-    if (event == PVR::PVREvent::ManagerStarted || event == PVR::PVREvent::ManagerStopped ||
-        event == PVR::PVREvent::RecordingsInvalidated ||
-        event == PVR::PVREvent::TimersInvalidated ||
-        event == PVR::PVREvent::ChannelGroupsInvalidated ||
-        event == PVR::PVREvent::SavedSearchesInvalidated ||
-        event == PVR::PVREvent::ClientsInvalidated ||
-        event == PVR::PVREvent::ClientsPrioritiesInvalidated)
-      m_updateState = INVALIDATED;
-  }
-}
-
-void CDirectoryProvider::OnFavouritesEvent(const CFavouritesService::FavouritesUpdated& event)
-{
-  std::unique_lock<CCriticalSection> lock(m_section);
-  if (URIUtils::IsProtocol(m_currentUrl, "favourites"))
-    m_updateState = INVALIDATED;
-}
-
 void CDirectoryProvider::Reset()
 {
   {
-    std::unique_lock<CCriticalSection> lock(m_section);
+    std::unique_lock lock(m_section);
     if (m_jobID)
       CServiceBroker::GetJobManager()->CancelJob(m_jobID);
     m_jobID = 0;
+    m_jobPending = false;
+    m_lastJobStartedAt = {};
+    m_nextJobTimer.Stop();
     m_items.clear();
     m_currentTarget.clear();
     m_currentUrl.clear();
@@ -402,51 +517,104 @@ void CDirectoryProvider::Reset()
     m_currentSort.sortOrder = SortOrderAscending;
     m_currentLimit = 0;
     m_currentBrowse = BrowseMode::AUTO;
-    m_updateState = OK;
+    m_updateState = UpdateState::OK;
   }
 
-  std::unique_lock<CCriticalSection> subscriptionLock(m_subscriptionSection);
-  if (m_isSubscribed)
   {
-    m_isSubscribed = false;
-    CServiceBroker::GetAnnouncementManager()->RemoveAnnouncer(this);
-    CServiceBroker::GetFavouritesService().Events().Unsubscribe(this);
-    CServiceBroker::GetRepositoryUpdater().Events().Unsubscribe(this);
-    CServiceBroker::GetAddonMgr().Events().Unsubscribe(this);
-    CServiceBroker::GetPVRManager().Events().Unsubscribe(this);
+    std::unique_lock subscriptionLock(m_subscriptionSection);
+    m_subscriber.reset();
   }
 }
 
 void CDirectoryProvider::FreeResources(bool immediately)
 {
-  std::unique_lock<CCriticalSection> lock(m_section);
+  std::unique_lock lock(m_section);
   for (const auto& item : m_items)
     item->FreeMemory(immediately);
 }
 
-void CDirectoryProvider::OnJobComplete(unsigned int jobID, bool success, CJob *job)
+void CDirectoryProvider::OnJobComplete(unsigned int jobID, bool success, CJob* job)
 {
-  std::unique_lock<CCriticalSection> lock(m_section);
+  std::unique_lock lock(m_section);
   if (success)
   {
     m_items = static_cast<CDirectoryJob*>(job)->GetItems();
     m_currentTarget = static_cast<CDirectoryJob*>(job)->GetTarget();
     static_cast<CDirectoryJob*>(job)->GetItemTypes(m_itemTypes);
-    if (m_updateState == OK)
-      m_updateState = DONE;
+    if (m_updateState == UpdateState::OK)
+      m_updateState = UpdateState::DONE;
   }
   m_jobID = 0;
+
+  if (m_jobPending)
+  {
+    // Handle delayed update request(s).
+
+    using namespace std::chrono_literals;
+    static constexpr auto JOB_RATE_LIMIT = 1s;
+    const auto now{std::chrono::system_clock::now()};
+    const auto nextJobAllowedAt{m_lastJobStartedAt + JOB_RATE_LIMIT};
+
+    if (now >= nextJobAllowedAt)
+    {
+      // Finished job ended after job schedule timeslice was over. Start a new update job now.
+      StartDirectoryJob();
+    }
+    else
+    {
+      // Finished job ended before job schedule timeslice was over. Start a new update job delayed.
+      m_nextJobTimer.Start(
+          std::chrono::duration_cast<std::chrono::milliseconds>(nextJobAllowedAt - now));
+    }
+  }
+}
+
+void CDirectoryProvider::OnTimeout()
+{
+  std::unique_lock lock(m_section);
+
+  if (m_jobPending)
+  {
+    // Start a new update job.
+    StartDirectoryJob();
+  }
+}
+
+bool CDirectoryProvider::OnEventPublished(Topic topic /*= Topic::UNSPECIFIED*/)
+{
+  std::unique_lock lock(m_section);
+  switch (topic)
+  {
+    case Topic::UNSPECIFIED:
+      // Always invalidate.
+      break;
+    case Topic::PLAYER:
+      // We don't need to do anything if there is no matching sort method.
+      if (m_currentSort.sortBy != SortByNone && m_currentSort.sortBy != SortByLastPlayed &&
+          m_currentSort.sortBy != SortByDateAdded && m_currentSort.sortBy != SortByPlaycount &&
+          m_currentSort.sortBy != SortByLastUsed)
+        return false;
+      break;
+    case Topic::VIDEO_LIBRARY:
+      // We don't need to do anything if there are no fitting items.
+      return std::ranges::find(m_itemTypes, InfoTagType::VIDEO) == m_itemTypes.cend();
+    case Topic::AUDIO_LIBRARY:
+      // We don't need to do anything if there are no fitting items.
+      return std::ranges::find(m_itemTypes, InfoTagType::AUDIO) == m_itemTypes.cend();
+  }
+  m_updateState = UpdateState::INVALIDATED;
+  return true;
 }
 
 std::string CDirectoryProvider::GetTarget(const CFileItem& item) const
 {
   std::string target = item.GetProperty("node.target").asString();
 
-  std::unique_lock<CCriticalSection> lock(m_section);
+  std::unique_lock lock(m_section);
   if (target.empty())
     target = m_currentTarget;
   if (target.empty())
-    target = m_target.GetLabel(m_parentID, false);
+    target = m_target.GetLabel(GetParentId(), false);
 
   return target;
 }
@@ -545,52 +713,49 @@ bool CDirectoryProvider::OnContextMenu(const std::shared_ptr<CGUIListItem>& item
 
 bool CDirectoryProvider::IsUpdating() const
 {
-  std::unique_lock<CCriticalSection> lock(m_section);
-  return m_jobID || m_updateState == DONE || m_updateState == INVALIDATED;
+  {
+    std::unique_lock lock(m_section);
+    if (m_jobID || m_jobPending || m_updateState == UpdateState::DONE ||
+        m_updateState == UpdateState::INVALIDATED)
+      return true;
+  }
+
+  std::unique_lock subscriptionLock(m_subscriptionSection);
+  return m_subscriber && !m_subscriber->IsReadyToUse();
 }
 
 bool CDirectoryProvider::UpdateURL()
 {
+  std::string value;
   {
-    std::unique_lock<CCriticalSection> lock(m_section);
-    std::string value(m_url.GetLabel(m_parentID, false));
+    std::unique_lock lock(m_section);
+    value = m_url.GetLabel(GetParentId(), false);
     if (value == m_currentUrl)
       return false;
 
     m_currentUrl = value;
   }
 
-  std::unique_lock<CCriticalSection> subscriptionLock(m_subscriptionSection);
-  if (!m_isSubscribed)
-  {
-    m_isSubscribed = true;
-    CServiceBroker::GetAnnouncementManager()->AddAnnouncer(
-        this, ANNOUNCEMENT::VideoLibrary | ANNOUNCEMENT::AudioLibrary | ANNOUNCEMENT::Player |
-                  ANNOUNCEMENT::GUI);
-    CServiceBroker::GetAddonMgr().Events().Subscribe(this, &CDirectoryProvider::OnAddonEvent);
-    CServiceBroker::GetRepositoryUpdater().Events().Subscribe(this, &CDirectoryProvider::OnAddonRepositoryEvent);
-    CServiceBroker::GetPVRManager().Events().Subscribe(this, &CDirectoryProvider::OnPVRManagerEvent);
-    CServiceBroker::GetFavouritesService().Events().Subscribe(this, &CDirectoryProvider::OnFavouritesEvent);
-  }
+  std::unique_lock subscriptionLock(m_subscriptionSection);
+  m_subscriber = GetSubscriber(value, *this);
   return true;
 }
 
 bool CDirectoryProvider::UpdateLimit()
 {
-  std::unique_lock<CCriticalSection> lock(m_section);
-  unsigned int value = m_limit.GetIntValue(m_parentID);
+  std::unique_lock lock(m_section);
+  unsigned int value = m_limit.GetIntValue(GetParentId());
   if (value == m_currentLimit)
     return false;
 
   m_currentLimit = value;
-
   return true;
 }
 
 bool CDirectoryProvider::UpdateBrowse()
 {
-  std::unique_lock<CCriticalSection> lock(m_section);
-  const std::string stringValue{m_browse.GetLabel(m_parentID, false)};
+  std::unique_lock lock(m_section);
+  const std::string stringValue{m_browse.GetLabel(GetParentId(), false)};
   BrowseMode value{m_currentBrowse};
   if (StringUtils::EqualsNoCase(stringValue, "always"))
     value = BrowseMode::ALWAYS;
@@ -608,9 +773,9 @@ bool CDirectoryProvider::UpdateBrowse()
 
 bool CDirectoryProvider::UpdateSort()
 {
-  std::unique_lock<CCriticalSection> lock(m_section);
-  SortBy sortMethod(SortUtils::SortMethodFromString(m_sortMethod.GetLabel(m_parentID, false)));
-  SortOrder sortOrder(SortUtils::SortOrderFromString(m_sortOrder.GetLabel(m_parentID, false)));
+  std::unique_lock lock(m_section);
+  SortBy sortMethod(SortUtils::SortMethodFromString(m_sortMethod.GetLabel(GetParentId(), false)));
+  SortOrder sortOrder(SortUtils::SortOrderFromString(m_sortOrder.GetLabel(GetParentId(), false)));
   if (sortOrder == SortOrderNone)
     sortOrder = SortOrderAscending;
 
@@ -621,8 +786,10 @@ bool CDirectoryProvider::UpdateSort()
   m_currentSort.sortOrder = sortOrder;
   m_currentSort.sortAttributes = SortAttributeIgnoreFolders;
 
-  if (CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(CSettings::SETTING_FILELISTS_IGNORETHEWHENSORTING))
-    m_currentSort.sortAttributes = static_cast<SortAttribute>(m_currentSort.sortAttributes | SortAttributeIgnoreArticle);
+  if (CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
+          CSettings::SETTING_FILELISTS_IGNORETHEWHENSORTING))
+    m_currentSort.sortAttributes =
+        static_cast<SortAttribute>(m_currentSort.sortAttributes | SortAttributeIgnoreArticle);
 
   return true;
 }

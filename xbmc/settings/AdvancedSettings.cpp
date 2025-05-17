@@ -107,9 +107,7 @@ void CAdvancedSettings::Initialize(CSettingsManager& settingsMgr)
     m_handleMounting = true;
 
   settingsMgr.RegisterSettingsHandler(this, true);
-  std::set<std::string> settingSet;
-  settingSet.insert(CSettings::SETTING_DEBUG_SHOWLOGINFO);
-  settingsMgr.RegisterCallback(this, settingSet);
+  settingsMgr.RegisterCallback(this, {CSettings::SETTING_DEBUG_SHOWLOGINFO});
 }
 
 void CAdvancedSettings::Uninitialize(CSettingsManager& settingsMgr)
@@ -325,6 +323,7 @@ void CAdvancedSettings::Initialize()
   m_bVideoLibraryUseFastHash = true;
   m_bVideoScannerIgnoreErrors = false;
   m_iVideoLibraryDateAdded = 1; // prefer mtime over ctime and current time
+  m_minimumEpisodePlaylistDuration = 5 * 60; // 5 minutes
 
   m_caseSensitiveLocalArtMatch = true; // case sensitive local art matching
 
@@ -534,11 +533,7 @@ void CAdvancedSettings::ParseSettingsFile(const std::string &file)
     }
     if (network->FirstChildElement("nfstimeout"))
     {
-#ifdef HAS_NFS_SET_TIMEOUT
       XMLUtils::GetUInt(network, "nfstimeout", m_nfsTimeout, 0, 3600);
-#else
-      CLog::Log(LOGWARNING, "nfstimeout unsupported");
-#endif
     }
     if (network->FirstChildElement("nfsretries"))
     {
@@ -828,6 +823,7 @@ void CAdvancedSettings::ParseSettingsFile(const std::string &file)
     XMLUtils::GetBoolean(pElement, "importresumepoint", m_bVideoLibraryImportResumePoint);
     XMLUtils::GetInt(pElement, "dateadded", m_iVideoLibraryDateAdded);
     XMLUtils::GetBoolean(pElement, "casesensitivelocalartmatch", m_caseSensitiveLocalArtMatch);
+    XMLUtils::GetInt(pElement, "minimumepisodeplaylistduration", m_minimumEpisodePlaylistDuration);
   }
 
   pElement = pRootElement->FirstChildElement("videoscanner");

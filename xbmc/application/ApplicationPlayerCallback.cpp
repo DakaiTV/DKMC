@@ -46,7 +46,7 @@ CApplicationPlayerCallback::CApplicationPlayerCallback()
 
 void CApplicationPlayerCallback::OnPlayBackEnded()
 {
-  CLog::LogF(LOGDEBUG, "CApplicationPlayerCallback::OnPlayBackEnded");
+  CLog::LogF(LOGDEBUG, "call");
 
   CGUIMessage msg(GUI_MSG_PLAYBACK_ENDED, 0, 0);
   CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
@@ -54,7 +54,7 @@ void CApplicationPlayerCallback::OnPlayBackEnded()
 
 void CApplicationPlayerCallback::OnPlayBackStarted(const CFileItem& file)
 {
-  CLog::LogF(LOGDEBUG, "CApplication::OnPlayBackStarted");
+  CLog::LogF(LOGDEBUG, "call");
   std::shared_ptr<CFileItem> itemCurrentFile;
 
   // check if VideoPlayer should set file item stream details from its current streams
@@ -113,6 +113,24 @@ void CApplicationPlayerCallback::OnPlayerCloseFile(const CFileItem& file,
   // Make sure we don't reset existing bookmark etc. on eg. player start failure
   if (bookmark.timeInSeconds == 0.0)
     return;
+
+  // Adjust paths of new fileItem for physical/removable blurays
+  // DynPath contains the mpls (playlist) played
+  // VideoInfoTag()->m_strFileNameAndPath contains the removable:// path
+  // We need to update DynPath with the removable:// path (for the database), keeping the playlist
+  if (fileItem.HasVideoInfoTag() &&
+      fileItem.GetVideoInfoTag()->m_strFileNameAndPath.starts_with("bluray://removable"))
+  {
+    const std::string dynPath{fileItem.GetDynPath()};
+    if (URIUtils::IsBlurayPath(dynPath))
+    {
+      CURL url{fileItem.GetVideoInfoTag()->m_strFileNameAndPath};
+      const CURL fileUrl{dynPath};
+      url.SetFileName(fileUrl.GetFileName());
+      fileItem.SetPath(url.Get());
+      fileItem.SetDynPath("");
+    }
+  }
 
   if (stackHelper->GetRegisteredStack(fileItem) != nullptr)
   {
@@ -200,7 +218,7 @@ void CApplicationPlayerCallback::OnPlayBackResumed()
 
 void CApplicationPlayerCallback::OnPlayBackStopped()
 {
-  CLog::LogF(LOGDEBUG, "CApplication::OnPlayBackStopped");
+  CLog::LogF(LOGDEBUG, "call");
 
   CGUIMessage msg(GUI_MSG_PLAYBACK_STOPPED, 0, 0);
   CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
@@ -217,7 +235,7 @@ void CApplicationPlayerCallback::OnPlayBackError()
 
 void CApplicationPlayerCallback::OnQueueNextItem()
 {
-  CLog::LogF(LOGDEBUG, "CApplication::OnQueueNextItem");
+  CLog::LogF(LOGDEBUG, "call");
 
   // informs python script currently running that we are requesting the next track
   // (does nothing if python is not loaded)
@@ -259,7 +277,7 @@ void CApplicationPlayerCallback::OnPlayBackSpeedChanged(int iSpeed)
 
 void CApplicationPlayerCallback::OnAVChange()
 {
-  CLog::LogF(LOGDEBUG, "CApplication::OnAVChange");
+  CLog::LogF(LOGDEBUG, "call");
 
   CServiceBroker::GetGUI()->GetStereoscopicsManager().OnStreamChange();
 
@@ -269,7 +287,7 @@ void CApplicationPlayerCallback::OnAVChange()
 
 void CApplicationPlayerCallback::OnAVStarted(const CFileItem& file)
 {
-  CLog::LogF(LOGDEBUG, "CApplication::OnAVStarted");
+  CLog::LogF(LOGDEBUG, "call");
 
   CGUIMessage msg(GUI_MSG_PLAYBACK_AVSTARTED, 0, 0);
   CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);

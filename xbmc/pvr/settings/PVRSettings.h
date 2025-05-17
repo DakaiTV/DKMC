@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "settings/SettingsContainer.h"
 #include "settings/lib/ISettingCallback.h"
 #include "settings/lib/ISettingsHandler.h"
 #include "threads/CriticalSection.h"
@@ -27,7 +28,7 @@ namespace PVR
   class CPVRSettings : private ISettingsHandler, private ISettingCallback
   {
   public:
-    explicit CPVRSettings(const std::set<std::string>& settingNames);
+    explicit CPVRSettings(const SettingsContainer& settingNames);
     ~CPVRSettings() override;
 
     void RegisterCallback(ISettingCallback* callback);
@@ -65,10 +66,10 @@ namespace PVR
     CPVRSettings(const CPVRSettings&) = delete;
     CPVRSettings& operator=(CPVRSettings const&) = delete;
 
-    void Init(const std::set<std::string>& settingNames);
+    void Init(const SettingsContainer& settingNames);
 
     mutable CCriticalSection m_critSection;
-    std::map<std::string, std::shared_ptr<CSetting>> m_settings;
+    std::map<std::string, std::shared_ptr<CSetting>, std::less<>> m_settings;
     std::set<ISettingCallback*> m_callbacks;
 
     static unsigned int m_iInstances;
