@@ -46,9 +46,9 @@ if(NOT TARGET ${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME})
   
     BUILD_DEP_TARGET()
   
-    add_dependencies(${${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_BUILD_NAME} LIBRARY::Zlib
+    add_dependencies(${${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_BUILD_NAME} LIBRARY::ZLIB
                                                                         LIBRARY::Utfcpp)
-    set(${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_LINK_LIBRARIES "LIBRARY::Zlib")
+    set(${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_LINK_LIBRARIES "LIBRARY::ZLIB")
   endmacro()
 
   # If there is a potential this library can be built internally
@@ -136,6 +136,10 @@ if(NOT TARGET ${APP_NAME_LC}::${CMAKE_FIND_PACKAGE_NAME})
   include(SelectLibraryConfigurations)
   select_library_configurations(${${CMAKE_FIND_PACKAGE_NAME}_MODULE})
   unset(${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_LIBRARIES)
+
+  if(NOT VERBOSE_FIND)
+     set(${CMAKE_FIND_PACKAGE_NAME}_FIND_QUIETLY TRUE)
+   endif()
 
   include(FindPackageHandleStandardArgs)
   find_package_handle_standard_args(TagLib

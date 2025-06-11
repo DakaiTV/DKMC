@@ -44,6 +44,7 @@ if(NOT TARGET LibDvdCSS::LibDvdCSS)
 
   if(CORE_SYSTEM_NAME MATCHES windows)
     set(CMAKE_ARGS -DDUMMY_DEFINE=ON
+                   -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                    ${LIBDVD_ADDITIONAL_ARGS})
   else()
     find_program(AUTORECONF autoreconf REQUIRED)
@@ -71,6 +72,10 @@ if(NOT TARGET LibDvdCSS::LibDvdCSS)
   endif()
 
   BUILD_DEP_TARGET()
+
+  if(NOT VERBOSE_FIND)
+     set(${CMAKE_FIND_PACKAGE_NAME}_FIND_QUIETLY TRUE)
+   endif()
 
   include(FindPackageHandleStandardArgs)
   find_package_handle_standard_args(LibDvdCSS

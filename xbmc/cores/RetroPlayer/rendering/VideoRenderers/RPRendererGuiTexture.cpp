@@ -48,12 +48,11 @@ CRPBaseRenderer* CRendererFactoryGuiTexture::CreateRenderer(
 
 RenderBufferPoolVector CRendererFactoryGuiTexture::CreateBufferPools(CRenderContext& context)
 {
-  return
-  {
+  return {
 #if !defined(HAS_DX)
-    std::make_shared<CRenderBufferPoolGuiTexture>(SCALINGMETHOD::NEAREST),
+      std::make_shared<CRenderBufferPoolGuiTexture>(SCALINGMETHOD::NEAREST),
 #endif
-        std::make_shared<CRenderBufferPoolGuiTexture>(SCALINGMETHOD::LINEAR),
+      std::make_shared<CRenderBufferPoolGuiTexture>(SCALINGMETHOD::LINEAR),
   };
 }
 
@@ -66,7 +65,14 @@ CRenderBufferPoolGuiTexture::CRenderBufferPoolGuiTexture(SCALINGMETHOD scalingMe
 
 bool CRenderBufferPoolGuiTexture::IsCompatible(const CRenderVideoSettings& renderSettings) const
 {
-  return renderSettings.GetScalingMethod() == m_scalingMethod;
+  if (renderSettings.GetScalingMethod() != m_scalingMethod)
+    return false;
+
+  // Shaders not supported
+  if (!renderSettings.GetShaderPreset().empty())
+    return false;
+
+  return true;
 }
 
 IRenderBuffer* CRenderBufferPoolGuiTexture::CreateRenderBuffer(void* header /* = nullptr */)

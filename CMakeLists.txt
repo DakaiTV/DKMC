@@ -69,7 +69,11 @@ endif()
 # Hide messages from Check*.cmake (e.g. CheckCSourceCompiles)
 if(NOT VERBOSE)
   set(CMAKE_REQUIRED_QUIET ON)
-  set(SEARCH_QUIET QUIET)
+
+  # Hide Find module output
+  if(NOT VERBOSE_FIND)
+    set(SEARCH_QUIET QUIET)
+  endif()
 endif()
 
 # Includes
@@ -89,6 +93,7 @@ include(cmake/scripts/common/DependencyOptions.cmake)
 
 # general
 option(VERBOSE            "Enable verbose output?" OFF)
+option(VERBOSE_FIND       "Enable verbose output of library searches only?" OFF)
 option(ENABLE_CLANGTIDY   "Enable clang-tidy support?" OFF)
 option(ENABLE_CPPCHECK    "Enable cppcheck support?" OFF)
 option(ENABLE_DVDCSS      "Enable libdvdcss support?" ON)
@@ -137,7 +142,9 @@ endif()
 if(UNIX)
   option(FFMPEG_PATH        "Path to external ffmpeg?" "")
   option(ENABLE_INTERNAL_FSTRCMP "Enable internal fstrcmp?" OFF)
-  option(ENABLE_INTERNAL_DAV1D "Enable internal dav1d?" OFF)
+  if(ENABLE_INTERNAL_FFMPEG)
+    option(ENABLE_INTERNAL_DAV1D "Enable internal dav1d?" OFF)
+  endif()
   option(ENABLE_INTERNAL_GTEST "Enable internal gtest?" OFF)
 endif()
 
@@ -225,7 +232,6 @@ endif()
 
 # Required dependencies. Keep in alphabetical order please
 set(required_deps ASS>=0.15.0
-                  Cdio
                   CrossGUID
                   Curl
                   Exiv2
@@ -312,6 +318,7 @@ if(ENABLE_UPNP)
 endif()
 
 if(ENABLE_OPTICAL)
+  core_require_dep(Cdio>=0.80)
   list(APPEND DEP_DEFINES -DHAS_OPTICAL_DRIVE -DHAS_CDDA_RIPPER)
 endif()
 

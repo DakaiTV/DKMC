@@ -51,6 +51,7 @@ if(NOT TARGET LibDvdRead::LibDvdRead)
 
   if(CORE_SYSTEM_NAME MATCHES windows)
     set(CMAKE_ARGS -DDUMMY_DEFINE=ON
+                   -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                    ${LIBDVD_ADDITIONAL_ARGS})
   else()
 
@@ -90,6 +91,10 @@ if(NOT TARGET LibDvdRead::LibDvdRead)
   if(TARGET LibDvdCSS::LibDvdCSS)
     add_dependencies(${${${CMAKE_FIND_PACKAGE_NAME}_MODULE}_BUILD_NAME} LibDvdCSS::LibDvdCSS)
   endif()
+
+  if(NOT VERBOSE_FIND)
+     set(${CMAKE_FIND_PACKAGE_NAME}_FIND_QUIETLY TRUE)
+   endif()
 
   include(FindPackageHandleStandardArgs)
   find_package_handle_standard_args(LibDvdRead

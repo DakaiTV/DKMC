@@ -331,8 +331,7 @@ void CGUIDialogAudioSettings::AddAudioStreams(const std::shared_ptr<CSettingGrou
 
 bool CGUIDialogAudioSettings::IsPlayingPassthrough(const std::string& condition,
                                                    const std::string& value,
-                                                   const SettingConstPtr& setting,
-                                                   void* data)
+                                                   const SettingConstPtr& setting)
 {
   const auto& components = CServiceBroker::GetAppComponents();
   const auto appPlayer = components.GetComponent<CApplicationPlayer>();
@@ -341,14 +340,13 @@ bool CGUIDialogAudioSettings::IsPlayingPassthrough(const std::string& condition,
 
 void CGUIDialogAudioSettings::AudioStreamsOptionFiller(const SettingConstPtr& setting,
                                                        std::vector<IntegerSettingOption>& list,
-                                                       int& current,
-                                                       void* data)
+                                                       int& current)
 {
   const auto& components = CServiceBroker::GetAppComponents();
   const auto appPlayer = components.GetComponent<CApplicationPlayer>();
   const int audioStreamCount = appPlayer->GetAudioStreamCount();
 
-  std::string channelsLabel = g_localizeStrings.Get(10127);
+  const std::string& channelsLabel = g_localizeStrings.Get(10127);
   std::string strUnknown = "[" + g_localizeStrings.Get(13205) + "]";
 
   // cycle through each audio stream and add it to our list control

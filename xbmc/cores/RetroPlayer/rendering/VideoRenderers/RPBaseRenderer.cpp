@@ -12,6 +12,7 @@
 #include "cores/RetroPlayer/buffers/IRenderBufferPool.h"
 #include "cores/RetroPlayer/rendering/RenderContext.h"
 #include "cores/RetroPlayer/rendering/RenderUtils.h"
+#include "cores/RetroPlayer/shaders/IShaderPreset.h"
 #include "utils/log.h"
 
 using namespace KODI;
@@ -37,7 +38,22 @@ CRPBaseRenderer::~CRPBaseRenderer()
 
 bool CRPBaseRenderer::IsCompatible(const CRenderVideoSettings& settings) const
 {
-  return m_bufferPool->IsCompatible(settings);
+  if (!m_bufferPool->IsCompatible(settings))
+    return false;
+
+  // Shader preset must match
+  std::string shaderPreset;
+  if (m_shaderPreset)
+    shaderPreset = m_shaderPreset->GetShaderPreset();
+
+  // Shader preset might not be initialized yet
+  if (!shaderPreset.empty())
+  {
+    if (settings.GetShaderPreset() != shaderPreset)
+      return false;
+  }
+
+  return true;
 }
 
 bool CRPBaseRenderer::Configure(AVPixelFormat format)
@@ -132,6 +148,15 @@ void CRPBaseRenderer::SetRenderRotation(unsigned int rotationDegCCW)
   m_renderSettings.VideoSettings().SetRenderRotation(rotationDegCCW);
 }
 
+void CRPBaseRenderer::SetShaderPreset(const std::string& presetPath)
+{
+  if (presetPath != m_renderSettings.VideoSettings().GetShaderPreset())
+  {
+    m_renderSettings.VideoSettings().SetShaderPreset(presetPath);
+    m_bShadersNeedUpdate = true;
+  }
+}
+
 void CRPBaseRenderer::SetPixels(const std::string& pixelPath)
 {
   m_renderSettings.VideoSettings().SetPixels(pixelPath);
@@ -154,7 +179,7 @@ void CRPBaseRenderer::ManageRenderArea(const IRenderBuffer& renderBuffer)
   // Get screen parameters
   float screenWidth;
   float screenHeight;
-  //! @Todo screenPixelRatio unused - Possibly due to display integer scaling according to Garbear
+  //! @todo screenPixelRatio unused - Possibly due to display integer scaling according to Garbear
   float screenPixelRatio;
 
   if (scaleMode == SCALINGMETHOD::NEAREST && stretchMode == STRETCHMODE::Original &&
@@ -203,11 +228,30 @@ void CRPBaseRenderer::ManageRenderArea(const IRenderBuffer& renderBuffer)
 
   // Adapt the drawing rect points if we have to rotate
   m_rotatedDestCoords = CRenderUtils::ReorderDrawPoints(destRect, rotationDegCCW);
+
+  // Update video shader source size
+  if (m_shaderPreset)
+    m_shaderPreset->SetVideoSize(sourceWidth, sourceHeight);
 }
 
 void CRPBaseRenderer::MarkDirty()
 {
   // CServiceBroker::GetGUI()->GetWindowManager().MarkDirty(m_dimensions); //! @todo
+}
+
+/**
+ * \brief Updates everything needed for video shaders (shader presets)
+ * Needs to be called after m_renderBuffer has been set
+ */
+void CRPBaseRenderer::Updateshaders()
+{
+  if (m_bShadersNeedUpdate)
+  {
+    if (m_shaderPreset)
+      m_bUseShaderPreset =
+          m_shaderPreset->SetShaderPreset(m_renderSettings.VideoSettings().GetShaderPreset());
+    m_bShadersNeedUpdate = false;
+  }
 }
 
 void CRPBaseRenderer::PreRender(bool clear)
@@ -219,6 +263,8 @@ void CRPBaseRenderer::PreRender(bool clear)
   if (clear)
     m_context.Clear(m_context.UseLimitedColor() ? UTILS::COLOR::LIMITED_BLACK
                                                 : UTILS::COLOR::BLACK);
+
+  // ManageRenderArea(*m_renderBuffer);
 }
 
 void CRPBaseRenderer::PostRender()
