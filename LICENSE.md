@@ -1,4 +1,4 @@
-Kodi is provided under
+Kodi based DKMC is provided under
 
     SPDX-License-Identifier: GPL-2.0-or-later
 
