@@ -182,13 +182,14 @@ bool CGUIDialogFileBrowser::OnMessage(CGUIMessage& message)
         if (iItem < 0) break;
         CFileItemPtr pItem = (*m_vecItems)[iItem];
         if ((iAction == ACTION_SELECT_ITEM || iAction == ACTION_MOUSE_LEFT_CLICK) &&
-           (!m_multipleSelection || pItem->m_bIsShareOrDrive || pItem->m_bIsFolder))
+            (!m_multipleSelection || pItem->IsShareOrDrive() || pItem->m_bIsFolder))
         {
           OnClick(iItem);
           return true;
         }
-        else if ((iAction == ACTION_HIGHLIGHT_ITEM || iAction == ACTION_MOUSE_LEFT_CLICK || iAction == ACTION_SELECT_ITEM) &&
-                (m_multipleSelection && !pItem->m_bIsShareOrDrive && !pItem->m_bIsFolder))
+        else if ((iAction == ACTION_HIGHLIGHT_ITEM || iAction == ACTION_MOUSE_LEFT_CLICK ||
+                  iAction == ACTION_SELECT_ITEM) &&
+                 (m_multipleSelection && !pItem->IsShareOrDrive() && !pItem->m_bIsFolder))
         {
           pItem->Select(!pItem->IsSelected());
           CGUIMessage msg(GUI_MSG_ITEM_SELECT, GetID(), message.GetSenderId(), iItem + 1);
@@ -379,7 +380,7 @@ void CGUIDialogFileBrowser::Update(const std::string &strDirectory)
         CFileItemPtr pItem(new CFileItem(".."));
         pItem->SetPath(strParentPath);
         pItem->m_bIsFolder = true;
-        pItem->m_bIsShareOrDrive = false;
+        pItem->SetIsShareOrDrive(false);
         items.AddFront(pItem, 0);
       }
     }
@@ -389,7 +390,7 @@ void CGUIDialogFileBrowser::Update(const std::string &strDirectory)
       // add parent path to the virtual directory
       CFileItemPtr pItem(new CFileItem(".."));
       pItem->SetPath("");
-      pItem->m_bIsShareOrDrive = false;
+      pItem->SetIsShareOrDrive(false);
       pItem->m_bIsFolder = true;
       items.AddFront(pItem, 0);
       strParentPath = "";
@@ -449,7 +450,7 @@ void CGUIDialogFileBrowser::Update(const std::string &strDirectory)
 
   std::string strPath2 = m_Directory->GetPath();
   URIUtils::RemoveSlashAtEnd(strPath2);
-  strSelectedItem = m_history.GetSelectedItem(strPath2==""?"empty":strPath2);
+  strSelectedItem = m_history.GetSelectedItem(strPath2.empty() ? "empty" : strPath2);
 
   bool bSelectedFound = false;
   for (int i = 0; i < m_vecItems->Size(); ++i)
@@ -548,9 +549,9 @@ void CGUIDialogFileBrowser::OnClick(int iItem)
       OnEditMediaSource(pItem.get());
       return;
     }
-    if ( pItem->m_bIsShareOrDrive )
+    if (pItem->IsShareOrDrive())
     {
-      if (!HaveDiscOrConnection(pItem->m_iDriveType))
+      if (!HaveDiscOrConnection(pItem->GetDriveType()))
         return ;
     }
     Update(strPath);
@@ -822,7 +823,7 @@ bool CGUIDialogFileBrowser::ShowAndGetFileList(const std::vector<CMediaSource>& 
   bool confirmed(browser->IsConfirmed());
   if (confirmed)
   {
-    if (browser->m_markedPath.size())
+    if (!browser->m_markedPath.empty())
       path = browser->m_markedPath;
     else
       path.push_back(browser->m_selectedPath);
@@ -910,7 +911,7 @@ bool CGUIDialogFileBrowser::ShowAndGetSource(
 void CGUIDialogFileBrowser::SetSources(const std::vector<CMediaSource>& shares)
 {
   m_shares = shares;
-  if (!m_shares.size() && m_addSourceType.empty())
+  if (m_shares.empty() && m_addSourceType.empty())
     CServiceBroker::GetMediaManager().GetLocalDrives(m_shares);
   m_rootDir.SetSources(m_shares);
 }

@@ -312,7 +312,7 @@ std::vector<std::string> CAddonInstaller::RemoveOrphanedDepsRecursively() const
   std::vector<std::string> removedItems;
 
   auto toRemove = CServiceBroker::GetAddonMgr().GetOrphanedDependencies();
-  while (toRemove.size() > 0)
+  while (!toRemove.empty())
   {
     for (const auto& dep : toRemove)
     {
@@ -366,7 +366,7 @@ bool CAddonInstaller::DoInstall(const AddonPtr& addon,
 {
   // check whether we already have the addon installing
   std::unique_lock lock(m_critSection);
-  if (m_downloadJobs.find(addon->ID()) != m_downloadJobs.end())
+  if (m_downloadJobs.contains(addon->ID()))
     return false;
 
   CAddonInstallJob* installJob = new CAddonInstallJob(addon, repo, autoUpdate);
@@ -534,7 +534,7 @@ bool CAddonInstaller::CheckDependencies(const AddonPtr &addon,
 bool CAddonInstaller::HasJob(const std::string& ID) const
 {
   std::unique_lock lock(m_critSection);
-  return m_downloadJobs.find(ID) != m_downloadJobs.end();
+  return m_downloadJobs.contains(ID);
 }
 
 void CAddonInstaller::PrunePackageCache()
@@ -561,7 +561,7 @@ void CAddonInstaller::PrunePackageCache()
   int i = 0;
   while (size > limit && i < items.Size())
   {
-    size -= items[i]->m_dwSize;
+    size -= items[i]->GetSize();
     db.RemovePackage(items[i]->GetPath());
     CFileUtils::DeleteItem(items[i++]);
   }
@@ -580,7 +580,7 @@ void CAddonInstaller::PrunePackageCache()
     i = 0;
     while (size > limit && i < items.Size())
     {
-      size -= items[i]->m_dwSize;
+      size -= items[i]->GetSize();
       db.RemovePackage(items[i]->GetPath());
       CFileUtils::DeleteItem(items[i++]);
     }
@@ -622,7 +622,7 @@ int64_t CAddonInstaller::EnumeratePackageFolder(
     if (items[i]->m_bIsFolder)
       continue;
 
-    size += items[i]->m_dwSize;
+    size += items[i]->GetSize();
     std::string pack,dummy;
     CAddonVersion::SplitFileName(pack, dummy, items[i]->GetLabel());
     result.try_emplace(pack, std::make_unique<CFileItemList>());
@@ -1257,7 +1257,7 @@ bool CAddonUnInstallJob::DoWork()
   {
     const auto removedItems = CAddonInstaller::GetInstance().RemoveOrphanedDepsRecursively();
 
-    if (removedItems.size() > 0)
+    if (!removedItems.empty())
     {
       CLog::Log(LOGINFO, "CAddonUnInstallJob[{}]: removed orphaned dependencies ({})",
                 m_addon->ID(), StringUtils::Join(removedItems, ", "));

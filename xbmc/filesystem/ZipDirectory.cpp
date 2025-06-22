@@ -26,8 +26,8 @@ namespace XFILE
     CFileItemPtr item(new CFileItem(label));
     if (!isFolder)
     {
-      item->m_dwSize = entry.usize;
-      item->m_idepth = entry.method;
+      item->SetSize(entry.usize);
+      item->SetDepth(entry.method);
     }
 
     return item;
@@ -65,7 +65,7 @@ namespace XFILE
   {
     std::vector<SZipEntry> items;
     g_ZipManager.GetZipList(url, items);
-    if (items.size())
+    if (!items.empty())
     {
       if (items.size() > 1)
         return true;
