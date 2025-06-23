@@ -1748,7 +1748,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
         if (CServiceBroker::GetTextureCache()->CacheImage(artFile->GetPath(), details))
         {
           candidate = GetArtTypeFromSize(details.width, details.height);
-          if (itemArt.find(candidate) != itemArt.end())
+          if (itemArt.contains(candidate))
             continue;
         }
       }
@@ -1830,7 +1830,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
       for (auto& it : pItem->GetVideoInfoTag()->m_coverArt)
       {
         if ((addAll || CVideoThumbLoader::IsArtTypeInWhitelist(it.m_type, artTypes, exactName)) &&
-          art.find(it.m_type) == art.end())
+            !art.contains(it.m_type))
         {
           std::string thumb = IMAGE_FILES::URLFromFile(pItem->GetPath(), "video_" + it.m_type);
           art.insert(std::make_pair(it.m_type, thumb));
@@ -1840,7 +1840,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
 
     // add online fanart (treated separately due to it being stored in m_fanart)
     if ((addAll || CVideoThumbLoader::IsArtTypeInWhitelist("fanart", artTypes, exactName)) &&
-      art.find("fanart") == art.end())
+        !art.contains("fanart"))
     {
       std::string fanart = pItem->GetVideoInfoTag()->m_fanart.GetImageURL();
       if (!fanart.empty())
@@ -1858,7 +1858,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
         aspect = mediaType == MediaTypeEpisode ? "thumb" : "poster";
 
       if ((addAll || CVideoThumbLoader::IsArtTypeInWhitelist(aspect, artTypes, exactName)) &&
-        art.find(aspect) == art.end())
+          !art.contains(aspect))
       {
         std::string image = GetImage(url, pItem->GetPath());
         if (!image.empty())
@@ -1866,7 +1866,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
       }
     }
 
-    if (art.find("thumb") == art.end() &&
+    if (!art.contains("thumb") &&
         CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
             CSettings::SETTING_MYVIDEOS_EXTRACTTHUMB) &&
         CDVDFileInfo::CanExtract(*pItem))
@@ -1876,7 +1876,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
 
     for (const auto& artType : artTypes)
     {
-      if (art.find(artType) != art.end())
+      if (art.contains(artType))
         CServiceBroker::GetTextureCache()->BackgroundCacheImage(art[artType]);
     }
 
@@ -2196,18 +2196,22 @@ CVideoInfoScanner::~CVideoInfoScanner()
       {
         // allow plugin to calculate hash itself using strings rather than binary data for size and date
         // according to ListItem.setInfo() documentation date format should be "d.m.Y"
-        if (pItem->m_dwSize)
-          digest.Update(std::to_string(pItem->m_dwSize));
-        if (pItem->m_dateTime.IsValid())
-          digest.Update(StringUtils::Format("{:02}.{:02}.{:04}", pItem->m_dateTime.GetDay(),
-                                            pItem->m_dateTime.GetMonth(),
-                                            pItem->m_dateTime.GetYear()));
+        const int64_t size{pItem->GetSize()};
+        if (size)
+          digest.Update(std::to_string(size));
+
+        const CDateTime& dateTime{pItem->GetDateTime()};
+        if (dateTime.IsValid())
+          digest.Update(StringUtils::Format("{:02}.{:02}.{:04}", dateTime.GetDay(),
+                                            dateTime.GetMonth(), dateTime.GetYear()));
       }
       else
       {
-        digest.Update(&pItem->m_dwSize, sizeof(pItem->m_dwSize));
-        KODI::TIME::FileTime time = pItem->m_dateTime;
-        digest.Update(&time, sizeof(KODI::TIME::FileTime));
+        const int64_t size{pItem->GetSize()};
+        digest.Update(&size, sizeof(size));
+        KODI::TIME::FileTime time{};
+        pItem->GetDateTime().GetAsTimeStamp(time);
+        digest.Update(&time, sizeof(time));
       }
       if (IsVideo(*pItem) && !PLAYLIST::IsPlayList(*pItem) && !pItem->IsNFO())
         count++;
@@ -2234,7 +2238,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
   {
     CDigest digest{CDigest::Type::MD5};
 
-    if (excludes.size())
+    if (!excludes.empty())
       digest.Update(StringUtils::Join(excludes, "|"));
 
     struct __stat64 buffer;
@@ -2261,7 +2265,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
 
     CDigest digest{CDigest::Type::MD5};
 
-    if (excludes.size())
+    if (!excludes.empty())
       digest.Update(StringUtils::Join(excludes, "|"));
 
     int64_t time = 0;
@@ -2356,7 +2360,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
         aspect = "thumb";
       std::map<std::string, std::string>& art = seasonArt[url.m_season];
       if ((addAll || CVideoThumbLoader::IsArtTypeInWhitelist(aspect, artTypes, exactName)) &&
-        art.find(aspect) == art.end())
+          !art.contains(aspect))
       {
         std::string image = CScraperUrl::GetThumbUrl(url);
         if (!image.empty())
@@ -2436,7 +2440,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
       m_bStop = true;
       return -1; // cancelled
     }
-    if (returncode > 0 && movielist.size())
+    if (returncode > 0 && !movielist.empty())
     {
       url = movielist[0];
       return 1;  // found a movie

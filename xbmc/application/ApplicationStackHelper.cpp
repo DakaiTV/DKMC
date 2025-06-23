@@ -92,7 +92,7 @@ std::optional<int64_t> CApplicationStackHelper::InitializeStackStartPartAndOffse
   if (m_currentStackIsDiscImageStack)
   {
     // first assume values passed to the stack
-    int selectedFile = item.m_lStartPartNumber;
+    int selectedFile = item.GetStartPartNumber();
     startoffset = item.GetStartOffset();
 
     // check if we instructed the stack to resume from default
@@ -317,7 +317,7 @@ void CApplicationStackHelper::SetRegisteredStackTotalTimeMs(const CFileItem& ite
 CApplicationStackHelper::StackPartInformationPtr CApplicationStackHelper::GetStackPartInformation(
     const std::string& key)
 {
-  if (m_stackmap.count(key) == 0)
+  if (!m_stackmap.contains(key))
   {
     StackPartInformationPtr value(new StackPartInformation());
     m_stackmap[key] = value;

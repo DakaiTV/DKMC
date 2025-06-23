@@ -2780,30 +2780,30 @@ int CVideoDatabase::UpdateDetailsForMovie(int idMovie, CVideoInfoTag& details, c
     BeginTransaction();
 
     // process the link table updates
-    if (updatedDetails.find("genre") != updatedDetails.end())
+    if (updatedDetails.contains("genre"))
       UpdateLinksToItem(idMovie, MediaTypeMovie, "genre", details.m_genre);
-    if (updatedDetails.find("studio") != updatedDetails.end())
+    if (updatedDetails.contains("studio"))
       UpdateLinksToItem(idMovie, MediaTypeMovie, "studio", details.m_studio);
-    if (updatedDetails.find("country") != updatedDetails.end())
+    if (updatedDetails.contains("country"))
       UpdateLinksToItem(idMovie, MediaTypeMovie, "country", details.m_country);
-    if (updatedDetails.find("tag") != updatedDetails.end())
+    if (updatedDetails.contains("tag"))
       UpdateLinksToItem(idMovie, MediaTypeMovie, "tag", details.m_tags);
-    if (updatedDetails.find("director") != updatedDetails.end())
+    if (updatedDetails.contains("director"))
       UpdateActorLinksToItem(idMovie, MediaTypeMovie, "director", details.m_director);
-    if (updatedDetails.find("writer") != updatedDetails.end())
+    if (updatedDetails.contains("writer"))
       UpdateActorLinksToItem(idMovie, MediaTypeMovie, "writer", details.m_writingCredits);
-    if (updatedDetails.find("art.altered") != updatedDetails.end())
+    if (updatedDetails.contains("art.altered"))
       SetArtForItem(idMovie, MediaTypeMovie, artwork);
-    if (updatedDetails.find("ratings") != updatedDetails.end())
+    if (updatedDetails.contains("ratings"))
       details.m_iIdRating = UpdateRatings(idMovie, MediaTypeMovie, details.m_ratings, details.GetDefaultRating());
-    if (updatedDetails.find("uniqueid") != updatedDetails.end())
+    if (updatedDetails.contains("uniqueid"))
       details.m_iIdUniqueID = UpdateUniqueIDs(idMovie, MediaTypeMovie, details);
-    if (updatedDetails.find("dateadded") != updatedDetails.end() && details.m_dateAdded.IsValid())
+    if (updatedDetails.contains("dateadded") && details.m_dateAdded.IsValid())
       UpdateFileDateAdded(details);
 
     // track if the set was updated
     int idSet = 0;
-    if (updatedDetails.find("set") != updatedDetails.end())
+    if (updatedDetails.contains("set"))
     { // set
       idSet = -1;
       if (!details.m_set.title.empty())
@@ -2812,7 +2812,7 @@ int CVideoDatabase::UpdateDetailsForMovie(int idMovie, CVideoInfoTag& details, c
       }
     }
 
-    if (updatedDetails.find("showlink") != updatedDetails.end())
+    if (updatedDetails.contains("showlink"))
     {
       // remove existing links
       std::vector<int> tvShowIds;
@@ -4844,7 +4844,7 @@ CVideoInfoTag CVideoDatabase::GetDetailsForTvShow(const dbiplus::sql_record* con
 
   if (item != NULL)
   {
-    item->m_dateTime = details.GetPremiered();
+    item->SetDateTime(details.GetPremiered());
     item->SetProperty("totalseasons", details.m_iSeason);
     item->SetProperty("totalepisodes", details.m_iEpisode);
     item->SetProperty("numepisodes", details.m_iEpisode); // will be changed later to reflect watchmode setting
@@ -5419,8 +5419,11 @@ bool CVideoDatabase::GetArtForAsset(int assetId,
 
 std::string CVideoDatabase::GetArtForItem(int mediaId, const MediaType &mediaType, const std::string &artType)
 {
+  if (!m_pDS2)
+    return {};
+
   std::string query = PrepareSQL("SELECT url FROM art WHERE media_id=%i AND media_type='%s' AND type='%s'", mediaId, mediaType.c_str(), artType.c_str());
-  return GetSingleValue(query, m_pDS2);
+  return GetSingleValue(query, *m_pDS2);
 }
 
 bool CVideoDatabase::RemoveArtForItem(int mediaId, const MediaType &mediaType, const std::string &artType)
@@ -8332,7 +8335,7 @@ bool CVideoDatabase::GetSeasonsByWhere(const std::string& strBaseDir, const Filt
         (sorting.limitStart > 0 || sorting.limitEnd > 0 ||
          (sorting.limitStart == 0 && sorting.limitEnd == 0)))
     {
-      total = (int)strtol(GetSingleValue(PrepareSQL(strSQL, "COUNT(1)") + strSQLExtra, m_pDS).c_str(), NULL, 10);
+      total = GetSingleValueInt(PrepareSQL(strSQL, "COUNT(1)") + strSQLExtra, *m_pDS);
       strSQLExtra += DatabaseUtils::BuildLimitClause(sorting.limitEnd, sorting.limitStart);
     }
 
@@ -8357,7 +8360,7 @@ bool CVideoDatabase::GetSeasonsByWhere(const std::string& strBaseDir, const Filt
       std::string name = m_pDS->fv(VIDEODB_ID_SEASON_NAME).get_asString();
       std::string path = m_pDS->fv(VIDEODB_ID_SEASON_TVSHOW_PATH).get_asString();
 
-      if (mapSeasons.find(std::make_pair(showId, iSeason)) == mapSeasons.end() &&
+      if (!mapSeasons.contains(std::make_pair(showId, iSeason)) &&
           (m_profileManager.GetMasterProfile().getLockMode() == LockMode::EVERYONE ||
            g_passwordManager.bMasterUser ||
            g_passwordManager.IsDatabasePathUnlocked(
@@ -8649,9 +8652,9 @@ bool CVideoDatabase::GetMoviesByWhere(const std::string& strBaseDir, const Filte
     const CUrlOptions::UrlOptions& options = videoUrl.GetOptions();
 
     // navigation = from videoversions node
-    const bool videoVersionNav{options.find("videoversionid") != options.end()};
+    const bool videoVersionNav{options.contains("videoversionid")};
     // navigation = list of assets of the movie
-    const bool assetsNav{options.find("assetType") != options.end()};
+    const bool assetsNav{options.contains("assetType")};
 
     int total = -1;
 
@@ -8665,7 +8668,7 @@ bool CVideoDatabase::GetMoviesByWhere(const std::string& strBaseDir, const Filte
         (sorting.limitStart > 0 || sorting.limitEnd > 0 ||
          (sorting.limitStart == 0 && sorting.limitEnd == 0)))
     {
-      total = (int)strtol(GetSingleValue(PrepareSQL(strSQL, "COUNT(1)") + strSQLExtra, m_pDS).c_str(), NULL, 10);
+      total = GetSingleValueInt(PrepareSQL(strSQL, "COUNT(1)") + strSQLExtra, *m_pDS);
       strSQLExtra += DatabaseUtils::BuildLimitClause(sorting.limitEnd, sorting.limitStart);
     }
 
@@ -8813,7 +8816,7 @@ bool CVideoDatabase::GetTvShowsByWhere(const std::string& strBaseDir, const Filt
         (sorting.limitStart > 0 || sorting.limitEnd > 0 ||
          (sorting.limitStart == 0 && sorting.limitEnd == 0)))
     {
-      total = (int)strtol(GetSingleValue(PrepareSQL(strSQL, "COUNT(1)") + strSQLExtra, m_pDS).c_str(), NULL, 10);
+      total = GetSingleValueInt(PrepareSQL(strSQL, "COUNT(1)") + strSQLExtra, *m_pDS);
       strSQLExtra += DatabaseUtils::BuildLimitClause(sorting.limitEnd, sorting.limitStart);
     }
 
@@ -8942,7 +8945,7 @@ bool CVideoDatabase::GetEpisodesByWhere(const std::string& strBaseDir, const Fil
         (sorting.limitStart > 0 || sorting.limitEnd > 0 ||
          (sorting.limitStart == 0 && sorting.limitEnd == 0)))
     {
-      total = (int)strtol(GetSingleValue(PrepareSQL(strSQL, "COUNT(1)") + strSQLExtra, m_pDS).c_str(), NULL, 10);
+      total = GetSingleValueInt(PrepareSQL(strSQL, "COUNT(1)") + strSQLExtra, *m_pDS);
       strSQLExtra += DatabaseUtils::BuildLimitClause(sorting.limitEnd, sorting.limitStart);
     }
 
@@ -8998,7 +9001,7 @@ bool CVideoDatabase::GetEpisodesByWhere(const std::string& strBaseDir, const Fil
 
         pItem->SetOverlayImage(episode.GetPlayCount() > 0 ? CGUIListItem::ICON_OVERLAY_WATCHED
                                                           : CGUIListItem::ICON_OVERLAY_UNWATCHED);
-        pItem->m_dateTime = episode.m_firstAired;
+        pItem->SetDateTime(episode.m_firstAired);
         items.Add(pItem);
       }
     }
@@ -9906,7 +9909,7 @@ bool CVideoDatabase::GetMusicVideosByWhere(const std::string &baseDir, const Fil
     {
       idArtist = option->second.asInteger();
       strArtist = GetSingleValue(
-                      PrepareSQL("SELECT name FROM actor where actor_id = '%i'", idArtist), m_pDS)
+                      PrepareSQL("SELECT name FROM actor where actor_id = '%i'", idArtist), *m_pDS)
                       .c_str();
     }
     Filter extFilter = filter;
@@ -9919,7 +9922,7 @@ bool CVideoDatabase::GetMusicVideosByWhere(const std::string &baseDir, const Fil
         (sorting.limitStart > 0 || sorting.limitEnd > 0 ||
          (sorting.limitStart == 0 && sorting.limitEnd == 0)))
     {
-      total = (int)strtol(GetSingleValue(PrepareSQL(strSQL, "COUNT(1)") + strSQLExtra, m_pDS).c_str(), NULL, 10);
+      total = GetSingleValueInt(PrepareSQL(strSQL, "COUNT(1)") + strSQLExtra, *m_pDS);
       strSQLExtra += DatabaseUtils::BuildLimitClause(sorting.limitEnd, sorting.limitStart);
     }
 
@@ -12754,7 +12757,7 @@ void CVideoDatabase::GetVideoVersions(VideoDbContentType itemType,
         infoTag.m_fanart = videoItem.GetVideoInfoTag()->m_fanart;
 
         auto item(std::make_shared<CFileItem>(infoTag));
-        item->m_strTitle = name;
+        item->SetTitle(name);
         item->SetLabel(name);
 
         CVideoDbUrl itemUrl;
@@ -12827,7 +12830,7 @@ void CVideoDatabase::GetDefaultVideoVersion(VideoDbContentType itemType, int dbI
         infoTag.m_strTitle = name;
 
         item.SetFromVideoInfoTag(infoTag);
-        item.m_strTitle = name;
+        item.SetTitle(name);
         item.SetLabel(name);
       }
     }
@@ -13214,7 +13217,7 @@ bool CVideoDatabase::GetVideoVersionTypes(VideoDbContentType idContent,
       item->GetVideoInfoTag()->GetAssetInfo().SetTitle(name);
       item->GetVideoInfoTag()->m_strTitle = name;
 
-      item->m_strTitle = name;
+      item->SetTitle(name);
       item->SetLabel(name);
 
       items.Add(item);
@@ -13232,7 +13235,10 @@ bool CVideoDatabase::GetVideoVersionTypes(VideoDbContentType idContent,
 
 std::string CVideoDatabase::GetVideoVersionById(int id)
 {
-  return GetSingleValue(PrepareSQL("SELECT name FROM videoversiontype WHERE id=%i", id), m_pDS2);
+  if (!m_pDS2)
+    return {};
+
+  return GetSingleValue(PrepareSQL("SELECT name FROM videoversiontype WHERE id=%i", id), *m_pDS2);
 }
 
 bool CVideoDatabase::SetVideoVersionDefaultArt(int dbId, int idFrom, VideoDbContentType type)
@@ -13261,7 +13267,7 @@ std::vector<std::string> CVideoDatabase::GetUsedImages(
     if (!m_pDB || !m_pDS)
       return imagesToCheck;
 
-    if (!imagesToCheck.size())
+    if (imagesToCheck.empty())
       return {};
 
     int artworkLevel = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(
