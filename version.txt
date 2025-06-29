@@ -1,9 +1,9 @@
 APP_NAME DKMC	
 COMPANY_NAME Dalian Neicun Tech Ltd.
 DEV_NAME Team Viqsoft
-ABOUT_WEBSITE https://dakai.tv/about/
-FORUM_WEBSITE https://forum.dakai.tv/
-DOCS_WEBSITE https://dakai.wiki/
+ABOUT_WEBSITE https://dakai.tv/
+FORUM_WEBSITE https://dakai.tv/
+DOCS_WEBSITE https://dakai.tv/
 COPYRIGHT_YEARS 2019-2025
 WEBSITE http://dakai.tv
 VERSION_MAJOR 22
@@ -11,7 +11,7 @@ VERSION_MINOR 0
 VERSION_TAG ALPHA1
 VERSION_CODE 22.00.00
 ADDON_API 22.00.00
-ADDON_REPOS repository.dakai.tv|https://mirrors.dakai.tv
+ADDON_REPOS repository.dakai.tv|https://mirrors.kodi.tv
 APP_PACKAGE tv.dakai.dkmc
 PACKAGE_IDENTITY DNTL.DKMC
 PACKAGE_PUBLISHER DN2BD90A-CDD8-477F-96C3-B25992247B97
