@@ -153,6 +153,12 @@ jni::CJNIAudioTrack *CAESinkAUDIOTRACK::CreateAudioTrack(int stream, int sampleR
               channelMask, e.what());
   }
 
+  if (jniAt && jniAt->getState() == CJNIAudioTrack::STATE_INITIALIZED)
+  {
+    jniAt->pause();
+    jniAt->flush();
+  }
+
   return jniAt;
 }
 
@@ -270,12 +276,7 @@ bool CAESinkAUDIOTRACK::Initialize(AEAudioFormat &format, std::string &device)
     m_info = m_info_iec;
 
   m_format      = format;
-  m_headPos = 0;
-  m_stuckCounter = 0;
-  m_headPosOld = 0;
-  m_timestampPos = 0;
-  m_linearmovingaverage.clear();
-  m_pause_ms = 0.0;
+  Deinitialize();
   CLog::Log(LOGDEBUG,
             "CAESinkAUDIOTRACK::Initialize requested: sampleRate {}; format: {}; channels: {}",
             format.m_sampleRate, CAEUtil::DataFormatToStr(format.m_dataFormat),
@@ -549,6 +550,8 @@ bool CAESinkAUDIOTRACK::Initialize(AEAudioFormat &format, std::string &device)
 
     if (!IsInitialized())
     {
+      delete m_at_jni;
+      m_at_jni = NULL;
       if (!m_passthrough)
       {
         if (atChannelMask != CJNIAudioFormat::CHANNEL_OUT_STEREO &&
@@ -597,10 +600,10 @@ bool CAESinkAUDIOTRACK::Initialize(AEAudioFormat &format, std::string &device)
 
 void CAESinkAUDIOTRACK::Deinitialize()
 {
-  CLog::Log(LOGDEBUG, "CAESinkAUDIOTRACK::Deinitialize");
-
   if (!m_at_jni)
     return;
+
+  CLog::Log(LOGDEBUG, "CAESinkAUDIOTRACK::Deinitialize");
 
   if (IsInitialized())
   {
@@ -621,6 +624,8 @@ void CAESinkAUDIOTRACK::Deinitialize()
   m_at_jni = NULL;
   m_delay = 0.0;
   m_hw_delay = 0.0;
+  m_pause_ms = 0.0;
+  m_stuckCounter = 0;
 }
 
 bool CAESinkAUDIOTRACK::IsInitialized()
@@ -643,8 +648,11 @@ void CAESinkAUDIOTRACK::GetDelay(AEDelayStatus& status)
 
   uint32_t head_pos = (uint32_t)m_at_jni->getPlaybackHeadPosition();
 
-  // Wraparound
-  if ((uint32_t)(m_headPos & UINT64_LOWER_BYTES) > head_pos) // need to compute wraparound
+  // Wraparound - but only if we were not more than 0.1 seconds from wraparound away: samplerate / 10
+  // we add max 50 ms packages - so should be sane that way
+  const uint32_t minwrapvalue = UINT32_MAX - m_sink_sampleRate / 10;
+  const uint32_t remain = static_cast<uint32_t>(m_headPos & UINT64_LOWER_BYTES);
+  if ((remain > head_pos) && (remain >= minwrapvalue))
     m_headPos += (1ULL << 32); // add wraparound, e.g. 0x0000 FFFF FFFF -> 0x0001 FFFF FFFF
   // clear lower 32 bit values, e.g. 0x0001 FFFF FFFF -> 0x0001 0000 0000
   // and add head_pos which wrapped around, e.g. 0x0001 0000 0000 -> 0x0001 0000 0004

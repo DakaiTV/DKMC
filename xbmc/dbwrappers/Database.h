@@ -108,10 +108,11 @@ public:
   void BeginTransaction();
   virtual bool CommitTransaction();
   void RollbackTransaction();
+  bool InTransaction() const;
   void CopyDB(const std::string& latestDb);
   void DropAnalytics();
 
-  std::string PrepareSQL(std::string strStmt, ...) const;
+  std::string PrepareSQL(std::string_view sqlFormat, ...) const;
 
   /*!
    * @brief Get a single value from a table.

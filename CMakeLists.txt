@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.18)
 if(WIN32)
-  # Version 3.20 is required for multi-config generator expressions to work
-  cmake_minimum_required(VERSION 3.20)
+  cmake_minimum_required(VERSION 3.30.6)
 endif()
+
 project(kodi LANGUAGES CXX C ASM)
 
 if(POLICY CMP0069)
@@ -116,11 +116,14 @@ option(ENABLE_INTERNAL_FFMPEG "Enable internal ffmpeg?" OFF)
 dependent_option(ENABLE_INTERNAL_ASS "Enable internal libass?")
 dependent_option(ENABLE_INTERNAL_CEC "Enable internal libcec?")
 dependent_option(ENABLE_INTERNAL_CURL "Enable internal libcurl?")
+dependent_option(ENABLE_INTERNAL_DAV1D "Enable internal dav1d?")
 dependent_option(ENABLE_INTERNAL_EXIV2 "Enable internal exiv2?")
 dependent_option(ENABLE_INTERNAL_FLATBUFFERS "Enable internal flatbuffers?")
 dependent_option(ENABLE_INTERNAL_FMT "Enable internal fmt?")
+dependent_option(ENABLE_INTERNAL_LIBMICROHTTPD  "Enable internal libmicrohttpd?")
 dependent_option(ENABLE_INTERNAL_NFS "Enable internal libnfs?")
 dependent_option(ENABLE_INTERNAL_PCRE2 "Enable internal pcre2?")
+dependent_option(ENABLE_INTERNAL_MARIADBCLIENT "Enable internal mariadb-c-connector?")
 dependent_option(ENABLE_INTERNAL_NLOHMANNJSON "Enable internal nlohmannjson?")
 dependent_option(ENABLE_INTERNAL_XSLT "Enable internal libxslt?")
 
@@ -142,9 +145,6 @@ endif()
 if(UNIX)
   option(FFMPEG_PATH        "Path to external ffmpeg?" "")
   option(ENABLE_INTERNAL_FSTRCMP "Enable internal fstrcmp?" OFF)
-  if(ENABLE_INTERNAL_FFMPEG)
-    option(ENABLE_INTERNAL_DAV1D "Enable internal dav1d?" OFF)
-  endif()
   option(ENABLE_INTERNAL_GTEST "Enable internal gtest?" OFF)
 endif()
 
@@ -175,9 +175,7 @@ add_custom_target(${APP_NAME_LC}-libraries)
 set(LIBRARY_FILES "" CACHE STRING "" FORCE)
 mark_as_advanced(LIBRARY_FILES)
 
-set(INCLUDES ${CMAKE_SOURCE_DIR}
-             ${CMAKE_SOURCE_DIR}/lib
-             ${CMAKE_SOURCE_DIR}/xbmc
+set(INCLUDES ${CMAKE_SOURCE_DIR}/xbmc
              ${CMAKE_SOURCE_DIR}/xbmc/${PLATFORM_DIR}
              ${CMAKE_SOURCE_DIR}/xbmc/cores/VideoPlayer
              ${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR}
@@ -216,7 +214,7 @@ set(required_buildtools FlatC
 
 # Optional build tools
 set(optional_buildtools CCache
-                        ClangFormat
+                        ClangFormat>=9.0
                         ClangTidy
                         Cppcheck
                         IncludeWhatYouUse)
@@ -263,7 +261,6 @@ set(optional_deps Alsa>=1.0.27
                   Bluray>=0.9.3
                   CAP
                   CEC>=4.0.0
-                  Dav1d
                   DBus
                   Iso9660pp>=2.1.0
                   LCMS2>=2.10
@@ -292,7 +289,7 @@ core_optional_dep(${optional_deps})
 core_require_dep(${required_deps})
 
 # Check for any libs to be packaged with main app. eg libaacs
-# These libs are not directly linked with main app, but may be used if available from a 
+# These libs are not directly linked with main app, but may be used if available from a
 # dependency in the main app. eg libbluray can dyload libaacs for additional features
 if(PLATFORM_OPTIONAL_PACKAGES)
   core_optional_package_lib(${PLATFORM_OPTIONAL_PACKAGES})
@@ -636,6 +633,10 @@ if(FFMPEG_LINK_EXECUTABLE)
 endif()
 if(FFMPEG_CREATE_SHARED_LIBRARY)
   set(CMAKE_CXX_CREATE_SHARED_LIBRARY "${FFMPEG_CREATE_SHARED_LIBRARY}")
+endif()
+if(FFMPEG_XCODE_WRAPPER)
+  set(CMAKE_XCODE_ATTRIBUTE_LD "${FFMPEG_XCODE_WRAPPER}")
+  set(CMAKE_XCODE_ATTRIBUTE_LDPLUSPLUS "${FFMPEG_XCODE_WRAPPER}")
 endif()
 
 # Platform specific additional extra targets

@@ -195,7 +195,7 @@ bool CGUIPassword::SetMasterLockMode(bool bDetails)
 {
   const std::shared_ptr<CProfileManager> profileManager = CServiceBroker::GetSettingsComponent()->GetProfileManager();
 
-  CProfile* profile = profileManager->GetProfile(0);
+  CProfile* profile{profileManager->GetProfile(MASTER_PROFILE_ID)};
   if (profile)
   {
     CProfile::CLock locks = profile->GetLocks();
@@ -226,7 +226,7 @@ bool CGUIPassword::IsProfileLockUnlocked(int iProfile, bool& bCanceled, bool pro
   if (iProfile == -1)
     iProfileToCheck = profileManager->GetCurrentProfileIndex();
 
-  if (iProfileToCheck == 0)
+  if (iProfileToCheck == MASTER_PROFILE_ID)
     return IsMasterLockUnlocked(prompt,bCanceled);
   else
   {
@@ -631,9 +631,8 @@ bool CGUIPassword::IsMediaFileUnlocked(const std::string& type, const std::strin
 
   if (!sources)
   {
-    CLog::Log(LOGERROR,
-              "{}: CMediaSourceSettings::GetInstance().GetSources(\"{}\") returned nullptr.",
-              __func__, type);
+    CLog::LogF(LOGERROR, "CMediaSourceSettings::GetInstance().GetSources(\"{}\") returned nullptr.",
+               type);
     return true;
   }
 

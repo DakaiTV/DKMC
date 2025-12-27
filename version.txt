@@ -1,18 +1,18 @@
-APP_NAME DKMC	
-COMPANY_NAME Dalian Neicun Tech Ltd.
-DEV_NAME Team Viqsoft
-ABOUT_WEBSITE https://dakai.tv/
-FORUM_WEBSITE https://dakai.tv/
-DOCS_WEBSITE https://dakai.tv/
-COPYRIGHT_YEARS 2019-2025
-WEBSITE http://dakai.tv
+APP_NAME Kodi
+COMPANY_NAME XBMC Foundation
+DEV_NAME Team Kodi
+ABOUT_WEBSITE https://kodi.tv/about/
+FORUM_WEBSITE https://forum.kodi.tv/
+DOCS_WEBSITE https://kodi.wiki/
+COPYRIGHT_YEARS 2005-2021
+WEBSITE http://kodi.tv
 VERSION_MAJOR 22
 VERSION_MINOR 0
 VERSION_TAG ALPHA1
-VERSION_CODE 22.00.00
-ADDON_API 22.00.00
-ADDON_REPOS repository.dakai.tv|https://mirrors.kodi.tv
-APP_PACKAGE tv.dakai.dkmc
-PACKAGE_IDENTITY DNTL.DKMC
-PACKAGE_PUBLISHER DN2BD90A-CDD8-477F-96C3-B25992247B97
-PACKAGE_DESCRIPTION DKMC is an Kodi based open source (GPL) software media center for playing videos, music, pictures, games, and more.
+VERSION_CODE 21.90.700
+ADDON_API 21.90.700
+ADDON_REPOS repository.xbmc.org|https://mirrors.kodi.tv
+APP_PACKAGE org.xbmc.kodi
+PACKAGE_IDENTITY XBMCFoundation.Kodi
+PACKAGE_PUBLISHER C62BD90A-CDD8-477F-96C3-B25992247B97
+PACKAGE_DESCRIPTION Kodi is an open source (GPL) software media center for playing videos, music, pictures, games, and more.

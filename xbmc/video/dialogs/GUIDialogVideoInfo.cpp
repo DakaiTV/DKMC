@@ -47,6 +47,7 @@
 #include "threads/IRunnable.h"
 #include "utils/Artwork.h"
 #include "utils/FileUtils.h"
+#include "utils/Map.h"
 #include "utils/SortUtils.h"
 #include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
@@ -67,6 +68,7 @@
 #include <algorithm>
 #include <iterator>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 
 using namespace XFILE::VIDEODATABASEDIRECTORY;
@@ -282,12 +284,11 @@ void CGUIDialogVideoInfo::OnInitWindow()
 
   // @todo add support to edit video asset art. Until then edit art through Versions Manager.
   if (!VIDEO::IsVideoAssetFile(*m_movieItem))
-    CONTROL_ENABLE_ON_CONDITION(
-        CONTROL_BTN_GET_THUMB,
-        (profileManager->GetCurrentProfile().canWriteDatabases() ||
-         g_passwordManager.bMasterUser) &&
-            !StringUtils::StartsWithNoCase(m_movieItem->GetVideoInfoTag()->GetUniqueID().c_str(),
-                                           "plugin"));
+    CONTROL_ENABLE_ON_CONDITION(CONTROL_BTN_GET_THUMB,
+                                (profileManager->GetCurrentProfile().canWriteDatabases() ||
+                                 g_passwordManager.bMasterUser) &&
+                                    !StringUtils::StartsWithNoCase(
+                                        m_movieItem->GetVideoInfoTag()->GetUniqueID(), "plugin"));
   else
     CONTROL_DISABLE(CONTROL_BTN_GET_THUMB);
 
@@ -296,10 +297,11 @@ void CGUIDialogVideoInfo::OnInitWindow()
 
   VideoDbContentType type = m_movieItem->GetVideoContentType();
   if (type == VideoDbContentType::TVSHOWS || type == VideoDbContentType::MOVIES)
-    CONTROL_ENABLE_ON_CONDITION(CONTROL_BTN_GET_FANART, (profileManager->
-        GetCurrentProfile().canWriteDatabases() || g_passwordManager.bMasterUser) &&
-        !StringUtils::StartsWithNoCase(m_movieItem->GetVideoInfoTag()->
-        GetUniqueID().c_str(), "plugin"));
+    CONTROL_ENABLE_ON_CONDITION(CONTROL_BTN_GET_FANART,
+                                (profileManager->GetCurrentProfile().canWriteDatabases() ||
+                                 g_passwordManager.bMasterUser) &&
+                                    !StringUtils::StartsWithNoCase(
+                                        m_movieItem->GetVideoInfoTag()->GetUniqueID(), "plugin"));
   else
     CONTROL_DISABLE(CONTROL_BTN_GET_FANART);
 
@@ -791,7 +793,7 @@ void CGUIDialogVideoInfo::Play(bool resume)
       // play button acts according to default play action setting
       KODI::VIDEO::GUILIB::CVideoPlayActionProcessor proc{m_movieItem};
       proc.ProcessDefaultAction();
-      if (proc.UserCancelled())
+      if (proc.GetUserCancelled())
       {
         // The Resume dialog was closed without any choice
         SetMovie(m_movieItem.get()); // restore cast list, which was cleared on dialog close
@@ -919,12 +921,12 @@ bool CArtTypeChooser::ChooseArtType()
     const std::vector<std::string> availableArtTypes = GetArtTypesList(*m_item->GetVideoInfoTag());
 
     // maps art types to resource ids
-    static const std::unordered_map<std::string, int> name2idMap = {
+    static constexpr auto name2idMap = make_map<std::string_view, int>({
         {"banner", 20020},
         {"fanart", 20445},
         {"poster", 20021},
         {"thumb", 21371},
-    };
+    });
 
     for (const auto& type : availableArtTypes)
     {

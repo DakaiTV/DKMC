@@ -21,12 +21,12 @@
 #include "input/actions/Action.h"
 #include "input/actions/ActionIDs.h"
 #include "input/remote/IRRemote.h"
+#include "interfaces/AnnouncementManager.h"
+#include "jobs/JobManager.h"
 #include "messaging/ApplicationMessenger.h"
 #include "pictures/GUIWindowSlideShow.h"
-#include "utils/JobManager.h"
 #include "utils/Variant.h"
 #include "utils/log.h"
-#include "xbmc/interfaces/AnnouncementManager.h"
 
 #include <mutex>
 
@@ -67,7 +67,8 @@ using namespace std::chrono_literals;
 CPeripheralCecAdapter::CPeripheralCecAdapter(CPeripherals& manager,
                                              const PeripheralScanResult& scanResult,
                                              CPeripheralBus* bus)
-  : CPeripheralHID(manager, scanResult, bus), CThread("CECAdapter"), m_cecAdapter(NULL)
+  : CPeripheralHID(manager, scanResult, bus),
+    CThread("CECAdapter")
 {
   ResetMembers();
   m_features.push_back(FEATURE_CEC);
@@ -88,7 +89,7 @@ CPeripheralCecAdapter::~CPeripheralCecAdapter(void)
   if (m_cecAdapter)
   {
     CECDestroy(m_cecAdapter);
-    m_cecAdapter = NULL;
+    m_cecAdapter = nullptr;
   }
 }
 
@@ -96,7 +97,7 @@ void CPeripheralCecAdapter::ResetMembers(void)
 {
   if (m_cecAdapter)
     CECDestroy(m_cecAdapter);
-  m_cecAdapter = NULL;
+  m_cecAdapter = nullptr;
   m_bStarted = false;
   m_bHasButton = false;
   m_bIsReady = false;
@@ -118,7 +119,7 @@ void CPeripheralCecAdapter::ResetMembers(void)
   m_bActiveSourceBeforeStandby = false;
   m_bOnPlayReceived = false;
   m_bPlaybackPaused = false;
-  m_queryThread = NULL;
+  m_queryThread = nullptr;
   m_bPowerOnScreensaver = false;
   m_bUseTVMenuLanguage = false;
   m_bSendInactiveSource = false;
@@ -268,7 +269,7 @@ bool CPeripheralCecAdapter::InitialiseFeature(const PeripheralFeature feature)
       m_bError = true;
       if (m_cecAdapter)
         CECDestroy(m_cecAdapter);
-      m_cecAdapter = NULL;
+      m_cecAdapter = nullptr;
 
       m_features.clear();
       return false;
@@ -1222,7 +1223,7 @@ void CPeripheralCecAdapter::CecSourceActivated(void* cbParam,
         bShowingSlideshow
             ? CServiceBroker::GetGUI()->GetWindowManager().GetWindow<CGUIWindowSlideShow>(
                   WINDOW_SLIDESHOW)
-            : NULL;
+            : nullptr;
 
     const auto& components = CServiceBroker::GetAppComponents();
     const auto appPlayer = components.GetComponent<CApplicationPlayer>();
@@ -1525,7 +1526,9 @@ bool CPeripheralCecAdapter::WriteLogicalAddresses(const cec_logical_addresses& a
 
 CPeripheralCecAdapterUpdateThread::CPeripheralCecAdapterUpdateThread(
     CPeripheralCecAdapter* adapter, libcec_configuration* configuration)
-  : CThread("CECAdapterUpdate"), m_adapter(adapter), m_configuration(*configuration)
+  : CThread("CECAdapterUpdate"),
+    m_adapter(adapter),
+    m_configuration(*configuration)
 {
   m_nextConfiguration.Clear();
   m_event.Reset();

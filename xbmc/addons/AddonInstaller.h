@@ -8,8 +8,8 @@
 
 #pragma once
 
+#include "jobs/IJobCallback.h"
 #include "threads/Event.h"
-#include "utils/Job.h"
 
 #include <map>
 #include <memory>
@@ -232,8 +232,6 @@ private:
    \return true if dependencies are available, false otherwise.
    */
   bool CheckDependencies(const ADDON::AddonPtr &addon, std::vector<std::string>& preDeps, CAddonDatabase &database, std::pair<std::string, std::string> &failedDep);
-
-  void PrunePackageCache();
 
   mutable CCriticalSection m_critSection;
   JobMap m_downloadJobs;

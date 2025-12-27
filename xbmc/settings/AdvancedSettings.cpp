@@ -13,6 +13,7 @@
 #include "URL.h"
 #include "application/AppParams.h"
 #include "filesystem/SpecialProtocol.h"
+#include "guilib/LocalizeStrings.h"
 #include "network/DNSNameCache.h"
 #include "profiles/ProfileManager.h"
 #include "settings/Settings.h"
@@ -21,10 +22,10 @@
 #include "settings/lib/SettingsManager.h"
 #include "utils/FileUtils.h"
 #include "utils/LangCodeExpander.h"
+#include "utils/Set.h"
 #include "utils/StringUtils.h"
 #include "utils/SystemInfo.h"
 #include "utils/URIUtils.h"
-#include "utils/Variant.h"
 #include "utils/XMLUtils.h"
 #include "utils/log.h"
 
@@ -35,6 +36,29 @@
 #include <vector>
 
 using namespace ADDON;
+
+namespace
+{
+
+bool ValidateVideoStackRegex(const CRegExp& regex)
+{
+  if (regex.GetCaptureTotal() != 4)
+  {
+    CLog::Log(LOGERROR, "Invalid video stack RE ({}). Must have exactly 4 captures.",
+              regex.GetPattern());
+    return false;
+  }
+  return true;
+};
+
+std::vector<CRegExp> CompileRegexesFromXML(TiXmlElement* folderStacking)
+{
+  std::vector<std::string> patterns;
+  CAdvancedSettings::GetCustomRegexps(folderStacking, patterns);
+  return CompileRegexes(patterns);
+}
+
+} // unnamed namespace
 
 void CAdvancedSettings::OnSettingsLoaded()
 {
@@ -114,6 +138,15 @@ void CAdvancedSettings::Uninitialize(CSettingsManager& settingsMgr)
 
   m_initialized = false;
 }
+
+namespace
+{
+std::string EscapeSpecialChars(const std::string& str)
+{
+  static const std::regex specialChars{R"([-[\]{}()*+?.,\^$|#\s])"};
+  return std::regex_replace(str, specialChars, R"(\$&)");
+}
+} // namespace
 
 void CAdvancedSettings::Initialize()
 {
@@ -236,16 +269,19 @@ void CAdvancedSettings::Initialize()
                                         m_allExcludeFromScanRegExps.begin(),
                                         m_allExcludeFromScanRegExps.end());
 
-  m_folderStackRegExps.clear();
-  m_folderStackRegExps.emplace_back("((cd|dvd|dis[ck])[0-9]+)$");
+  m_folderStackRegExps = CompileRegexes({
+      "(.*?)(?:[^\\/])((?:cd|dvd|p(?:(?:ar)?t)|dis[ck])[ _.-]*[0-9])$",
+      "()((?:p(?:(?:ar)?t)[ _.-]*[0-9]))$",
+  });
 
-  m_videoStackRegExps.clear();
-  m_videoStackRegExps.emplace_back("(.*?)([ _.-]*(?:cd|dvd|p(?:(?:ar)?t)|dis[ck])[ _.-]*[0-9]+)(.*?)(\\.[^.]+)$");
-  m_videoStackRegExps.emplace_back("(.*?)([ _.-]*(?:cd|dvd|p(?:(?:ar)?t)|dis[ck])[ _.-]*[a-d])(.*?)(\\.[^.]+)$");
-  m_videoStackRegExps.emplace_back("(.*?)([ ._-]*[a-d])(.*?)(\\.[^.]+)$");
-  // This one is a bit too greedy to enable by default.  It will stack sequels
-  // in a flat dir structure, but is perfectly safe in a dir-per-vid one.
-  //m_videoStackRegExps.push_back("(.*?)([ ._-]*[0-9])(.*?)(\\.[^.]+)$");
+  m_videoStackRegExps = CompileRegexes({
+      "(.*?)([ _.-]*(?:cd|dvd|p(?:(?:ar)?t)|dis[ck]|file)[ _.-]*[0-9]+)(.*?)(\\.[^.]+)$",
+      "(.*?)([ _.-]*(?:cd|dvd|p(?:(?:ar)?t)|dis[ck])[ _.-]*[a-z])(.*?)(\\.[^.]+)$",
+      "^(.+)((?:[ ._-]|(?<=\\)))[a-z])()(\\.[^.]+)$",
+      // This one is a bit too greedy to enable by default.  It will stack sequels
+      // in a flat dir structure, but is perfectly safe in a dir-per-vid one.
+      // "(.*?)([ ._-]*[0-9])(.*?)(\\.[^.]+)$",
+  });
 
   m_tvshowEnumRegExps.clear();
   // foo.s01.e01, foo.s01_e01, S01E02 foo, S01 - E02, S01xE02
@@ -268,12 +304,25 @@ void CAdvancedSettings::Initialize()
   m_tvshowEnumRegExps.emplace_back(false, "[\\\\/]([^\\\\/]+)\\.special\\.[a-z0-9]+$", 0, true);
 
   // foo.103*, 103 foo
-  // XXX: This regex is greedy and will match years in show names.  It should always be last.
+  // This regex is greedy and will match years in show names.  It should always be last.
   m_tvshowEnumRegExps.emplace_back(
       false,
       "[\\\\/\\._ -]([0-9]+)([0-9][0-9](?:(?:[a-i]|\\.[1-9])(?![0-9]))?)([\\._ -][^\\\\/]*)$");
 
-  m_tvshowMultiPartEnumRegExp = "^[-_ex]+([0-9]+(?:(?:[a-i]|\\.[1-9])(?![0-9]))?)";
+  m_tvshowMultiPartEnumRegExp = "^([-_ex]+)([0-9]+)(.*)";
+
+  // Build regex inserting local specific spelling of disc (xxx)
+  // [ _.-]*\((?:xxx|dis[ck])[ _.-]*\d{1,3}\)$
+  std::string localeDiscStr{g_localizeStrings.Get(427)};
+  if (!localeDiscStr.empty())
+    localeDiscStr = EscapeSpecialChars(localeDiscStr) + "|";
+  m_titleTrailingPartNumberRegExp =
+      R"([ _.-]*\((?:)" + localeDiscStr + R"(dis[ck])[ _.-]*\d{1,3}\)$)";
+
+  // Build regex inserting local specific spelling of disc (xxx)
+  // \/?:cd|dvd|xxx|dis[ck][ _.-]*([0-9]+)$
+  m_trailingPartNumberRegExp =
+      R"([\\\/](?:cd|dvd|)" + localeDiscStr + R"(dis[ck])[ _.-]*(\d{1,3})$)";
 
   m_remoteDelay = 3;
   m_bScanIRServer = true;
@@ -321,6 +370,8 @@ void CAdvancedSettings::Initialize()
   m_disableEpisodeRanges = false;
 
   m_caseSensitiveLocalArtMatch = true; // case sensitive local art matching
+  m_bNoRemoteArtWithLocalScraper =
+      false; // If local nfo file refers to online art, it will be retrieved
 
   m_iEpgUpdateCheckInterval = 300; /* Check every X seconds, if EPG data need to be updated. This does not mean that
                                       every X seconds an EPG update is actually triggered, it's just the interval how
@@ -383,6 +434,11 @@ void CAdvancedSettings::Initialize()
 
   m_cpuTempCmd = "";
   m_gpuTempCmd = "";
+
+  m_powerdownCommand = "";
+  m_rebootCommand = "";
+  m_suspendCommand = "";
+  m_hibernateCommand = "";
 #if defined(TARGET_DARWIN)
   // default for osx is fullscreen always on top
   m_alwaysOnTop = true;
@@ -421,7 +477,7 @@ void CAdvancedSettings::Initialize()
   m_useLocaleCollation = true;
 
   m_pictureExtensions =
-      ".png|.jpg|.jpeg|.bmp|.gif|.ico|.tif|.tiff|.tga|.pcx|.cbz|.zip|.rss|.webp|.jp2|.apng|.avif";
+      ".png|.jpg|.jpeg|.bmp|.gif|.ico|.tif|.tiff|.tga|.pcx|.cbz|.zip|.rss|.webp|.jp2|.apng|.avif|.heif|.heic";
   m_musicExtensions = ".b4s|.nsv|.m4a|.flac|.aac|.strm|.pls|.rm|.rma|.mpa|.wav|.wma|.ogg|.mp3|.mp2|.m3u|.gdm|.imf|.m15|.sfx|.uni|.ac3|.dts|.cue|.aif|.aiff|.wpl|.xspf|.ape|.mac|.mpc|.mp+|.mpp|.shn|.zip|.wv|.dsp|.xsp|.xwav|.waa|.wvs|.wam|.gcm|.idsp|.mpdsp|.mss|.spt|.rsd|.sap|.cmc|.cmr|.dmc|.mpt|.mpd|.rmt|.tmc|.tm8|.tm2|.oga|.url|.pxml|.tta|.rss|.wtv|.mka|.tak|.opus|.dff|.dsf|.m4b|.dtshd";
   m_videoExtensions = ".m4v|.3g2|.3gp|.nsv|.tp|.ts|.ty|.strm|.pls|.rm|.rmvb|.mpd|.m3u|.m3u8|.ifo|.mov|.qt|.divx|.xvid|.bivx|.vob|.nrg|.img|.iso|.udf|.pva|.wmv|.asf|.asx|.ogm|.m2v|.avi|.bin|.dat|.mpg|.mpeg|.mp4|.mkv|.mk3d|.avc|.vp3|.svq3|.nuv|.viv|.dv|.fli|.flv|.001|.wpl|.xspf|.zip|.vdr|.dvr-ms|.xsp|.mts|.m2t|.m2ts|.evo|.ogv|.sdp|.avs|.rec|.url|.pxml|.vc1|.h264|.rcv|.rss|.mpls|.mpl|.webm|.bdmv|.bdm|.wtv|.trp|.f4v";
   m_subtitlesExtensions = ".utf|.utf8|.utf-8|.sub|.srt|.smi|.rt|.txt|.ssa|.text|.ssa|.aqt|.jss|"
@@ -826,6 +882,7 @@ void CAdvancedSettings::ParseSettingsFile(const std::string &file)
     XMLUtils::GetBoolean(pElement, "casesensitivelocalartmatch", m_caseSensitiveLocalArtMatch);
     XMLUtils::GetInt(pElement, "minimumepisodeplaylistduration", m_minimumEpisodePlaylistDuration);
     XMLUtils::GetBoolean(pElement, "disableepisoderanges", m_disableEpisodeRanges);
+    XMLUtils::GetBoolean(pElement, "noremoteartwithlocalscraper", m_bNoRemoteArtWithLocalScraper);
   }
 
   pElement = pRootElement->FirstChildElement("videoscanner");
@@ -965,7 +1022,7 @@ void CAdvancedSettings::ParseSettingsFile(const std::string &file)
     GetCustomRegexps(pPictureExcludes, m_pictureExcludeFromListingRegExps);
 
   // picture extensions
-  TiXmlElement* pExts = pRootElement->FirstChildElement("pictureextensions");
+  const TiXmlElement* pExts = pRootElement->FirstChildElement("pictureextensions");
   if (pExts)
     GetCustomExtensions(pExts, m_pictureExtensions);
 
@@ -1007,14 +1064,21 @@ void CAdvancedSettings::ParseSettingsFile(const std::string &file)
                                         m_trailerMatchRegExps.end());
 
   // video stacking regexps
-  TiXmlElement* pVideoStacking = pRootElement->FirstChildElement("moviestacking");
-  if (pVideoStacking)
-    GetCustomRegexps(pVideoStacking, m_videoStackRegExps);
+  TiXmlElement* videoStacking = pRootElement->FirstChildElement("moviestacking");
+  if (videoStacking)
+  {
+    std::vector<CRegExp> regexes = CompileRegexesFromXML(videoStacking);
+    std::erase_if(regexes, std::not_fn(ValidateVideoStackRegex));
+    std::ranges::move(regexes, std::back_inserter(m_videoStackRegExps));
+  }
 
   // folder stacking regexps
-  TiXmlElement* pFolderStacking = pRootElement->FirstChildElement("folderstacking");
-  if (pFolderStacking)
-    GetCustomRegexps(pFolderStacking, m_folderStackRegExps);
+  TiXmlElement* folderStacking = pRootElement->FirstChildElement("folderstacking");
+  if (folderStacking)
+  {
+    std::vector<CRegExp> regexes = CompileRegexesFromXML(folderStacking);
+    std::ranges::move(regexes, std::back_inserter(m_folderStackRegExps));
+  }
 
   //tv stacking regexps
   TiXmlElement* pTVStacking = pRootElement->FirstChildElement("tvshowmatching");
@@ -1025,19 +1089,19 @@ void CAdvancedSettings::ParseSettingsFile(const std::string &file)
   XMLUtils::GetString(pRootElement, "tvmultipartmatching", m_tvshowMultiPartEnumRegExp);
 
   // path substitutions
-  TiXmlElement* pPathSubstitution = pRootElement->FirstChildElement("pathsubstitution");
+  const TiXmlElement* pPathSubstitution = pRootElement->FirstChildElement("pathsubstitution");
   if (pPathSubstitution)
   {
     m_pathSubstitutions.clear();
     CLog::Log(LOGDEBUG,"Configuring path substitutions");
-    TiXmlNode* pSubstitute = pPathSubstitution->FirstChildElement("substitute");
+    const TiXmlNode* pSubstitute = pPathSubstitution->FirstChildElement("substitute");
     while (pSubstitute)
     {
       std::string strFrom, strTo;
-      TiXmlNode* pFrom = pSubstitute->FirstChild("from");
+      const TiXmlNode* pFrom = pSubstitute->FirstChild("from");
       if (pFrom && !pFrom->NoChildren())
         strFrom = CSpecialProtocol::TranslatePath(pFrom->FirstChild()->Value()).c_str();
-      TiXmlNode* pTo = pSubstitute->FirstChild("to");
+      const TiXmlNode* pTo = pSubstitute->FirstChild("to");
       if (pTo && !pTo->NoChildren())
         strTo = pTo->FirstChild()->Value();
 
@@ -1075,17 +1139,17 @@ void CAdvancedSettings::ParseSettingsFile(const std::string &file)
   XMLUtils::GetBoolean(pRootElement, "detectasudf", m_detectAsUdf);
 
   // music thumbs
-  TiXmlElement* pThumbs = pRootElement->FirstChildElement("musicthumbs");
+  const TiXmlElement* pThumbs = pRootElement->FirstChildElement("musicthumbs");
   if (pThumbs)
     GetCustomExtensions(pThumbs,m_musicThumbs);
 
   // show art for shoutcast v2 streams (set to false for devices with limited storage)
   XMLUtils::GetBoolean(pRootElement, "shoutcastart", m_bShoutcastArt);
   // music filename->tag filters
-  TiXmlElement* filters = pRootElement->FirstChildElement("musicfilenamefilters");
+  const TiXmlElement* filters = pRootElement->FirstChildElement("musicfilenamefilters");
   if (filters)
   {
-    TiXmlNode* filter = filters->FirstChild("filter");
+    const TiXmlNode* filter = filters->FirstChild("filter");
     while (filter)
     {
       if (filter->FirstChild())
@@ -1094,10 +1158,10 @@ void CAdvancedSettings::ParseSettingsFile(const std::string &file)
     }
   }
 
-  TiXmlElement* pHostEntries = pRootElement->FirstChildElement("hosts");
+  const TiXmlElement* pHostEntries = pRootElement->FirstChildElement("hosts");
   if (pHostEntries)
   {
-    TiXmlElement* element = pHostEntries->FirstChildElement("entry");
+    const TiXmlElement* element = pHostEntries->FirstChildElement("entry");
     while(element)
     {
       if(!element->NoChildren())
@@ -1114,9 +1178,18 @@ void CAdvancedSettings::ParseSettingsFile(const std::string &file)
   XMLUtils::GetString(pRootElement, "cputempcommand", m_cpuTempCmd);
   XMLUtils::GetString(pRootElement, "gputempcommand", m_gpuTempCmd);
 
+  const TiXmlElement* pPowerManagement = pRootElement->FirstChildElement("powermanagement");
+  if (pPowerManagement)
+  {
+    XMLUtils::GetString(pPowerManagement, "powerdown", m_powerdownCommand);
+    XMLUtils::GetString(pPowerManagement, "reboot", m_rebootCommand);
+    XMLUtils::GetString(pPowerManagement, "suspend", m_suspendCommand);
+    XMLUtils::GetString(pPowerManagement, "hibernate", m_hibernateCommand);
+  }
+
   XMLUtils::GetBoolean(pRootElement, "alwaysontop", m_alwaysOnTop);
 
-  TiXmlElement *pPVR = pRootElement->FirstChildElement("pvr");
+  const TiXmlElement* pPVR = pRootElement->FirstChildElement("pvr");
   if (pPVR)
   {
     XMLUtils::GetInt(pPVR, "timecorrection", m_iPVRTimeCorrection, 0, 1440);
@@ -1132,16 +1205,19 @@ void CAdvancedSettings::ParseSettingsFile(const std::string &file)
     {
       const char* XML_SORTMETHOD = "sortmethod";
       const char* XML_SORTORDER = "sortorder";
-      int sortMethod;
-      // ignore SortByTime for duration defaults
-      if (XMLUtils::GetInt(pSortDecription, XML_SORTMETHOD, sortMethod, SortByLabel, SortByFile))
+      auto sortMethod = static_cast<int>(SortByNone);
+      static constexpr CSet validSortMethods{SortByLabel, SortByDate,          SortBySize,
+                                             SortByFile,  SortByEpisodeNumber, SortByProvider};
+      XMLUtils::GetInt(pSortDecription, XML_SORTMETHOD, sortMethod, static_cast<int>(SortByNone),
+                       static_cast<int>(SortByUserPreference));
+      if (validSortMethods.contains(static_cast<SortBy>(sortMethod)))
       {
         int sortOrder;
         if (XMLUtils::GetInt(pSortDecription, XML_SORTORDER, sortOrder, SortOrderAscending,
                              SortOrderDescending))
         {
-          m_PVRDefaultSortOrder.sortBy = (SortBy)sortMethod;
-          m_PVRDefaultSortOrder.sortOrder = (SortOrder)sortOrder;
+          m_PVRDefaultSortOrder.sortBy = static_cast<SortBy>(sortMethod);
+          m_PVRDefaultSortOrder.sortOrder = static_cast<SortOrder>(sortOrder);
         }
       }
     }

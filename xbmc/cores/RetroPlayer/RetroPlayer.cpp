@@ -44,8 +44,8 @@
 #include "input/actions/Action.h"
 #include "input/actions/ActionIDs.h"
 #include "interfaces/AnnouncementManager.h"
+#include "jobs/JobManager.h"
 #include "messaging/ApplicationMessenger.h"
-#include "utils/JobManager.h"
 #include "utils/StringUtils.h"
 #include "utils/log.h"
 #include "windowing/WinSystem.h"
@@ -58,7 +58,8 @@ using namespace GAME;
 using namespace RETRO;
 
 CRetroPlayer::CRetroPlayer(IPlayerCallback& callback)
-  : IPlayer(callback), m_gameServices(CServiceBroker::GetGameServices())
+  : IPlayer(callback),
+    m_gameServices(CServiceBroker::GetGameServices())
 {
   ResetPlayback();
   CServiceBroker::GetWinSystem()->RegisterRenderLoop(this);

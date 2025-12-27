@@ -12,6 +12,7 @@
 #include "pictures/PictureScalingAlgorithm.h"
 #include "settings/lib/ISettingCallback.h"
 #include "settings/lib/ISettingsHandler.h"
+#include "utils/RegExp.h"
 #include "utils/SortUtils.h"
 
 #include <cstdint>
@@ -218,9 +219,11 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     std::vector<std::string> m_audioExcludeFromListingRegExps;
     std::vector<std::string> m_audioExcludeFromScanRegExps;
     std::vector<std::string> m_pictureExcludeFromListingRegExps;
-    std::vector<std::string> m_videoStackRegExps;
-    std::vector<std::string> m_folderStackRegExps;
+    std::vector<CRegExp> m_videoStackRegExps;
+    std::vector<CRegExp> m_folderStackRegExps;
     std::vector<std::string> m_trailerMatchRegExps;
+    std::string m_titleTrailingPartNumberRegExp;
+    std::string m_trailingPartNumberRegExp;
     SETTINGS_TVSHOWLIST m_tvshowEnumRegExps;
     std::string m_tvshowMultiPartEnumRegExp;
     using StringMapping = std::vector<std::pair<std::string, std::string>>;
@@ -275,6 +278,7 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     bool m_caseSensitiveLocalArtMatch{true};
     int m_minimumEpisodePlaylistDuration; // seconds
     bool m_disableEpisodeRanges{false};
+    bool m_bNoRemoteArtWithLocalScraper{false};
 
     CLangInfo::Tokens m_vecTokens;
 
@@ -322,6 +326,12 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
 
     std::string m_cpuTempCmd;
     std::string m_gpuTempCmd;
+
+    /* Power management command overrides */
+    std::string m_powerdownCommand;
+    std::string m_rebootCommand;
+    std::string m_suspendCommand;
+    std::string m_hibernateCommand;
 
     /* PVR/TV related advanced settings */
     int m_iPVRTimeCorrection;     /*!< @brief correct all times (epg tags, timer tags, recording tags) by this amount of minutes. defaults to 0. */

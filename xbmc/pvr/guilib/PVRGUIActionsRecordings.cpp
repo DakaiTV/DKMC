@@ -19,6 +19,7 @@
 #include "guilib/GUIWindowManager.h"
 #include "guilib/LocalizeStrings.h"
 #include "guilib/WindowIDs.h"
+#include "jobs/JobManager.h"
 #include "messaging/helpers/DialogHelper.h"
 #include "messaging/helpers/DialogOKHelper.h"
 #include "pvr/PVREventLogJob.h"
@@ -435,33 +436,4 @@ bool CPVRGUIActionsRecordings::ProcessDeleteAfterWatch(const CFileItem& item) co
     }
   }
   return true;
-}
-
-bool CPVRGUIActionsRecordings::IncrementPlayCount(const CFileItem& item) const
-{
-  if (!item.IsPVRRecording())
-    return false;
-
-  if (item.GetPVRRecordingInfoTag()->IncrementPlayCount())
-  {
-    // Item must now be watched (because play count > 0).
-    return ProcessDeleteAfterWatch(item);
-  }
-  return false;
-}
-
-bool CPVRGUIActionsRecordings::MarkWatched(const CFileItem& item, bool watched) const
-{
-  if (!item.IsPVRRecording())
-    return false;
-
-  if (CServiceBroker::GetPVRManager().Recordings()->MarkWatched(item.GetPVRRecordingInfoTag(),
-                                                                watched))
-  {
-    if (watched)
-      return ProcessDeleteAfterWatch(item);
-
-    return true;
-  }
-  return false;
 }

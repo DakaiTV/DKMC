@@ -23,6 +23,7 @@
 #include "settings/SettingsComponent.h"
 #include "utils/Geometry.h"
 #include "utils/LangCodeExpander.h"
+#include "utils/StreamUtils.h"
 #include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
 #include "utils/log.h"
@@ -31,7 +32,11 @@
 #include "platform/darwin/osx/CocoaInterface.h"
 #endif
 
+#include <chrono>
 #include <memory>
+#include <string>
+
+using namespace std::chrono_literals;
 
 namespace
 {
@@ -293,6 +298,9 @@ bool CDVDInputStreamNavigator::Open()
   m_iTitle = m_iTitleCount = 0;
   m_iPart = m_iPartCount = 0;
   m_iTime = m_iTotalTime = 0;
+
+  // For playlist/chapter watch time
+  m_startWatchTime = std::chrono::steady_clock::now();
 
   return true;
 }
@@ -1062,26 +1070,11 @@ void CDVDInputStreamNavigator::SetAudioStreamName(AudioStreamInfo &info, const a
     break;
   }
 
-  info.codecDesc.append(" ");
+  const int channels{audio_attributes.channels + 1};
+  info.channels = channels;
 
-  switch(audio_attributes.channels + 1)
-  {
-  case 1:
-    info.codecDesc += g_localizeStrings.Get(37003); // "mono"
-    break;
-  case 2:
-    info.codecDesc += g_localizeStrings.Get(37004); // "stereo"
-    break;
-  case 6:
-    info.codecDesc += "5.1";
-    break;
-  case 7:
-    info.codecDesc += "6.1";
-    break;
-  default:
-    info.codecDesc += StringUtils::Format("{:d} {}", audio_attributes.channels + 1,
-                                          g_localizeStrings.Get(10127)); // "channels"
-  }
+  info.codecDesc.append(" ");
+  info.codecDesc.append(StreamUtils::GetLayout(channels));
 }
 
 AudioStreamInfo CDVDInputStreamNavigator::GetAudioStreamInfo(const int iId)
@@ -1102,7 +1095,6 @@ AudioStreamInfo CDVDInputStreamNavigator::GetAudioStreamInfo(const int iId)
     lang[0] = (audio_attributes.lang_code >> 8) & 255;
 
     info.language = g_LangCodeExpander.ConvertToISO6392B(lang);
-    info.channels = audio_attributes.channels + 1;
   }
 
   return info;
@@ -1584,4 +1576,37 @@ int dvd_inputstreamnavigator_cb_readv(void * p_stream, void * p_iovec, int i_blo
     }
   }
   return i_total;
+}
+
+void CDVDInputStreamNavigator::SaveCurrentState(const CStreamDetails& details)
+{
+  std::unique_lock lock(m_statesLock);
+
+  // Details for this playlist
+  SavePlaylistDetails(m_playedPlaylists, m_startWatchTime,
+                      {.playlist = m_iTitle,
+                       .inMenu = m_bInMenu,
+                       .duration = std::chrono::milliseconds(GetTotalTime()),
+                       .details = details});
+
+  // Reset watch timer for next playlist
+  m_startWatchTime = std::chrono::steady_clock::now();
+}
+
+CDVDInputStream::UpdateState CDVDInputStreamNavigator::UpdateCurrentState(CFileItem& item,
+                                                                          double time,
+                                                                          bool& closed)
+{
+  std::unique_lock lock(m_statesLock);
+
+  // First add current state to the list of playlist states
+  if (item.HasVideoInfoTag())
+    SaveCurrentState(item.GetVideoInfoTag()->m_streamDetails);
+
+  return UpdatePlaylistDetails(DVDSTREAM_TYPE_DVD, m_playedPlaylists, item, time, closed);
+}
+
+void CDVDInputStreamNavigator::UpdateStack(CFileItem& item)
+{
+  return UpdateStackItem(item, 0ms);
 }

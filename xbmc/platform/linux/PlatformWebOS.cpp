@@ -14,6 +14,8 @@
 #include "powermanagement/LunaPowerManagement.h"
 #include "utils/log.h"
 
+#include "platform/linux/WebOSTVPlatformConfig.h"
+
 #include <filesystem>
 
 #include <sys/resource.h>
@@ -45,6 +47,9 @@ bool CPlatformWebOS::InitStageOne()
   const auto HOME = GetHomePath();
 
   setenv("APPID", CCompileInfo::GetPackage(), 0);
+  setenv("FONTCONFIG_FILE", "/etc/fonts/fonts.conf", 1);
+  setenv("FONTCONFIG_PATH", "/etc/fonts", 1);
+  setenv("GST_PLUGIN_SCANNER_1_0", (HOME + "/lib/gst-plugin-scanner").c_str(), 1);
   setenv("XDG_RUNTIME_DIR", "/tmp/xdg", 1);
   setenv("XKB_CONFIG_ROOT", "/usr/share/X11/xkb", 1);
   setenv("WAYLAND_DISPLAY", "wayland-0", 1);
@@ -69,10 +74,17 @@ bool CPlatformWebOS::InitStageTwo()
   if (setrlimit(RLIMIT_CORE, &limit) != 0)
     CLog::Log(LOGERROR, "Failed to disable core dumps");
 
+  WebOSTVPlatformConfig::Load();
+  WebOSTVPlatformConfig::LoadARCStatus();
   return CPlatformLinux::InitStageTwo();
 }
 
 void CPlatformWebOS::RegisterPowerManagement()
 {
   CLunaPowerManagement::Register();
+}
+
+bool CPlatformWebOS::IsConfigureAddonsAtStartupEnabled()
+{
+  return false;
 }

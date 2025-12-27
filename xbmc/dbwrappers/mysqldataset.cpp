@@ -649,10 +649,10 @@ bool MysqlDatabase::exists()
 
 // methods for formatting
 // ---------------------------------------------
-std::string MysqlDatabase::vprepare(const char* format, va_list args)
+std::string MysqlDatabase::vprepare(std::string_view format, va_list args)
 {
-  std::string strFormat = format;
-  std::string strResult = "";
+  std::string strFormat{format};
+  std::string strResult;
   size_t pos;
 
   //  %q is the sqlite format string for %s.
@@ -976,32 +976,32 @@ void CStrAccum::VXPrintf(MYSQL* conn,
     }
     /* Find out what flags are present */
     flag_leftjustify = flag_plussign = flag_blanksign = flag_alternateform = flag_altform2 =
-        flag_zeropad = 0;
-    done = 0;
+        flag_zeropad = false;
+    done = false;
     do
     {
       switch (c)
       {
         case '-':
-          flag_leftjustify = 1;
+          flag_leftjustify = true;
           break;
         case '+':
-          flag_plussign = 1;
+          flag_plussign = true;
           break;
         case ' ':
-          flag_blanksign = 1;
+          flag_blanksign = true;
           break;
         case '#':
-          flag_alternateform = 1;
+          flag_alternateform = true;
           break;
         case '!':
-          flag_altform2 = 1;
+          flag_altform2 = true;
           break;
         case '0':
-          flag_zeropad = 1;
+          flag_zeropad = true;
           break;
         default:
-          done = 1;
+          done = true;
           break;
       }
     } while (!done && (c = (*++fmt)) != 0);
@@ -1012,7 +1012,7 @@ void CStrAccum::VXPrintf(MYSQL* conn,
       width = va_arg(ap, int);
       if (width < 0)
       {
-        flag_leftjustify = 1;
+        flag_leftjustify = true;
         width = -width;
       }
       c = *++fmt;
@@ -1057,21 +1057,21 @@ void CStrAccum::VXPrintf(MYSQL* conn,
     /* Get the conversion type modifier */
     if (c == 'l')
     {
-      flag_long = 1;
+      flag_long = true;
       c = *++fmt;
       if (c == 'l')
       {
-        flag_longlong = 1;
+        flag_longlong = true;
         c = *++fmt;
       }
       else
       {
-        flag_longlong = 0;
+        flag_longlong = false;
       }
     }
     else
     {
-      flag_long = flag_longlong = 0;
+      flag_long = flag_longlong = false;
     }
     /* Fetch the info entry for the field */
     infop = fmtinfo.data();
@@ -1096,7 +1096,7 @@ void CStrAccum::VXPrintf(MYSQL* conn,
       break;
     }
 
-    zExtra = 0;
+    zExtra = nullptr;
 
     /* Limit the precision to prevent overflowing buf[] during conversion */
     if (precision > etBUFSIZE - 40 && (infop->flags & FLAG_STRING) == 0)
@@ -1181,7 +1181,7 @@ void CStrAccum::VXPrintf(MYSQL* conn,
           prefix = 0;
         }
         if (longvalue == 0)
-          flag_alternateform = 0;
+          flag_alternateform = false;
         if (flag_zeropad && precision < width - (prefix != 0))
         {
           precision = width - (prefix != 0);
@@ -1330,7 +1330,7 @@ void CStrAccum::VXPrintf(MYSQL* conn,
         }
         else
         {
-          flag_rtz = 0;
+          flag_rtz = false;
         }
         if (xtype == etEXP)
         {
@@ -1341,7 +1341,7 @@ void CStrAccum::VXPrintf(MYSQL* conn,
           e2 = exp;
         }
         nsd = 0;
-        flag_dp = (precision > 0 ? 1 : 0) | flag_alternateform | flag_altform2;
+        flag_dp = (precision > 0 ? 1 : 0) || flag_alternateform || flag_altform2;
         /* The sign in front of the number */
         if (prefix)
         {
@@ -1636,9 +1636,8 @@ bool CStrAccum::Append(const char* z, int n)
 
 size_t ci_find(std::string_view where, std::string_view what)
 {
-  const auto found =
-      std::ranges::search(where.cbegin(), where.cend(), what.cbegin(), what.cend(),
-                          [](char l, char r) { return std::tolower(l) == std::tolower(r); });
+  const auto found = std::ranges::search(where, what, [](char l, char r)
+                                         { return std::tolower(l) == std::tolower(r); });
   if (found.empty())
     return std::string::npos;
   else
@@ -1866,8 +1865,8 @@ bool MysqlDataset::query(const std::string& query)
   if (!handle())
     throw DbErrors("No Database Connection");
 
-  if (query.find("SELECT") == std::string::npos && query.find("select") == std::string::npos)
-    throw DbErrors("MUST be select SQL!");
+  // Must be a SELECT SQL query
+  assert(query.find("SELECT") != std::string::npos || query.find("select") != std::string::npos);
 
   close();
 

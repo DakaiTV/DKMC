@@ -246,8 +246,9 @@ void CRPRendererOpenGLES::DrawBlackBars()
 
 void CRPRendererOpenGLES::Render(uint8_t alpha)
 {
-  CRenderBufferOpenGLES* renderBuffer = static_cast<CRenderBufferOpenGLES*>(m_renderBuffer);
+  const ViewportCoordinates dest{m_rotatedDestCoords};
 
+  auto renderBuffer = static_cast<CRenderBufferOpenGLES*>(m_renderBuffer);
   if (renderBuffer == nullptr)
     return;
 
@@ -290,12 +291,9 @@ void CRPRendererOpenGLES::Render(uint8_t alpha)
     glTexParameteri(m_textureTarget, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(m_textureTarget, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    const CPoint destPoints[4] = {m_rotatedDestCoords[0], m_rotatedDestCoords[1],
-                                  m_rotatedDestCoords[2], m_rotatedDestCoords[3]};
-
     SHADER::CShaderTextureGLES source(sourceTexture, false);
     SHADER::CShaderTextureGLES target(targetTexture, false);
-    if (!m_shaderPreset->RenderUpdate(destPoints, source, target))
+    if (!m_shaderPreset->RenderUpdate(dest, {m_fullDestWidth, m_fullDestHeight}, source, target))
     {
       m_bShadersNeedUpdate = false;
       m_bUseShaderPreset = false;
@@ -371,7 +369,7 @@ void CRPRendererOpenGLES::Render(uint8_t alpha)
     glUniform4f(uniColLoc, (colour[0] / 255.0f), (colour[1] / 255.0f), (colour[2] / 255.0f),
                 (colour[3] / 255.0f));
     glUniform1f(depthLoc, -1.0f);
-    glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, 0);
+    glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, nullptr);
 
     glDisableVertexAttribArray(vertLoc);
     glDisableVertexAttribArray(loc);

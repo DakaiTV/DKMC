@@ -27,6 +27,7 @@
 #include "guilib/GUIKeyboardFactory.h"
 #include "guilib/GUIWindowManager.h"
 #include "guilib/LocalizeStrings.h"
+#include "jobs/JobManager.h"
 #include "media/MediaType.h"
 #include "music/MusicDatabase.h"
 #include "music/MusicDbUrl.h"
@@ -42,7 +43,6 @@
 #include "threads/IRunnable.h"
 #include "utils/Artwork.h"
 #include "utils/FileUtils.h"
-#include "utils/JobManager.h"
 #include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
 #include "utils/log.h"
@@ -76,7 +76,7 @@ public:
   bool HasSongExtraArtChanged(const CFileItemPtr& pSongItem,
                               const std::string& type,
                               const int itemID,
-                              CMusicDatabase& db)
+                              const CMusicDatabase& db)
   {
     if (!pSongItem->HasMusicInfoTag())
       return false;
@@ -732,7 +732,7 @@ void PlayItem(const std::shared_ptr<CFileItem>& itemIn,
   {
     AddItemToPlayListAndPlay(item, nullptr, player);
   }
-  else if (item->HasMusicInfoTag())
+  else if (MUSIC::IsAudio(*item))
   {
     if (mode == ContentUtils::PlayMode::PLAY_FROM_HERE ||
         (mode == ContentUtils::PlayMode::CHECK_AUTO_PLAY_NEXT_ITEM && IsAutoPlayNextItem(*item)))
@@ -769,6 +769,10 @@ void PlayItem(const std::shared_ptr<CFileItem>& itemIn,
       playlistPlayer.SetCurrentPlaylist(PLAYLIST::Id::TYPE_NONE);
       playlistPlayer.Play(item, player);
     }
+  }
+  else
+  {
+    CLog::LogF(LOGERROR, "Unable to play item {}", item->GetPath());
   }
 }
 

@@ -21,6 +21,7 @@
 #include "utils/Artwork.h"
 #include "utils/SortUtils.h"
 
+#include <cctype>
 #include <map>
 #include <set>
 #include <string>
@@ -348,7 +349,7 @@ public:
   bool SearchAlbumsByArtistName(const std::string& strArtist, CFileItemList& items);
   int GetAlbumByMatch(const CAlbum& album);
   std::string GetAlbumById(int id) const;
-  std::string GetAlbumDiscTitle(int idAlbum, int idDisc);
+  std::string GetAlbumDiscTitle(int idAlbum, int idDisc) const;
   bool SetAlbumUserrating(const int idAlbum, int userrating);
   int GetAlbumDiscsCount(int idAlbum) const;
 
@@ -634,7 +635,7 @@ public:
   int GetDiscsCount(const std::string& baseDir, const Filter& filter = Filter());
   int GetSongsCount(const Filter& filter = Filter());
   bool GetFilter(CDbUrl& musicUrl, Filter& filter, SortDescription& sorting) override;
-  int GetOrderFilter(const std::string& type, const SortDescription& sorting, Filter& filter);
+  int GetOrderFilter(const std::string& type, const SortDescription& sorting, Filter& filter) const;
 
   /////////////////////////////////////////////////
   // Party Mode
@@ -691,7 +692,7 @@ public:
                 CFileItemList& items,
                 const Filter& filter = Filter(),
                 const SortDescription& sortDescription = SortDescription());
-  std::string GetItemById(const std::string& itemType, int id);
+  std::string GetItemById(const std::string& itemType, int id) const;
 
   /////////////////////////////////////////////////
   // XML
@@ -890,11 +891,11 @@ private:
 
   CSong GetSongFromDataset();
   CSong GetSongFromDataset(const dbiplus::sql_record* const record, int offset = 0) const;
-  CArtist GetArtistFromDataset(dbiplus::Dataset* pDS, int offset = 0, bool needThumb = true);
+  CArtist GetArtistFromDataset(dbiplus::Dataset* pDS, int offset = 0, bool needThumb = true) const;
   CArtist GetArtistFromDataset(const dbiplus::sql_record* const record,
                                int offset = 0,
                                bool needThumb = true) const;
-  CAlbum GetAlbumFromDataset(dbiplus::Dataset* pDS, int offset = 0, bool imageURL = false);
+  CAlbum GetAlbumFromDataset(dbiplus::Dataset* pDS, int offset = 0, bool imageURL = false) const;
   CAlbum GetAlbumFromDataset(const dbiplus::sql_record* const record,
                              int offset = 0,
                              bool imageURL = false) const;
@@ -947,7 +948,7 @@ private:
   std::string SortnameBuildSQL(const std::string& strAlias,
                                const SortAttribute& sortAttributes,
                                const std::string& strField,
-                               const std::string& strSortField);
+                               const std::string& strSortField) const;
 
   /*! \brief Build SQL for sorting field naturally and case-insensitively (in SQLite).
   \param strField field name

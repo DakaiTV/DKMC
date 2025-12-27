@@ -70,6 +70,7 @@ const std::set<AddonType> lookAndFeelTypes = {
     AddonType::RESOURCE_LANGUAGE,
     AddonType::RESOURCE_UISOUNDS,
     AddonType::RESOURCE_FONT,
+    AddonType::RESOURCE_SKIN,
     AddonType::VISUALIZATION,
 };
 
@@ -580,7 +581,7 @@ static bool GetRecentlyUpdatedAddons(VECADDONS& addons)
     return false;
 
   auto limit = CDateTime::GetCurrentDateTime() - CDateTimeSpan(14, 0, 0, 0);
-  auto isOld = [limit](const AddonPtr& addon){ return addon->LastUpdated() < limit; };
+  auto isOld = [&limit](const AddonPtr& addon) { return addon->LastUpdated() < limit; };
   addons.erase(std::remove_if(addons.begin(), addons.end(), isOld), addons.end());
   return true;
 }

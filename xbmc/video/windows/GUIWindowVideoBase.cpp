@@ -582,9 +582,9 @@ public:
   }
 
 protected:
-  bool OnResumeSelected() override { return m_window.PlayItem(m_item, m_player); }
+  bool OnResumeSelected() override { return m_window.PlayItem(GetItem(), m_player); }
 
-  bool OnPlaySelected() override { return m_window.PlayItem(m_item, m_player); }
+  bool OnPlaySelected() override { return m_window.PlayItem(GetItem(), m_player); }
 
 private:
   CGUIWindowVideoBase& m_window;
@@ -608,23 +608,24 @@ public:
 protected:
   bool OnPlaySelected() override
   {
-    CVideoPlayActionProcessor proc{m_window, m_item, m_player};
+    CVideoPlayActionProcessor proc{m_window, GetItem(), m_player};
     return proc.ProcessDefaultAction();
   }
 
   bool OnQueueSelected() override
   {
-    m_window.OnQueueItem(m_item, m_itemIndex);
+    m_window.OnQueueItem(GetItem(), m_itemIndex);
     return true;
   }
 
-  bool OnInfoSelected() override { return m_window.OnItemInfo(*m_item); }
+  bool OnInfoSelected() override { return m_window.OnItemInfo(*GetItem()); }
 
   bool OnChooseSelected() override
   {
     // window only shows the default version, so no window specific context menu items available
-    if (m_item->HasVideoVersions() && !m_item->GetVideoInfoTag()->IsDefaultVideoVersion())
-      return CONTEXTMENU::ShowFor(m_item, CContextMenuManager::MAIN);
+    const auto item{GetItem()};
+    if (item->HasVideoVersions() && !item->GetVideoInfoTag()->IsDefaultVideoVersion())
+      return CONTEXTMENU::ShowFor(item, CContextMenuManager::MAIN);
 
     m_window.OnPopupMenu(m_itemIndex);
     return true;
@@ -818,8 +819,11 @@ void CGUIWindowVideoBase::GetContextButtons(int itemNumber, CContextButtons &but
       }
       if (PLAYLIST::IsSmartPlayList(*item) || PLAYLIST::IsSmartPlayList(*m_vecItems))
         buttons.Add(CONTEXT_BUTTON_EDIT_SMART_PLAYLIST, 586);
-      if (URIUtils::IsBlurayPath(item->GetDynPath()))
+
+      if (URIUtils::IsBlurayPath(item->GetDynPath()) && !item->IsFolder())
+      {
         buttons.Add(CONTEXT_BUTTON_CHOOSE_PLAYLIST, 13424);
+      }
     }
   }
   CGUIMediaWindow::GetContextButtons(itemNumber, buttons);
@@ -1078,7 +1082,8 @@ bool CGUIWindowVideoBase::PlayItem(const std::shared_ptr<CFileItem>& pItem,
 
     // recursively add items to list
     CFileItemList queuedItems;
-    VIDEO::UTILS::GetItemsForPlayList(item, queuedItems);
+    VIDEO::UTILS::GetItemsForPlayList(item, queuedItems,
+                                      ContentUtils::PlayMode::CHECK_AUTO_PLAY_NEXT_ITEM);
 
     CServiceBroker::GetPlaylistPlayer().ClearPlaylist(PLAYLIST::Id::TYPE_VIDEO);
     CServiceBroker::GetPlaylistPlayer().Reset();

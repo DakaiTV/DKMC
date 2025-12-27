@@ -10,7 +10,6 @@
 
 #include "CueDocument.h"
 #include "ServiceBroker.h"
-#include "URL.h"
 #include "Util.h"
 #include "events/IEvent.h"
 #include "filesystem/CurlFile.h"
@@ -337,7 +336,11 @@ CFileItem::CFileItem(const CURL& path, bool bIsFolder) : m_strPath(path.Get())
 {
   SetFolder(bIsFolder);
   if (bIsFolder && !m_strPath.empty() && !IsFileFolder())
-    URIUtils::AddSlashAtEnd(m_strPath);
+  {
+    std::string folderPath = m_strPath;
+    URIUtils::AddSlashAtEnd(folderPath);
+    SetPath(folderPath);
+  }
   FillInMimeType(false);
 }
 
@@ -345,7 +348,11 @@ CFileItem::CFileItem(std::string_view strPath, bool bIsFolder) : m_strPath(strPa
 {
   SetFolder(bIsFolder);
   if (bIsFolder && !m_strPath.empty() && !IsFileFolder())
-    URIUtils::AddSlashAtEnd(m_strPath);
+  {
+    std::string folderPath = m_strPath;
+    URIUtils::AddSlashAtEnd(folderPath);
+    SetPath(folderPath);
+  }
   FillInMimeType(false);
 }
 
@@ -354,7 +361,11 @@ CFileItem::CFileItem(const CMediaSource& share) : m_strPath(share.strPath)
   SetFolder(true);
   m_bIsShareOrDrive = true;
   if (!IsRSS()) // no slash at end for rss feeds
-    URIUtils::AddSlashAtEnd(m_strPath);
+  {
+    std::string folderPath = m_strPath;
+    URIUtils::AddSlashAtEnd(folderPath);
+    SetPath(folderPath);
+  }
   std::string label = share.strName;
   if (!share.strStatus.empty())
     label = StringUtils::Format("{} ({})", share.strName, share.strStatus);
@@ -400,8 +411,8 @@ CFileItem& CFileItem::operator=(const CFileItem& item)
   CGUIListItem::operator=(item);
   m_bLabelPreformatted=item.m_bLabelPreformatted;
   FreeMemory();
-  m_strPath = item.m_strPath;
-  m_strDynPath = item.m_strDynPath;
+  SetPath(item.m_strPath);
+  SetDynPath(item.m_strDynPath);
   m_bIsParentFolder = item.m_bIsParentFolder;
   m_iDriveType = item.m_iDriveType;
   m_bIsShareOrDrive = item.m_bIsShareOrDrive;
@@ -593,6 +604,8 @@ void CFileItem::Archive(CArchive& ar)
     if (iType == 1)
       ar >> *GetGameInfoTag();
 
+    m_urlPath.reset();
+    m_urlDynPath.reset();
     SetInvalid();
   }
 }
@@ -862,7 +875,7 @@ bool CFileItem::IsPicture() const
     return false;
 
   if (!m_strPath.empty())
-    return CUtil::IsPicture(m_strPath);
+    return GetURL().IsPicture();
 
   return false;
 }
@@ -915,35 +928,32 @@ bool CFileItem::IsLibraryFolder() const
   if (HasProperty("library.filter") && GetProperty("library.filter").asBoolean())
     return true;
 
-  return URIUtils::IsLibraryFolder(m_strPath);
+  return GetURL().IsLibraryFolder();
 }
 
 bool CFileItem::IsPythonScript() const
 {
-  return URIUtils::HasExtension(m_strPath, ".py");
+  return GetURL().HasExtension(".py");
 }
 
 bool CFileItem::IsType(const char *ext) const
 {
-  if (!m_strDynPath.empty())
-    return URIUtils::HasExtension(m_strDynPath, ext);
-
-  return URIUtils::HasExtension(m_strPath, ext);
+  return GetDynURL().HasExtension(ext);
 }
 
 bool CFileItem::IsNFO() const
 {
-  return URIUtils::HasExtension(m_strPath, ".nfo");
+  return GetURL().HasExtension(".nfo");
 }
 
 bool CFileItem::IsDiscImage() const
 {
-  return URIUtils::IsDiscImage(GetDynPath());
+  return GetDynURL().IsDiscImage();
 }
 
 bool CFileItem::IsOpticalMediaFile() const
 {
-  return URIUtils::IsOpticalMediaFile(GetDynPath());
+  return GetDynURL().IsOpticalMediaFile();
 }
 
 bool CFileItem::IsRAR() const
@@ -953,69 +963,69 @@ bool CFileItem::IsRAR() const
 
 bool CFileItem::IsAPK() const
 {
-  return URIUtils::IsAPK(m_strPath);
+  return GetURL().IsAPK();
 }
 
 bool CFileItem::IsZIP() const
 {
-  return URIUtils::IsZIP(m_strPath);
+  return GetURL().IsZIP();
 }
 
 bool CFileItem::IsCBZ() const
 {
-  return URIUtils::HasExtension(m_strPath, ".cbz");
+  return GetURL().IsCBZ();
 }
 
 bool CFileItem::IsCBR() const
 {
-  return URIUtils::HasExtension(m_strPath, ".cbr");
+  return GetURL().IsCBR();
 }
 
 bool CFileItem::IsRSS() const
 {
-  return StringUtils::StartsWithNoCase(m_strPath, "rss://") || URIUtils::HasExtension(m_strPath, ".rss")
-      || StringUtils::StartsWithNoCase(m_strPath, "rsss://")
-      || m_mimetype == "application/rss+xml";
+  auto& curl = GetURL();
+  return curl.IsProtocol("rss") || curl.HasExtension(".rss") || curl.IsProtocol("rsss") ||
+         m_mimetype == "application/rss+xml";
 }
 
 bool CFileItem::IsAndroidApp() const
 {
-  return URIUtils::IsAndroidApp(m_strPath);
+  return GetURL().IsAndroidApp();
 }
 
 bool CFileItem::IsStack() const
 {
-  return URIUtils::IsStack(GetDynPath());
+  return GetDynURL().IsStack();
 }
 
 bool CFileItem::IsFavourite() const
 {
-  return URIUtils::IsFavourite(m_strPath);
+  return GetURL().IsFavourite();
 }
 
 bool CFileItem::IsPlugin() const
 {
-  return URIUtils::IsPlugin(m_strPath);
+  return GetURL().IsPlugin();
 }
 
 bool CFileItem::IsScript() const
 {
-  return URIUtils::IsScript(m_strPath);
+  return GetURL().IsScript();
 }
 
 bool CFileItem::IsAddonsPath() const
 {
-  return URIUtils::IsAddonsPath(m_strPath);
+  return GetURL().IsAddonsPath();
 }
 
 bool CFileItem::IsSourcesPath() const
 {
-  return URIUtils::IsSourcesPath(m_strPath);
+  return GetURL().IsSourcesPath();
 }
 
 bool CFileItem::IsMultiPath() const
 {
-  return URIUtils::IsMultiPath(m_strPath);
+  return GetURL().IsMultiPath();
 }
 
 bool CFileItem::IsBluray() const
@@ -1041,7 +1051,7 @@ bool CFileItem::IsNfs() const
 
 bool CFileItem::IsISO9660() const
 {
-  return URIUtils::IsISO9660(m_strPath);
+  return GetURL().IsISO9660();
 }
 
 bool CFileItem::IsSmb() const
@@ -1193,9 +1203,11 @@ void CFileItem::FillInMimeType(bool lookup /*= true*/)
      StringUtils::StartsWithNoCase(m_mimetype, "application/x-mms-framed"))
   {
     if (m_strDynPath.empty())
-      m_strDynPath = m_strPath;
+      SetDynPath(m_strPath);
 
-    StringUtils::Replace(m_strDynPath, "http:", "mms:");
+    std::string temp = m_strDynPath;
+    StringUtils::Replace(temp, "http:", "mms:");
+    SetDynPath(std::move(temp));
   }
 }
 
@@ -1459,13 +1471,14 @@ void CFileItem::SetFromVideoInfoTag(const CVideoInfoTag &video)
     SetLabel(video.m_strTitle);
   if (video.m_strFileNameAndPath.empty())
   {
-    m_strPath = video.m_strPath;
-    URIUtils::AddSlashAtEnd(m_strPath);
+    std::string videoPath = video.m_strPath;
+    URIUtils::AddSlashAtEnd(videoPath);
+    SetPath(videoPath);
     SetFolder(true);
   }
   else
   {
-    m_strPath = video.m_strFileNameAndPath;
+    SetPath(video.m_strFileNameAndPath);
     SetFolder(false);
   }
 
@@ -1573,10 +1586,12 @@ void CFileItem::SetFromSong(const CSong &song)
   if (song.idSong > 0)
   {
     std::string strExt = URIUtils::GetExtension(song.strFileName);
-    m_strPath = StringUtils::Format("musicdb://songs/{}{}", song.idSong, strExt);
+    SetPath(StringUtils::Format("musicdb://songs/{}{}", song.idSong, strExt));
   }
   else if (!song.strFileName.empty())
-    m_strPath = song.strFileName;
+  {
+    SetPath(song.strFileName);
+  }
   GetMusicInfoTag()->SetSong(song);
   m_lStartOffset = song.iStartOffset;
   m_lStartPartNumber = 1;
@@ -1594,15 +1609,27 @@ void CFileItem::SetFromSong(const CSong &song)
 * construction, and also allowing CFileItemList to have its own (public)
 * SetURL() function, so for now we give direct access.
 */
-void CFileItem::SetURL(const CURL& url)
+const std::string& CFileItem::GetPath() const
 {
-  m_strPath = url.Get();
+  return m_strPath;
 }
 
-CURL CFileItem::GetURL() const
+void CFileItem::SetPath(std::string path)
 {
-  CURL url(m_strPath);
-  return url;
+  m_strPath = std::move(path);
+  m_urlPath.reset();
+}
+
+void CFileItem::SetURL(const CURL& url)
+{
+  SetPath(url.Get());
+}
+
+const CURL& CFileItem::GetURL() const
+{
+  if (!m_urlPath)
+    m_urlPath = CURL(m_strPath);
+  return *m_urlPath;
 }
 
 bool CFileItem::IsURL(const CURL& url) const
@@ -1617,20 +1644,22 @@ bool CFileItem::IsPath(const std::string& path, bool ignoreURLOptions /* = false
 
 void CFileItem::SetDynURL(const CURL& url)
 {
-  m_strDynPath = url.Get();
+  SetDynPath(url.Get());
 }
 
-CURL CFileItem::GetDynURL() const
+const CURL& CFileItem::GetDynURL() const
 {
   if (!m_strDynPath.empty())
   {
-    CURL url(m_strDynPath);
-    return url;
+    if (!m_urlDynPath)
+      m_urlDynPath = CURL(m_strDynPath);
+    return *m_urlDynPath;
   }
   else
   {
-    CURL url(m_strPath);
-    return url;
+    if (!m_urlPath)
+      m_urlPath = CURL(m_strPath);
+    return *m_urlPath;
   }
 }
 
@@ -1642,9 +1671,10 @@ const std::string &CFileItem::GetDynPath() const
     return m_strPath;
 }
 
-void CFileItem::SetDynPath(std::string_view path)
+void CFileItem::SetDynPath(std::string path)
 {
-  m_strDynPath = path;
+  m_strDynPath = std::move(path);
+  m_urlDynPath.reset();
 }
 
 void CFileItem::SetCueDocument(const std::shared_ptr<CCueDocument>& cuePtr)
@@ -1849,7 +1879,7 @@ std::string CFileItem::GetMovieName(bool bUseFolderNames /* = false */) const
 
   std::string strMovieName;
   if (URIUtils::IsStack(m_strPath))
-    strMovieName = CStackDirectory::GetStackedTitlePath(m_strPath);
+    strMovieName = CStackDirectory::GetStackTitlePath(m_strPath);
   else
     strMovieName = GetBaseMoviePath(bUseFolderNames);
 
@@ -1878,7 +1908,7 @@ std::string CFileItem::GetBaseMoviePath(bool bUseFolderNames) const
     if (URIUtils::IsInArchive(m_strPath))
     {
       // Try to get archive itself, if empty take path before
-      name2 = CURL(m_strPath).GetHostName();
+      name2 = GetURL().GetHostName();
       if (name2.empty())
         name2 = strMovieName;
 

@@ -1171,18 +1171,37 @@ constexpr std::array<InfoMap, 13> player_process = {{
 ///     @return **True** if the weather data has been downloaded.
 ///     <p>
 ///   }
+///   \table_row3{   <b>`Weather.IsUpdating`</b>,
+///                  \anchor Weather_IsUpdating
+///                  _boolean_,
+///     @return **True** if weather data are currently updating.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link Weather_IsUpdating `Weather.IsUpdating`\endlink
+///   }
+///   \table_row3{   <b>`Weather.LastUpdated`</b>,
+///                  \anchor Weather_LastUpdated
+///                  _string_,
+///     @return The localized date and time weather data were last updated\, empty string if not available.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link Weather_LastUpdated `Weather.LastUpdated`\endlink
+///   }
+///   \table_row3{   <b>`Weather.Data(property)`</b>,
+///                  \anchor Weather_Data
+///                  _string_,
+///     @return Weather data, as specified by the parameter.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link Weather_Data `Weather.Data(property)`\endlink
+///   }
 ///   \table_row3{   <b>`Weather.Conditions`</b>,
 ///                  \anchor Weather_Conditions
 ///                  _string_,
 ///     @return The current weather conditions as textual description.
-///     @note This is looked up in a background process.
 ///     <p>
 ///   }
 ///   \table_row3{   <b>`Weather.ConditionsIcon`</b>,
 ///                  \anchor Weather_ConditionsIcon
 ///                  _string_,
 ///     @return The current weather conditions as an icon.
-///     @note This is looked up in a background process.
 ///     <p>
 ///   }
 ///   \table_row3{   <b>`Weather.Temperature`</b>,
@@ -1213,9 +1232,12 @@ constexpr std::array<InfoMap, 13> player_process = {{
 ///
 /// -----------------------------------------------------------------------------
 // clang-format off
-constexpr std::array<InfoMap, 7> weather = {{
+constexpr std::array<InfoMap, 10> weather = {{
     {"isfetched",       WEATHER_IS_FETCHED},
-    {"conditions",      WEATHER_CONDITIONS_TEXT}, // labels from here
+    {"isupdating",      WEATHER_IS_UPDATING},
+    {"lastupdated",     WEATHER_LAST_UPDATED}, // labels from here
+    {"data",            WEATHER_DATA},
+    {"conditions",      WEATHER_CONDITIONS_TEXT},
     {"temperature",     WEATHER_TEMPERATURE},
     {"location",        WEATHER_LOCATION},
     {"fanartcode",      WEATHER_FANART_CODE},
@@ -2781,10 +2803,16 @@ constexpr std::array<InfoMap, 7> musicpartymode = {{
 ///     @return The bitrate of current song.
 ///     <p>
 ///   }
-///   \table_row3{   <b>`MusicPlayer.Channels`</b>,
+///   \table_row3{   <b>`MusicPlayer.Channels(format)`</b>,
 ///                  \anchor MusicPlayer_Channels
 ///                  _string_,
-///     @return The number of channels of current song.
+///     @param[in] format (optional) format of the infolabel.
+///     (possible values: see \ref ListItem_AudioChannels "ListItem.AudioChannels").
+///     @return The channel information of the current song\, formatted in the optional format.
+///     (possible values: see \ref ListItem_AudioChannels "ListItem.AudioChannels").
+///     <p><hr>
+///     @skinning_v22 **[Infolabel Updated]** \link MusicPlayer_Channels `MusicPlayer.Channels`\endlink
+///     added optional format parameter
 ///     <p>
 ///   }
 ///   \table_row3{   <b>`MusicPlayer.BitsPerSample`</b>,
@@ -3857,15 +3885,20 @@ constexpr std::array<InfoMap, 46> musicplayer = {{
 ///     \ref ListItem_AudioCodec "ListItem.AudioCodec").
 ///     <p>
 ///   }
-///   \table_row3{   <b>`VideoPlayer.AudioChannels`</b>,
+///   \table_row3{   <b>`VideoPlayer.AudioChannels(format)`</b>,
 ///                  \anchor VideoPlayer_AudioChannels
 ///                  _string_,
-///     @return The number of audio channels of the currently playing video
+///     @param[in] format (optional) format of the infolabel.
+///     (possible values: see \ref ListItem_AudioChannels "ListItem.AudioChannels").
+///     @return The audio channel information of the currently playing video\, formatted in the optional format
 ///     (possible values: see \ref ListItem_AudioChannels "ListItem.AudioChannels").
 ///     <p><hr>
 ///     @skinning_v16 **[Infolabel Updated]** \link VideoPlayer_AudioChannels `VideoPlayer.AudioChannels`\endlink
 ///     if a video contains no audio\, these infolabels will now return empty.
 ///     (they used to return 0)
+///
+///     @skinning_v22 **[Infolabel Updated]** \link VideoPlayer_AudioChannels `VideoPlayer.AudioChannels`\endlink
+///     added optional format parameter
 ///     <p>
 ///   }
 ///   \table_row3{   <b>`VideoPlayer.AudioLanguage`</b>,
@@ -6357,10 +6390,17 @@ constexpr std::array<InfoMap, 3> container_str = {{
 ///       - <b>wmav2</b>
 ///     <p>
 ///   }
-///   \table_row3{   <b>`ListItem.AudioChannels`</b>,
+///   \table_row3{   <b>`ListItem.AudioChannels(format)`</b>,
 ///                  \anchor ListItem_AudioChannels
 ///                  _string_,
-///     @return The number of audio channels of the currently selected video. Possible values:
+///     @param format (optional) format of the infolabel. Possible values for the format:
+///       - <b>(blank)</b> no format value: count of channels
+///       - <b>defaultlayout</b> return a default channel layout in the format x.y.z for the
+///         channel count (x=listener level speakers\, y=lfe channels\, z=overhead channels).
+///         If a default layout is not defined for the channel count then the text "x channels" is
+///         returned, with x replaced by the channel count and "channels" localized to the user language.
+///     @return The audio channel information of the currently selected video. Possible values
+///       for the default format:
 ///       - <b>1</b>
 ///       - <b>2</b>
 ///       - <b>4</b>
@@ -6368,10 +6408,23 @@ constexpr std::array<InfoMap, 3> container_str = {{
 ///       - <b>6</b>
 ///       - <b>8</b>
 ///       - <b>10</b>
+///
+///     Possible values for format "defaultlayout":
+///       - <b>1.0</b>
+///       - <b>2.0</b>
+///       - <b>5.1</b>
+///       - <b>6.1</b>
+///       - <b>7.1</b>
+///       - <b>9 channels</b>
+///       - <b>9.1.6</b>
+///
 ///     <p><hr>
 ///     @skinning_v16 **[Infolabel Updated]** \link ListItem_AudioChannels `ListItem.AudioChannels`\endlink
 ///     if a video contains no audio\, these infolabels will now return empty.
 ///     (they used to return 0)
+///
+///     @skinning_v22 **[Infolabel Updated]** \link ListItem_AudioChannels `ListItem.AudioChannels`\endlink
+///     added optional format parameter
 ///     <p>
 ///   }
 ///   \table_row3{   <b>`ListItem.AudioLanguage`</b>,
@@ -7200,12 +7253,18 @@ constexpr std::array<InfoMap, 3> container_str = {{
 ///     @skinning_v19 **[New Infolabel]** \link ListItem_SampleRate `ListItem.SampleRate`\endlink
 ///     <p>
 ///   }
-///   \table_row3{   <b>`ListItem.MusicChannels`</b>,
+///   \table_row3{   <b>`ListItem.MusicChannels(format)`</b>,
 ///                  \anchor ListItem_MusicChannels
 ///                  _string_,
+///     @param[in] format (optional) format of the infolabel.
+///     (possible values: see \ref ListItem_AudioChannels "ListItem.AudioChannels").
 ///     @return The number of audio channels of a song.
+///     (possible values: see \ref ListItem_AudioChannels "ListItem.AudioChannels").
 ///     <p><hr>
 ///     @skinning_v19 **[New Infolabel]** \link ListItem_No_Of_Channels `ListItem.NoOfChannels`\endlink
+///
+///     @skinning_v22 **[Infolabel Updated]** \link ListItem_MusicChannels `ListItem.MusicChannels`\endlink
+///     added optional format parameter
 ///     <p>
 ///   }
 ///   \table_row3{   <b>`ListItem.TvShowDBID`</b>,
@@ -10484,21 +10543,21 @@ namespace
 std::string TranslateListSeparator(const std::string& param)
 {
   if (StringUtils::EqualsNoCase(param, "comma"))
-    return ",";
+    return ", ";
   else if (StringUtils::EqualsNoCase(param, "pipe"))
-    return "|";
+    return " | ";
   else if (StringUtils::EqualsNoCase(param, "slash"))
-    return "/";
+    return " / ";
   else if (StringUtils::EqualsNoCase(param, "cr"))
     return "\n";
   else if (StringUtils::EqualsNoCase(param, "dash"))
-    return "-";
+    return " - ";
   else if (StringUtils::EqualsNoCase(param, "colon"))
-    return ":";
+    return " : ";
   else if (StringUtils::EqualsNoCase(param, "semicolon"))
-    return ";";
+    return "; ";
   else if (StringUtils::EqualsNoCase(param, "fullstop"))
-    return ".";
+    return ". ";
   else
   {
     CLog::Log(LOGERROR, "unhandled separator param {}", param);
@@ -10635,10 +10694,18 @@ int CGUIInfoManager::TranslateSingleString(const std::string &strCondition, bool
     }
     else if (cat.Name() == "weather")
     {
-      for (const auto& i : weather)
+      if (prop.num_params() == 0)
       {
-        if (prop.Name() == i.str)
-          return i.val;
+        for (const auto& i : weather)
+        {
+          if (prop.Name() == i.str)
+            return i.val;
+        }
+      }
+      else if (prop.num_params() == 1)
+      {
+        if (prop.Name() == "data")
+          return AddMultiInfo(CGUIInfo(WEATHER_DATA, prop.param(), 0));
       }
     }
     else if (cat.Name() == "network")
@@ -10826,6 +10893,11 @@ int CGUIInfoManager::TranslateSingleString(const std::string &strCondition, bool
 
         return AddMultiInfo(CGUIInfo(MUSICPLAYER_PROPERTY, prop.param()));
       }
+      else if (prop.Name() == "channels" && prop.num_params() == 1)
+      {
+        return AddMultiInfo(CGUIInfo(MUSICPLAYER_CHANNELS, prop.param()));
+      }
+
       return TranslateMusicPlayerString(prop.Name());
     }
     else if (cat.Name() == "videoplayer")
@@ -10878,6 +10950,10 @@ int CGUIInfoManager::TranslateSingleString(const std::string &strCondition, bool
         return AddMultiInfo(
             CGUIInfo(VIDEOPLAYER_NEXT_GENRE, TranslateListSeparator(prop.param()), 0));
       }
+
+      if (prop.Name() == "audiochannels" && prop.num_params() == 1)
+        return AddMultiInfo(CGUIInfo(VIDEOPLAYER_AUDIO_CHANNELS, prop.param(), 0));
+
       return TranslateVideoPlayerString(prop.Name());
     }
     else if (cat.Name() == "retroplayer")
@@ -11208,6 +11284,10 @@ int CGUIInfoManager::TranslateListItem(const Property& cat, const Property& prop
     else if (prop.Name() == "duration" || prop.Name() == "nextduration")
     {
       data4 = TranslateTimeFormat(prop.param());
+    }
+    else if (prop.Name() == "audiochannels" || prop.Name() == "musicchannels")
+    {
+      data3 = prop.param();
     }
   }
 
@@ -11878,7 +11958,7 @@ std::string CGUIInfoManager::GetMultiInfoItemLabel(const CFileItem *item, int co
       case LISTITEM_THUMB:
         return item->GetThumbHideIfUnwatched(item);
       case LISTITEM_FOLDERPATH:
-        return CURL(item->GetPath()).GetWithoutUserDetails();
+        return item->GetURL().GetWithoutUserDetails();
       case LISTITEM_FOLDERNAME:
       case LISTITEM_PATH:
       {

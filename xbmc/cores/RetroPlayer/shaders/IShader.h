@@ -9,16 +9,14 @@
 #pragma once
 
 #include "ShaderTypes.h"
-#include "utils/Geometry.h"
+#include "cores/RetroPlayer/RetroPlayerTypes.h"
 
 #include <map>
 #include <stdint.h>
 #include <string>
 #include <vector>
 
-namespace KODI
-{
-namespace SHADER
+namespace KODI::SHADER
 {
 class IShaderLut;
 class IShaderTexture;
@@ -35,9 +33,8 @@ public:
    * \param shaderPath Full path to the shader file
    * \param shaderParameters Struct with all parameters pertaining to the shader
    * \param luts Look-up textures pertaining to the shader
-   * \param viewPortSize Size of the window/viewport
    * \param passIdx Index of the video shader pass
-   * \param frameCountMod Modulo applied to the frame count before sendign it to the shader
+   * \param frameCountMod Modulo applied to the frame count before sending it to the shader
    *
    * \return Returns false if creating the shader failed, true otherwise
    */
@@ -45,7 +42,6 @@ public:
                       std::string shaderPath,
                       ShaderParameterMap shaderParameters,
                       std::vector<std::shared_ptr<IShaderLut>> luts,
-                      float2 viewPortSize,
                       unsigned int passIdx,
                       unsigned int frameCountMod = 0) = 0;
 
@@ -74,14 +70,16 @@ public:
    * Updates any internal state needed to ensure that correct data is passed to
    * the shader when rendering.
    *
-   * \param dest Coordinates of the 4 corners of the output viewport/window
+   * \param dest Coordinates of the 4 corners of the destination rectangle
+   * \param fullDestSize Destination rectangle size for the fullscreen game window
    * \param sourceTexture Source texture of the first shader pass
    * \param pShaderTextures Intermediate textures used for all shader passes
    * \param pShaders All shader passes
    * \param frameCount Number of frames that have passed
    */
   virtual void PrepareParameters(
-      CPoint dest[4],
+      const RETRO::ViewportCoordinates& dest,
+      const float2 fullDestSize,
       IShaderTexture& sourceTexture,
       const std::vector<std::unique_ptr<IShaderTexture>>& pShaderTextures,
       const std::vector<std::unique_ptr<IShader>>& pShaders,
@@ -94,5 +92,4 @@ public:
    */
   virtual void UpdateMVP() = 0;
 };
-} // namespace SHADER
-} // namespace KODI
+} // namespace KODI::SHADER

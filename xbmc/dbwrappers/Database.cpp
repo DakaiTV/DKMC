@@ -257,15 +257,15 @@ void CDatabase::Split(const std::string& strFileNameAndPath,
   strFileName = strFileNameAndPath.substr(i);
 }
 
-std::string CDatabase::PrepareSQL(std::string strStmt, ...) const
+std::string CDatabase::PrepareSQL(std::string_view sqlFormat, ...) const
 {
-  std::string strResult = "";
+  std::string strResult;
 
   if (nullptr != m_pDB)
   {
     va_list args;
-    va_start(args, strStmt);
-    strResult = m_pDB->vprepare(strStmt.c_str(), args);
+    va_start(args, sqlFormat);
+    strResult = m_pDB->vprepare(sqlFormat, args);
     va_end(args);
   }
 
@@ -800,6 +800,20 @@ void CDatabase::RollbackTransaction()
   {
     CLog::Log(LOGERROR, "database:rollbacktransaction failed");
   }
+}
+
+bool CDatabase::InTransaction() const
+{
+  try
+  {
+    if (nullptr != m_pDB)
+      return m_pDB->in_transaction();
+  }
+  catch (...)
+  {
+    CLog::Log(LOGERROR, "database:in_transaction failed");
+  }
+  return false;
 }
 
 bool CDatabase::CreateDatabase()

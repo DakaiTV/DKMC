@@ -8,11 +8,14 @@
 
 #include "ServiceBroker.h"
 #include "URL.h"
+#include "filesystem/File.h"
 #include "filesystem/MultiPathDirectory.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/SettingsComponent.h"
+#include "test/TestUtils.h"
 #include "utils/URIUtils.h"
 
+#include <array>
 #include <utility>
 
 #include <gtest/gtest.h>
@@ -84,7 +87,8 @@ TEST_F(TestURIUtils, GetFileName)
 
 TEST_F(TestURIUtils, RemoveExtension)
 {
-  std::string ref, var;
+  std::string ref;
+  std::string var;
 
   /* NOTE: CSettings need to be set to find other extensions. */
   ref = "/path/to/file";
@@ -95,7 +99,8 @@ TEST_F(TestURIUtils, RemoveExtension)
 
 TEST_F(TestURIUtils, ReplaceExtension)
 {
-  std::string ref, var;
+  std::string ref;
+  std::string var;
 
   ref = "/path/to/file.xsd";
   var = URIUtils::ReplaceExtension("/path/to/file.xml", ".xsd");
@@ -104,7 +109,10 @@ TEST_F(TestURIUtils, ReplaceExtension)
 
 TEST_F(TestURIUtils, Split)
 {
-  std::string refpath, reffile, varpath, varfile;
+  std::string refpath;
+  std::string reffile;
+  std::string varpath;
+  std::string varfile;
 
   refpath = "/path/to/";
   reffile = "movie.avi";
@@ -162,7 +170,8 @@ TEST_F(TestURIUtils, SplitPathLocal)
 
 TEST_F(TestURIUtils, GetCommonPath)
 {
-  std::string ref, var;
+  std::string ref;
+  std::string var;
 
   ref = "/path/";
   var = "/path/2/movie.avi";
@@ -172,7 +181,8 @@ TEST_F(TestURIUtils, GetCommonPath)
 
 TEST_F(TestURIUtils, GetParentPath)
 {
-  std::string ref, var;
+  std::string ref;
+  std::string var;
 
   ref = "/path/to/";
   var = URIUtils::GetParentPath("/path/to/movie.avi");
@@ -185,7 +195,8 @@ TEST_F(TestURIUtils, GetParentPath)
 
 TEST_F(TestURIUtils, GetBasePath)
 {
-  std::string ref, var;
+  std::string ref;
+  std::string var;
 
   ref = "smb://somepath/path/";
 
@@ -215,7 +226,10 @@ TEST_F(TestURIUtils, GetBasePath)
 
 TEST_F(TestURIUtils, SubstitutePath)
 {
-  std::string from, to, ref, var;
+  std::string from;
+  std::string to;
+  std::string ref;
+  std::string var;
 
   from = "C:\\My Videos";
   to = "https://myserver/some%20other%20path";
@@ -480,7 +494,8 @@ TEST_F(TestURIUtils, IsBlurayPath)
 
 TEST_F(TestURIUtils, AddSlashAtEnd)
 {
-  std::string ref, var;
+  std::string ref;
+  std::string var;
 
   ref = "bluray://path/to/file/";
   var = "bluray://path/to/file/";
@@ -496,7 +511,8 @@ TEST_F(TestURIUtils, HasSlashAtEnd)
 
 TEST_F(TestURIUtils, RemoveSlashAtEnd)
 {
-  std::string ref, var;
+  std::string ref;
+  std::string var;
 
   ref = "bluray://path/to/file";
   var = "bluray://path/to/file/";
@@ -506,7 +522,8 @@ TEST_F(TestURIUtils, RemoveSlashAtEnd)
 
 TEST_F(TestURIUtils, CreateArchivePath)
 {
-  std::string ref, var;
+  std::string ref;
+  std::string var;
 
   ref = "zip://%2fpath%2fto%2f/file";
   var = URIUtils::CreateArchivePath("zip", CURL("/path/to/"), "file").Get();
@@ -631,6 +648,155 @@ TEST_F(TestURIUtils, UpdateUrlEncoding)
   EXPECT_STRCASEEQ(newUrl.c_str(), oldUrl.c_str());
 }
 
+struct URLEncodings
+{
+  std::string_view input;
+  std::string_view encoded;
+};
+
+constexpr URLEncodings EncodingTestData[] = {
+    // No crash
+    {"", ""},
+
+    // No Encoding needed
+    {"a", "a"},
+    {"z", "z"},
+    {"A", "A"},
+    {"Z", "Z"},
+    {"0", "0"},
+    {"9", "9"},
+
+    // Encoding needed
+    {" ", "%20"},
+    {"\"", "%22"},
+    {"#", "%23"},
+    {"$", "%24"},
+    {"%", "%25"},
+    {"&", "%26"},
+    {"'", "%27"},
+    {"*", "%2a"},
+    {"+", "%2b"},
+    {",", "%2c"},
+    {"/", "%2f"},
+    {":", "%3a"},
+    {";", "%3b"},
+    {"<", "%3c"},
+    {"=", "%3d"},
+    {">", "%3e"},
+    {"?", "%3f"},
+    {"@", "%40"},
+    {"[", "%5b"},
+    {"\\", "%5c"},
+    {"]", "%5d"},
+    {"^", "%5e"},
+    {"`", "%60"},
+    {"{", "%7b"},
+    {"|", "%7c"},
+    {"}", "%7d"},
+    {"\u03A9", "%ce%a9"}, // Greek Capital Letter Omega
+
+    // Encoding needed (Non alpha)
+    {"\x1", "%01"},
+    {"\x2", "%02"},
+    {"\x6", "%06"},
+    {"\a", "%07"},
+    {"\b", "%08"},
+    {"\t", "%09"},
+    {"\n", "%0a"},
+    {"\v", "%0b"},
+    {"\f", "%0c"},
+    {"\r", "%0d"},
+
+    // Double Encoding
+    {"%20", "%2520"},
+    {"%22", "%2522"},
+    {"%2a", "%252a"},
+    {"%2b", "%252b"},
+    {"%2c", "%252c"},
+    {"%2f", "%252f"},
+    {"%0a", "%250a"},
+    {"%0b", "%250b"},
+    {"%0c", "%250c"},
+};
+
+constexpr URLEncodings RFC1738EncodingTestData[] = {
+    {"-", "-"}, {"_", "_"}, {".", "."}, {"!", "!"}, {"(", "("}, {")", ")"}, {"~", "%7e"},
+};
+
+constexpr URLEncodings RFC3986EncodingTestData[] = {
+    {"-", "-"}, {"_", "_"}, {".", "."}, {"!", "%21"}, {"(", "%28"}, {")", "%29"}, {"~", "~"},
+};
+
+constexpr URLEncodings InvalidEncodingTestData[] = {
+    // Incomplete or Invalid encoding
+    {"%", "%"},
+    {"%%", "%%"},
+    {"%;", "%;"},
+    {"%-", "%-"},
+    {"%2", "%2"},
+    {"%2-", "%2-"},
+    {"%2x", "%2x"},
+
+    // Incomplete or Invalid encoding recovers to decode future characters
+    {"% ", "%%20"},
+    {"%% ", "%%%20"},
+    {"%; ", "%;%20"},
+    {"%- ", "%-%20"},
+    {"%2 ", "%2%20"},
+    {"%2- ", "%2-%20"},
+    {"%2x ", "%2x%20"},
+};
+
+TEST_F(TestURIUtils, URLEncode)
+{
+  for (const auto& [toEncode, expected] : EncodingTestData)
+    EXPECT_EQ(expected, URIUtils::URLEncode(toEncode));
+
+  for (const auto& [toEncode, expected] : RFC1738EncodingTestData)
+    EXPECT_EQ(expected, URIUtils::URLEncode(toEncode));
+
+  for (const auto& [toEncode, expected] : RFC3986EncodingTestData)
+    EXPECT_EQ(expected, URIUtils::URLEncode(toEncode, URIUtils::RFC3986));
+}
+
+TEST_F(TestURIUtils, URLDecode)
+{
+  for (const auto& [expected, encoded] : EncodingTestData)
+    EXPECT_EQ(expected, URIUtils::URLDecode(encoded));
+
+  for (const auto& [expected, encoded] : InvalidEncodingTestData)
+    EXPECT_EQ(expected, URIUtils::URLDecode(encoded));
+
+  for (const auto& [expected, encoded] : RFC1738EncodingTestData)
+    EXPECT_EQ(expected, URIUtils::URLDecode(encoded));
+
+  for (const auto& [expected, encoded] : RFC3986EncodingTestData)
+    EXPECT_EQ(expected, URIUtils::URLDecode(encoded));
+
+  // Test '+' is converted to ' '
+  EXPECT_EQ(" ", URIUtils::URLDecode("+"));
+
+  // Test decoding uppercase hex digits
+  EXPECT_EQ("{", URIUtils::URLDecode("%7B"));
+  EXPECT_EQ("|", URIUtils::URLDecode("%7C"));
+  EXPECT_EQ("}", URIUtils::URLDecode("%7D"));
+}
+
+TEST_F(TestURIUtils, URLEncodeDecode)
+{
+  for (unsigned ch = 1; ch < 128; ++ch)
+  {
+    std::string str{char(ch)};
+    EXPECT_EQ(str, CURL::Decode(CURL::Encode(str)));
+  }
+
+  for (const auto& [toEncode, encoded] : EncodingTestData)
+  {
+    EXPECT_EQ(toEncode, URIUtils::URLDecode(CURL::Encode(toEncode)));
+    EXPECT_EQ(encoded, URIUtils::URLDecode(CURL::Encode(encoded)));
+  }
+}
+
 TEST_F(TestURIUtils, ContainersEncodeHostnamePaths)
 {
   CURL curl("/path/thing");
@@ -650,3 +816,413 @@ TEST_F(TestURIUtils, ContainersEncodeHostnamePaths)
   EXPECT_EQ("rar://%2fpath%2fthing/my/archived/path",
             URIUtils::CreateArchivePath("rar", curl, "/my/archived/path").Get());
 }
+
+TEST_F(TestURIUtils, GetDiscBase)
+{
+  constexpr std::string_view refDir{"smb://somepath/path/"};
+  EXPECT_EQ(refDir, URIUtils::GetDiscBase("smb://somepath/path/BDMV/index.bdmv"));
+  EXPECT_EQ(refDir, URIUtils::GetDiscBase(
+                        "bluray://smb%3a%2f%2fsomepath%2fpath%2f/BDMV/PLAYLIST/00800.mpls"));
+
+  constexpr std::string_view refIso{"smb://somepath/path/movie.iso"};
+  EXPECT_EQ(refIso, URIUtils::GetDiscBase("smb://somepath/path/movie.iso"));
+  EXPECT_EQ(
+      refIso,
+      URIUtils::GetDiscBase(
+          "bluray://udf%3a%2f%2fsmb%253a%252f%252fsomepath%252fpath%252fmovie.iso%2f/BDMV/PLAYLIST/"
+          "00800.mpls"));
+}
+
+TEST_F(TestURIUtils, GetDiscBasePath)
+{
+  constexpr std::string_view refDir{"smb://somepath/path/"};
+  EXPECT_EQ(refDir, URIUtils::GetDiscBasePath("smb://somepath/path/BDMV/index.bdmv"));
+  EXPECT_EQ(refDir, URIUtils::GetDiscBasePath(
+                        "bluray://smb%3a%2f%2fsomepath%2fpath%2f/BDMV/PLAYLIST/00800.mpls"));
+  EXPECT_EQ(refDir, URIUtils::GetDiscBasePath("smb://somepath/path/movie.iso"));
+  EXPECT_EQ(
+      refDir,
+      URIUtils::GetDiscBasePath(
+          "bluray://udf%3a%2f%2fsmb%253a%252f%252fsomepath%252fpath%252fmovie.iso%2f/BDMV/PLAYLIST/"
+          "00800.mpls"));
+}
+
+TEST_F(TestURIUtils, GetDiscFile)
+{
+  EXPECT_EQ(
+      "smb://somepath/path/BDMV/index.bdmv",
+      URIUtils::GetDiscFile("bluray://smb%3a%2f%2fsomepath%2fpath%2f/BDMV/PLAYLIST/00800.mpls"));
+  EXPECT_EQ(
+      "smb://somepath/path/movie.iso",
+      URIUtils::GetDiscFile(
+          "bluray://udf%3a%2f%2fsmb%253a%252f%252fsomepath%252fpath%252fmovie.iso%2f/BDMV/PLAYLIST/"
+          "00800.mpls"));
+}
+
+TEST_F(TestURIUtils, GetDiscUnderlyingFile)
+{
+  CURL url{"bluray://smb%3a%2f%2fsomepath%2fpath%2f/file.ext"};
+  EXPECT_EQ("smb://somepath/path/file.ext", URIUtils::GetDiscUnderlyingFile(url));
+
+  url = CURL("bluray://udf%3a%2f%2fsmb%253a%252f%252fsomepath%252fpath%252fmovie.iso%2f/file.ext");
+  EXPECT_EQ("udf://smb%3a%2f%2fsomepath%2fpath%2fmovie.iso/file.ext",
+            URIUtils::GetDiscUnderlyingFile(url));
+}
+
+TEST_F(TestURIUtils, GetBlurayRootPath)
+{
+  constexpr std::string_view refRoot{"bluray://smb%3a%2f%2fsomepath%2fpath%2f/root"};
+  EXPECT_EQ(refRoot, URIUtils::GetBlurayRootPath("smb://somepath/path/BDMV/index.bdmv"));
+  EXPECT_EQ(refRoot, URIUtils::GetBlurayRootPath(
+                         "bluray://smb%3a%2f%2fsomepath%2fpath%2f/BDMV/PLAYLIST/00800.mpls"));
+
+  constexpr std::string_view refIsoRoot{
+      "bluray://udf%3a%2f%2fsmb%253a%252f%252fsomepath%252fpath%252fmovie.iso%2f/root"};
+  EXPECT_EQ(refIsoRoot, URIUtils::GetBlurayRootPath("smb://somepath/path/movie.iso"));
+  EXPECT_EQ(
+      refIsoRoot,
+      URIUtils::GetBlurayRootPath(
+          "bluray://udf%3a%2f%2fsmb%253a%252f%252fsomepath%252fpath%252fmovie.iso%2f/BDMV/PLAYLIST/"
+          "00800.mpls"));
+}
+
+TEST_F(TestURIUtils, GetBlurayEpisodePath)
+{
+  constexpr std::string_view ref{"bluray://smb%3a%2f%2fsomepath%2fpath%2f/root/episode/3/4"};
+  EXPECT_EQ(ref, URIUtils::GetBlurayEpisodePath("smb://somepath/path/BDMV/index.bdmv", 3, 4));
+  EXPECT_EQ(ref, URIUtils::GetBlurayEpisodePath(
+                     "bluray://smb%3a%2f%2fsomepath%2fpath%2f/BDMV/PLAYLIST/00800.mpls", 3, 4));
+
+  constexpr std::string_view refIso{
+      "bluray://udf%3a%2f%2fsmb%253a%252f%252fsomepath%252fpath%252fmovie.iso%2f/root/episode/3/4"};
+  EXPECT_EQ(refIso, URIUtils::GetBlurayEpisodePath("smb://somepath/path/movie.iso", 3, 4));
+  EXPECT_EQ(
+      refIso,
+      URIUtils::GetBlurayEpisodePath(
+          "bluray://udf%3a%2f%2fsmb%253a%252f%252fsomepath%252fpath%252fmovie.iso%2f/BDMV/PLAYLIST/"
+          "00800.mpls",
+          3, 4));
+}
+
+TEST_F(TestURIUtils, GetBlurayPlaylistPath)
+{
+  EXPECT_EQ("bluray://smb%3a%2f%2fsomepath%2fpath%2f/BDMV/PLAYLIST/",
+            URIUtils::GetBlurayPlaylistPath("smb://somepath/path/BDMV/index.bdmv"));
+  EXPECT_EQ("bluray://smb%3a%2f%2fsomepath%2fpath%2f/BDMV/PLAYLIST/00800.mpls",
+            URIUtils::GetBlurayPlaylistPath("smb://somepath/path/BDMV/index.bdmv", 800));
+  EXPECT_EQ(
+      "bluray://udf%3a%2f%2fsmb%253a%252f%252fsomepath%252fpath%252fmovie.iso%2f/BDMV/PLAYLIST/",
+      URIUtils::GetBlurayPlaylistPath("smb://somepath/path/movie.iso"));
+  EXPECT_EQ(
+      "bluray://udf%3a%2f%2fsmb%253a%252f%252fsomepath%252fpath%252fmovie.iso%2f/BDMV/PLAYLIST/"
+      "00800.mpls",
+      URIUtils::GetBlurayPlaylistPath("smb://somepath/path/movie.iso", 800));
+}
+
+TEST_F(TestURIUtils, GetBlurayPlaylistFromPath)
+{
+  EXPECT_EQ(URIUtils::GetBlurayPlaylistFromPath(
+                "bluray://smb%3a%2f%2fsomepath%2fpath%2f/BDMV/PLAYLIST/00800.mpls"),
+            800);
+  EXPECT_EQ(URIUtils::GetBlurayPlaylistFromPath(
+                "bluray://udf%3a%2f%2fsmb%253a%252f%252fsomepath%252fpath%252fmovie.iso%2f/BDMV/"
+                "PLAYLIST/00800.mpls"),
+            800);
+}
+
+TEST_F(TestURIUtils, RemovePartNumberFromTitle)
+{
+  const std::string r{URIUtils::GetTitleTrailingPartNumberRegex()};
+  CRegExp regex{true, CRegExp::autoUtf8, r.c_str()};
+
+  std::string title{"Movie (Disc 1)"};
+  EXPECT_EQ(regex.RegFind(title), 5);
+
+  title = "Movie-(Disk 100)";
+  EXPECT_EQ(regex.RegFind(title), 5);
+
+  title = "Movie";
+  EXPECT_EQ(regex.RegFind(title), -1);
+}
+
+struct TestIsHostOnLANData
+{
+  const static bool DONT_TEST_LOCAL_NETWORK = false;
+
+  bool expectedHostOnAnyLAN;
+  bool expectedOnAnyLAN;
+  bool expectedHostOnLocalLAN;
+  bool expectedOnLocalLAN;
+  std::string input;
+  bool testLocalNetwork = true;
+};
+
+std::ostream& operator<<(std::ostream& os, const TestIsHostOnLANData& rhs)
+{
+  return os << rhs.input;
+}
+
+class TestLANParamTest : public testing::Test,
+                         public testing::WithParamInterface<TestIsHostOnLANData>
+{
+};
+
+const TestIsHostOnLANData values[] = {
+    // clang-format off
+    /*
+    +-------------+--------------+
+    |   Private   |    Local     |
+    | Host | URL  | Host | URL   |
+    +------+------+------+-------+   */
+    // Assumption that hostnames without a period are local (smb, netbios)
+    { true,  false, true,  false, "localhost" },
+    { true,  true,  true,  true,  "some_unresolveable_hostname" },
+    { true,  true,  true,  true,  "google" },
+    { true,  true,  true,  true,  "aol" },
+
+    { false, false, false, false, "www.some_unresolveable_hostname.com" },
+    { false, false, false, false, "www.google.com" },
+    { false, false, false, false, "google.com" },
+    { false, false, false, false, "www.aol.com" },
+    { false, false, false, false, "aol.com" },
+    { false, false, false, false, "168.219.34.129" },
+
+    { false, false, false, false, "0.0.0.0" },
+    { false, false, false, false, "127.0.0.1" },
+    /*
+     * The following checks cannot be reliable tested on build machines
+     * These tests pass for a class B network (172.16.0.0/16) but cannot be guaranteed to work under different network configurations
+     */
+    { true,  true,  false, false, "192.168.0.3", TestIsHostOnLANData::DONT_TEST_LOCAL_NETWORK },
+    { true,  true,  true,  true,  "172.16.0.2",  TestIsHostOnLANData::DONT_TEST_LOCAL_NETWORK },
+    { true,  true,  false, false, "10.0.0.9",    TestIsHostOnLANData::DONT_TEST_LOCAL_NETWORK },
+    // clang-format on
+};
+
+TEST_P(TestLANParamTest, TestIsHostOnLAN)
+{
+  using enum LanCheckMode;
+
+  auto& param = GetParam();
+  auto hostnameURL = "http://" + param.input;
+
+  EXPECT_EQ(param.expectedHostOnAnyLAN, URIUtils::IsHostOnLAN(param.input, ANY_PRIVATE_SUBNET));
+  EXPECT_EQ(param.expectedOnAnyLAN, URIUtils::IsOnLAN(hostnameURL, ANY_PRIVATE_SUBNET));
+
+  if (param.testLocalNetwork)
+  {
+    EXPECT_EQ(param.expectedHostOnLocalLAN, URIUtils::IsHostOnLAN(param.input, ONLY_LOCAL_SUBNET));
+    EXPECT_EQ(param.expectedOnLocalLAN, URIUtils::IsOnLAN(hostnameURL, ONLY_LOCAL_SUBNET));
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(TestURIUtils, TestLANParamTest, testing::ValuesIn(values));
+
+TEST_F(TestURIUtils, CheckConsistencyBetweenFileNameUtilities)
+{
+  auto URIUtils_Split = [=](const std::string& in)
+  {
+    std::string _, splitCurlFileName;
+    URIUtils::Split(in, _, splitCurlFileName);
+    return splitCurlFileName;
+  };
+  auto CURL_FileName_URIUtils_Split = [=](const std::string& in)
+  { return URIUtils_Split(CURL(in).GetFileName()); };
+
+  {
+    EXPECT_EQ("?", CURL("?").GetFileName());
+
+    EXPECT_EQ("?", URIUtils::GetFileName("?"));
+    EXPECT_EQ("?", CURL_FileName_URIUtils_Split("?"));
+    EXPECT_EQ("?", URIUtils_Split("?"));
+  }
+  {
+    EXPECT_EQ("", URIUtils_Split("C:"));
+
+    EXPECT_EQ("", URIUtils::GetFileName("C:"));
+    EXPECT_EQ("", CURL_FileName_URIUtils_Split("C:"));
+    EXPECT_EQ("", URIUtils_Split("C:"));
+  }
+  {
+    EXPECT_EQ("", URIUtils::GetFileName("/"));
+    EXPECT_EQ("", CURL_FileName_URIUtils_Split("/"));
+    EXPECT_EQ("", URIUtils_Split("/"));
+
+    EXPECT_EQ("", URIUtils::GetFileName("\\"));
+    EXPECT_EQ("", CURL_FileName_URIUtils_Split("\\"));
+    EXPECT_EQ("", URIUtils_Split("\\"));
+
+    EXPECT_EQ(".thing", URIUtils::GetFileName("/.thing"));
+    EXPECT_EQ(".thing", CURL_FileName_URIUtils_Split("/.thing"));
+    EXPECT_EQ(".thing", URIUtils_Split("/.thing"));
+
+    EXPECT_EQ(".thing", URIUtils::GetFileName("/hello/there/.thing"));
+    EXPECT_EQ(".thing", CURL_FileName_URIUtils_Split("/hello/there/.thing"));
+    EXPECT_EQ(".thing", URIUtils_Split("/hello/there/.thing"));
+  }
+  {
+    EXPECT_EQ("srv/share/movie.avi?option=true",
+              CURL("nfs://127.0.0.1/srv/share/movie.avi?option=true").GetFileName());
+
+    EXPECT_EQ("movie.avi?option=true",
+              URIUtils::GetFileName("nfs://127.0.0.1/srv/share/movie.avi?option=true"));
+    EXPECT_EQ("movie.avi?option=true",
+              CURL_FileName_URIUtils_Split("nfs://127.0.0.1/srv/share/movie.avi?option=true"));
+    EXPECT_EQ("movie.avi", URIUtils_Split("nfs://127.0.0.1/srv/share/movie.avi?option=true"));
+  }
+  {
+    EXPECT_EQ("srv/share/movie.avi|option=true",
+              CURL("nfs://127.0.0.1/srv/share/movie.avi|option=true").GetFileName());
+
+    EXPECT_EQ("movie.avi|option=true",
+              URIUtils::GetFileName("nfs://127.0.0.1/srv/share/movie.avi|option=true"));
+    EXPECT_EQ("movie.avi|option=true",
+              CURL_FileName_URIUtils_Split("nfs://127.0.0.1/srv/share/movie.avi|option=true"));
+    EXPECT_EQ("movie.avi", URIUtils_Split("nfs://127.0.0.1/srv/share/movie.avi|option=true"));
+  }
+  {
+    EXPECT_EQ("a:b", URIUtils::GetFileName("/hello/there/a:b"));
+    EXPECT_EQ("a:b", CURL_FileName_URIUtils_Split("/hello/there/a:b"));
+    EXPECT_EQ("a:b", URIUtils_Split("/hello/there/a:b"));
+  }
+}
+
+struct CURLArchiveConstructionTestData
+{
+  std::string input;
+  std::string protocol;
+  std::string filename;
+  std::string hostname;
+  bool translateFilename{false};
+};
+
+std::ostream& operator<<(std::ostream& os, const CURLArchiveConstructionTestData& data)
+{
+  return os << "CURLArchiveConstructionTestData { " << data.input << " }" << std::endl;
+}
+
+const auto ArchiveFileParsingTests = std::array{
+    // Zip file tests
+    CURLArchiveConstructionTestData{
+        "xbmc/utils/test/resources/does_not_exist.zip/kodi-dev.png",
+        "",
+        "xbmc/utils/test/resources/does_not_exist.zip/kodi-dev.png",
+        "",
+        true,
+    },
+    CURLArchiveConstructionTestData{
+        "xbmc/utils/test/resources/zipfile.zip/kodi-dev.png",
+        "zip",
+        "kodi-dev.png",
+        "xbmc/utils/test/resources/zipfile.zip",
+    },
+    CURLArchiveConstructionTestData{
+        "xbmc/utils/test/resources/archives_in_zip.zip/does_not_exist.png",
+        "zip",
+        "does_not_exist.png",
+        "xbmc/utils/test/resources/archives_in_zip.zip",
+    },
+    CURLArchiveConstructionTestData{
+        "xbmc/utils/test/resources/archives_in_zip.zip/zipfile.zip",
+        "zip",
+        "zipfile.zip",
+        "xbmc/utils/test/resources/archives_in_zip.zip",
+    },
+    CURLArchiveConstructionTestData{
+        "xbmc/utils/test/resources/archives_in_zip.zip/rarfile.rar",
+        "zip",
+        "rarfile.rar",
+        "xbmc/utils/test/resources/archives_in_zip.zip",
+    },
+    CURLArchiveConstructionTestData{
+        "xbmc/utils/test/resources/archives_in_zip.zip/zipfile.zip/does_not_exist.png",
+        "zip",
+        "zipfile.zip/does_not_exist.png",
+        "xbmc/utils/test/resources/archives_in_zip.zip",
+    },
+    CURLArchiveConstructionTestData{
+        "xbmc/utils/test/resources/archives_in_zip.zip/zipfile.zip/kodi-dev.png",
+        "zip",
+        "zipfile.zip/kodi-dev.png",
+        "xbmc/utils/test/resources/archives_in_zip.zip",
+    },
+    CURLArchiveConstructionTestData{
+        "xbmc/utils/test/resources/archives_in_zip.zip/directory/does_not_exist.png",
+        "zip",
+        "directory/does_not_exist.png",
+        "xbmc/utils/test/resources/archives_in_zip.zip",
+    },
+    CURLArchiveConstructionTestData{
+        "xbmc/utils/test/resources/archives_in_zip.zip/directory/kodi-dev.png",
+        "zip",
+        "directory/kodi-dev.png",
+        "xbmc/utils/test/resources/archives_in_zip.zip",
+    },
+};
+
+class ArchiveFileParsingTester : public testing::Test,
+                                 public testing::WithParamInterface<CURLArchiveConstructionTestData>
+{
+};
+
+TEST_P(ArchiveFileParsingTester, TestArchiveFileParsingNativeSlashes)
+{
+  const auto& param = GetParam();
+  const std::string path = XBMC_REF_FILE_PATH(param.input);
+  const CURL url(path);
+
+  EXPECT_EQ(param.protocol, url.GetProtocol());
+  if (param.translateFilename)
+  {
+    EXPECT_EQ(XBMC_REF_FILE_PATH(param.filename), url.GetFileName());
+    EXPECT_EQ(param.hostname, CURL::Decode(url.GetHostName()));
+  }
+  else
+  {
+    EXPECT_EQ(param.filename, url.GetFileName());
+    EXPECT_EQ(XBMC_REF_FILE_PATH(param.hostname), CURL::Decode(url.GetHostName()));
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(TestURIUtils,
+                         ArchiveFileParsingTester,
+                         testing::ValuesIn(ArchiveFileParsingTests));
+
+struct GetFileOrFolderNameTest
+{
+  std::string_view input;
+  std::string expected;
+};
+
+// The function was written for limited cases and has UB for inputs like D:\\ D:foo
+// clang-format off
+const auto GetFileOrFolderNameTests = std::array{
+    GetFileOrFolderNameTest{"foo", "foo"},
+    GetFileOrFolderNameTest{"foo/bar", "bar"},
+    GetFileOrFolderNameTest{"foo/bar/", "bar"},
+    GetFileOrFolderNameTest{"foo/", "foo"},
+    GetFileOrFolderNameTest{"/foo", "foo"},    
+    GetFileOrFolderNameTest{"/foo/", "foo"},
+    GetFileOrFolderNameTest{"/", ""},
+    GetFileOrFolderNameTest{"", ""},
+    GetFileOrFolderNameTest{"foo\\bar", "bar"},
+    GetFileOrFolderNameTest{"foo\\bar\\", "bar"},
+    GetFileOrFolderNameTest{"foo\\", "foo"},
+    GetFileOrFolderNameTest{"\\foo\\", "foo"},
+    GetFileOrFolderNameTest{"\\foo", "foo"},
+};
+//clang-format on
+
+class GetFileOrFolderNameTester : public testing::WithParamInterface<GetFileOrFolderNameTest>,
+                                  public testing::Test
+{
+};
+
+TEST_P(GetFileOrFolderNameTester, TestValue)
+{
+  EXPECT_EQ(GetParam().expected, URIUtils::GetFileOrFolderName(GetParam().input));
+}
+
+INSTANTIATE_TEST_SUITE_P(TestURIUtils,
+                         GetFileOrFolderNameTester,
+                         testing::ValuesIn(GetFileOrFolderNameTests));

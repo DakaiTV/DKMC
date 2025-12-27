@@ -16,15 +16,12 @@
 
 namespace ADDON
 {
-struct AddonEvent;
 class CAddonMgr;
 class CBinaryAddonManager;
 class CShaderPresetAddon;
 } // namespace ADDON
 
-namespace KODI
-{
-namespace SHADER
+namespace KODI::SHADER
 {
 class IShaderPresetLoader;
 
@@ -34,7 +31,7 @@ public:
   /*!
    * \brief Create the factory and register all shader preset add-ons
    */
-  CShaderPresetFactory(ADDON::CAddonMgr& addons);
+  explicit CShaderPresetFactory(ADDON::CAddonMgr& addons);
   ~CShaderPresetFactory();
 
   /*!
@@ -50,7 +47,7 @@ public:
    *
    * \param load The loader that was passed to RegisterLoader()
    */
-  void UnregisterLoader(IShaderPresetLoader* loader);
+  void UnregisterLoader(const IShaderPresetLoader* loader);
 
   /*!
    * \brief Check if any shader preset add-ons have been loaded
@@ -78,18 +75,16 @@ public:
    *
    * \return True if a loader can load the preset, false otherwise
    */
-  bool CanLoadPreset(const std::string& presetPath);
+  bool CanLoadPreset(const std::string& presetPath) const;
 
 private:
-  void OnEvent(const ADDON::AddonEvent& event);
   void UpdateAddons();
 
   // Construction parameters
   ADDON::CAddonMgr& m_addons;
 
-  std::map<std::string, IShaderPresetLoader*> m_loaders;
-  std::map<std::string, std::unique_ptr<ADDON::CShaderPresetAddon>> m_shaderAddons;
-  std::map<std::string, std::unique_ptr<ADDON::CShaderPresetAddon>> m_failedAddons;
+  std::map<std::string, IShaderPresetLoader*, std::less<>> m_loaders;
+  std::map<std::string, std::unique_ptr<ADDON::CShaderPresetAddon>, std::less<>> m_shaderAddons;
+  std::map<std::string, std::unique_ptr<ADDON::CShaderPresetAddon>, std::less<>> m_failedAddons;
 };
-} // namespace SHADER
-} // namespace KODI
+} // namespace KODI::SHADER

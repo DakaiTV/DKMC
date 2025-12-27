@@ -16,19 +16,12 @@
 #include <array>
 #include <stdint.h>
 
-namespace KODI
-{
-namespace RETRO
-{
-class CRenderContext;
-}
-
-namespace SHADER
+namespace KODI::SHADER
 {
 class CShaderGLES : public IShader
 {
 public:
-  CShaderGLES(RETRO::CRenderContext& context);
+  CShaderGLES();
   ~CShaderGLES() override;
 
   // Implementation of IShader
@@ -36,14 +29,14 @@ public:
               std::string shaderPath,
               ShaderParameterMap shaderParameters,
               std::vector<std::shared_ptr<IShaderLut>> luts,
-              float2 viewPortSize,
               unsigned int passIdx,
               unsigned int frameCountMod = 0) override;
   void Render(IShaderTexture& source, IShaderTexture& target) override;
   void SetSizes(const float2& prevSize,
                 const float2& prevTextureSize,
                 const float2& nextSize) override;
-  void PrepareParameters(CPoint dest[4],
+  void PrepareParameters(const RETRO::ViewportCoordinates& dest,
+                         const float2 fullDestSize,
                          IShaderTexture& sourceTexture,
                          const std::vector<std::unique_ptr<IShaderTexture>>& pShaderTextures,
                          const std::vector<std::unique_ptr<IShader>>& pShaders,
@@ -73,7 +66,7 @@ private:
                            uint64_t frameCount);
   UniformInputs GetInputData(uint64_t frameCount = 0);
   UniformFrameInputs GetFrameInputData(GLuint texture);
-  UniformFrameInputs GetFrameUniformInputs() { return m_uniformFrameInputs; }
+  UniformFrameInputs GetFrameUniformInputs() const { return m_uniformFrameInputs; }
   void GetUniformLocs();
   void SetShaderParameters(CGLESTexture& sourceTexture);
 
@@ -101,9 +94,6 @@ private:
   // Resolution of the destination rectangle of the shader
   float2 m_destSize;
 
-  // Resolution of the viewport/window
-  float2 m_viewportSize;
-
   // Projection matrix
   std::array<std::array<GLfloat, 4>, 4> m_MVP;
 
@@ -115,10 +105,10 @@ private:
   unsigned int m_frameCountMod{0};
 
   GLuint m_shaderProgram{0};
-  GLubyte m_indices[4];
-  float m_VertexCoords[4][3];
-  float m_colors[4][3];
-  float m_TexCoords[4][2];
+  std::array<GLubyte, 4> m_indices;
+  std::array<std::array<float, 3>, 4> m_VertexCoords;
+  std::array<std::array<float, 3>, 4> m_colors;
+  std::array<std::array<float, 2>, 4> m_TexCoords;
 
   UniformInputs m_uniformInputs;
   UniformFrameInputs m_uniformFrameInputs;
@@ -131,8 +121,7 @@ private:
   GLint m_InputSizeLoc{-1};
   GLint m_MVPMatrixLoc{-1};
 
-  GLuint m_shaderVertexVBO[3]{GL_NONE};
-  GLuint m_shaderIndexVBO = GL_NONE;
+  std::array<GLuint, 3> m_shaderVertexVBO{GL_NONE};
+  GLuint m_shaderIndexVBO{GL_NONE};
 };
-} // namespace SHADER
-} // namespace KODI
+} // namespace KODI::SHADER

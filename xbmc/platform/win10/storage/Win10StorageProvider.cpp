@@ -11,7 +11,6 @@
 #include "filesystem/SpecialProtocol.h"
 #include "guilib/LocalizeStrings.h"
 #include "storage/MediaManager.h"
-#include "utils/JobManager.h"
 #include "utils/StringUtils.h"
 #include "utils/log.h"
 
@@ -49,7 +48,7 @@ void CStorageProvider::Initialize()
   if (!vShare.empty())
     CServiceBroker::GetMediaManager().SetHasOpticalDrive(true);
   else
-    CLog::Log(LOGDEBUG, "{}: No optical drive found.", __FUNCTION__);
+    CLog::LogF(LOGDEBUG, "No optical drive found.");
 
   m_watcher = DeviceInformation::CreateWatcher(DeviceClass::PortableStorageDevice);
   m_watcher.Added([this](auto&&, auto&&)

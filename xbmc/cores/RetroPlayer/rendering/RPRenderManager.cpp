@@ -270,6 +270,11 @@ void CRPRenderManager::AddFrame(const uint8_t* data,
   }
 }
 
+void CRPRenderManager::Flush()
+{
+  m_bFlush = true;
+}
+
 bool CRPRenderManager::Create(unsigned int width, unsigned int height)
 {
   //! @todo
@@ -355,11 +360,6 @@ void CRPRenderManager::CheckFlush()
 
     m_bFlush = false;
   }
-}
-
-void CRPRenderManager::Flush()
-{
-  m_bFlush = true;
 }
 
 void CRPRenderManager::RenderWindow(bool bClear, const RESOLUTION_INFO& coordsRes)
@@ -648,9 +648,8 @@ IRenderBuffer* CRPRenderManager::GetRenderBufferForSavestate(const std::string& 
     // Get a render buffer belonging to the specified pool
     const std::vector<IRenderBuffer*>& renderBuffers = it->second;
 
-    auto it2 =
-        std::find_if(renderBuffers.begin(), renderBuffers.end(), [bufferPool](IRenderBuffer* buffer)
-                     { return buffer->GetPool() == bufferPool; });
+    auto it2 = std::ranges::find_if(renderBuffers, [bufferPool](IRenderBuffer* buffer)
+                                    { return buffer->GetPool() == bufferPool; });
 
     if (it2 != renderBuffers.end())
     {

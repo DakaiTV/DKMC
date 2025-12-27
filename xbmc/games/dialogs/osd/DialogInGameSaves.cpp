@@ -50,7 +50,8 @@ CFileItemPtr CreateNewSaveItem()
 } // namespace
 
 CDialogInGameSaves::CDialogInGameSaves()
-  : CDialogGameVideoSelect(WINDOW_DIALOG_IN_GAME_SAVES), m_newSaveItem(CreateNewSaveItem())
+  : CDialogGameVideoSelect(WINDOW_DIALOG_IN_GAME_SAVES),
+    m_newSaveItem(CreateNewSaveItem())
 {
 }
 
@@ -376,7 +377,7 @@ void CDialogInGameSaves::OnRename(CFileItem& focusedItem)
   }
 }
 
-void CDialogInGameSaves::OnDelete(CFileItem& focusedItem)
+void CDialogInGameSaves::OnDelete(const CFileItem& focusedItem)
 {
   // "Confirm delete"
   // "Would you like to delete the selected file(s)?[CR]Warning - this action can't be undone!"

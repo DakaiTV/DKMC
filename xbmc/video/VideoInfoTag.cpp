@@ -14,7 +14,9 @@
 #include "settings/AdvancedSettings.h"
 #include "settings/SettingsComponent.h"
 #include "utils/Archive.h"
+#include "utils/LangCodeExpander.h"
 #include "utils/StringUtils.h"
+#include "utils/URIUtils.h"
 #include "utils/Variant.h"
 #include "utils/XMLUtils.h"
 #include "utils/log.h"
@@ -80,7 +82,7 @@ void CVideoInfoTag::Reset()
   m_duration = 0;
   m_lastPlayed.Reset();
   m_showLink.clear();
-  m_namedSeasons.clear();
+  m_seasons.clear();
   m_streamDetails.Reset();
   m_playCount = PLAYCOUNT_NOT_SET;
   m_EpBookmark.Reset();
@@ -193,6 +195,12 @@ bool CVideoInfoTag::Save(TiXmlNode *node, const std::string &tag, bool savePathI
     XMLUtils::SetString(movie, "filenameandpath", m_strFileNameAndPath);
     XMLUtils::SetString(movie, "basepath", m_basePath);
   }
+  if (URIUtils::IsBlurayPath(m_strFileNameAndPath))
+  {
+    const int playlist{URIUtils::GetBlurayPlaylistFromPath(m_strFileNameAndPath)};
+    if (playlist != -1)
+      XMLUtils::SetInt(movie, "playlist", playlist);
+  }
   if (!m_strEpisodeGuide.empty())
   {
     CXBMCTinyXML doc;
@@ -290,13 +298,7 @@ bool CVideoInfoTag::Save(TiXmlNode *node, const std::string &tag, bool savePathI
   XMLUtils::SetStringArray(movie, "artist", m_artist);
   XMLUtils::SetStringArray(movie, "showlink", m_showLink);
 
-  for (const auto& [number, value] : m_namedSeasons)
-  {
-    TiXmlElement season("namedseason");
-    season.SetAttribute("number", number);
-    season.InsertEndChild(TiXmlText(value));
-    movie->InsertEndChild(season);
-  }
+  SaveTvShowSeasons(movie);
 
   TiXmlElement resume("resume");
   XMLUtils::SetDouble(&resume, "position", m_resumePoint.timeInSeconds);
@@ -313,9 +315,41 @@ bool CVideoInfoTag::Save(TiXmlNode *node, const std::string &tag, bool savePathI
 
   XMLUtils::SetDateTime(movie, "dateadded", m_dateAdded);
 
+  {
+    const std::string lang{GetOriginalLanguage()};
+
+    if (!lang.empty() && (tag == "movie" || tag == "tvshow"))
+      XMLUtils::SetString(movie, "originallanguage", lang);
+  }
+
   if (additionalNode)
     movie->InsertEndChild(*additionalNode);
 
+  return true;
+}
+
+bool CVideoInfoTag::SaveTvShowSeasons(TiXmlNode* root) const
+{
+  for (const auto& [number, value] : m_seasons)
+  {
+    if (!value.m_name.empty())
+    {
+      TiXmlElement season("namedseason");
+      season.SetAttribute("number", number);
+      season.InsertEndChild(TiXmlText(value.m_name));
+      if (nullptr == root->InsertEndChild(season))
+        return false;
+    }
+
+    if (!value.m_plot.empty())
+    {
+      TiXmlElement season("seasonplot");
+      season.SetAttribute("number", number);
+      season.InsertEndChild(TiXmlText(value.m_plot));
+      if (nullptr == root->InsertEndChild(season))
+        return false;
+    }
+  }
   return true;
 }
 
@@ -439,8 +473,8 @@ void CVideoInfoTag::Merge(CVideoInfoTag& other)
 
   if (!other.m_showLink.empty())
     m_showLink = other.m_showLink;
-  if (!other.m_namedSeasons.empty())
-    m_namedSeasons = other.m_namedSeasons;
+  if (!other.m_seasons.empty())
+    m_seasons = other.m_seasons;
   if (other.m_streamDetails.HasItems())
     m_streamDetails = other.m_streamDetails;
   if (other.IsPlayCountSet())
@@ -558,11 +592,12 @@ void CVideoInfoTag::Archive(CArchive& ar)
     ar << m_iTrack;
     ar << dynamic_cast<IArchivable&>(m_streamDetails);
     ar << m_showLink;
-    ar << static_cast<int>(m_namedSeasons.size());
-    for (const auto& [number, name] : m_namedSeasons)
+    ar << static_cast<int>(m_seasons.size());
+    for (const auto& [number, attr] : m_seasons)
     {
       ar << number;
-      ar << name;
+      ar << attr.m_name;
+      ar << attr.m_plot;
     }
     ar << m_EpBookmark.playerState;
     ar << m_EpBookmark.timeInSeconds;
@@ -683,9 +718,10 @@ void CVideoInfoTag::Archive(CArchive& ar)
     {
       int seasonNumber;
       ar >> seasonNumber;
-      std::string seasonName;
-      ar >> seasonName;
-      m_namedSeasons.try_emplace(seasonNumber, seasonName);
+      CVideoInfoTag::SeasonAttributes attr;
+      ar >> attr.m_name;
+      ar >> attr.m_plot;
+      m_seasons.try_emplace(seasonNumber, attr);
     }
     ar >> m_EpBookmark.playerState;
     ar >> m_EpBookmark.timeInSeconds;
@@ -767,14 +803,14 @@ void CVideoInfoTag::Serialize(CVariant& value) const
 
   value["rating"] = GetRating().rating;
   CVariant ratings{CVariant::VariantTypeObject};
-  for (const auto& [name, value] : m_ratings)
+  for (const auto& [ratingname, ratingvalue] : m_ratings)
   {
     CVariant rating;
-    rating["rating"] = value.rating;
-    rating["votes"] = value.votes;
-    rating["default"] = (name == m_strDefaultRating);
+    rating["rating"] = ratingvalue.rating;
+    rating["votes"] = ratingvalue.votes;
+    rating["default"] = (ratingname == m_strDefaultRating);
 
-    ratings[name] = rating;
+    ratings[ratingname] = rating;
   }
   value["ratings"] = ratings;
   value["userrating"] = m_iUserRating;
@@ -997,6 +1033,9 @@ void CVideoInfoTag::ParseNative(const TiXmlElement* movie, bool prioritise)
   std::string value;
   float fValue;
 
+  if (StringUtils::ToLower(XMLUtils::GetAttribute(movie, "override")) == "true")
+    SetOverride(true);
+
   if (XMLUtils::GetString(movie, "title", value))
     SetTitle(value);
 
@@ -1136,6 +1175,9 @@ void CVideoInfoTag::ParseNative(const TiXmlElement* movie, bool prioritise)
 
   if (XMLUtils::GetString(movie, "filenameandpath", value))
     SetFileNameAndPath(value);
+  XMLUtils::GetInt(movie, "playlist", m_iTrack);
+  XMLUtils::GetBoolean(movie, "hasvideoversions", m_hasVideoVersions);
+  XMLUtils::GetBoolean(movie, "isdefaultvideoversion", m_isDefaultVideoVersion);
 
   if (XMLUtils::GetDate(movie, "premiered", m_premiered))
   {
@@ -1214,6 +1256,10 @@ void CVideoInfoTag::ParseNative(const TiXmlElement* movie, bool prioritise)
   if (XMLUtils::GetStringArray(movie, "showlink", showLink, prioritise, itemSeparator))
     SetShowLink(showLink);
 
+  if (nullptr != movie->FirstChildElement("namedseason") ||
+      nullptr != movie->FirstChildElement("seasonplot"))
+    m_seasons.clear();
+
   const TiXmlElement* namedSeason = movie->FirstChildElement("namedseason");
   while (namedSeason != nullptr)
   {
@@ -1221,12 +1267,33 @@ void CVideoInfoTag::ParseNative(const TiXmlElement* movie, bool prioritise)
     {
       int seasonNumber;
       std::string seasonName = namedSeason->FirstChild()->ValueStr();
-      if (!seasonName.empty() &&
-          namedSeason->Attribute("number", &seasonNumber) != nullptr)
-        m_namedSeasons.try_emplace(seasonNumber, seasonName);
+      if (!seasonName.empty() && namedSeason->Attribute("number", &seasonNumber) != nullptr)
+        m_seasons.try_emplace(seasonNumber,
+                              CVideoInfoTag::SeasonAttributes{.m_name = seasonName, .m_plot = ""});
     }
 
     namedSeason = namedSeason->NextSiblingElement("namedseason");
+  }
+
+  const TiXmlElement* seasonPlot = movie->FirstChildElement("seasonplot");
+  while (seasonPlot != nullptr)
+  {
+    if (seasonPlot->FirstChild() != nullptr)
+    {
+      int seasonNumber;
+      std::string plot = seasonPlot->FirstChild()->ValueStr();
+      if (!plot.empty() && seasonPlot->Attribute("number", &seasonNumber) != nullptr)
+      {
+        // executed after reading the season names so an entry for the season number may already
+        // exist and the data has to be combined.
+        auto [it, inserted] = m_seasons.try_emplace(
+            seasonNumber, CVideoInfoTag::SeasonAttributes{.m_name = "", .m_plot = plot});
+        if (!inserted)
+          it->second.m_plot = plot;
+      }
+    }
+
+    seasonPlot = seasonPlot->NextSiblingElement("seasonplot");
   }
 
   // cast
@@ -1427,6 +1494,10 @@ void CVideoInfoTag::ParseNative(const TiXmlElement* movie, bool prioritise)
   }
 
   XMLUtils::GetDateTime(movie, "dateadded", m_dateAdded);
+
+  if (XMLUtils::GetString(movie, "originallanguage", value) &&
+      !SetOriginalLanguage(value, LanguageProcessing::PROCESSING_NORMALIZE))
+    CLog::LogF(LOGWARNING, "<originallanguage> tag value {} is not recognized", value);
 }
 
 bool CVideoInfoTag::HasStreamDetails() const
@@ -1630,11 +1701,9 @@ void CVideoInfoTag::SetArtist(std::vector<std::string> artist)
 
 void CVideoInfoTag::SetUniqueIDs(std::map<std::string, std::string, std::less<>> uniqueIDs)
 {
-  for (const auto& uniqueid : uniqueIDs)
-  {
-    if (uniqueid.first.empty())
-      uniqueIDs.erase(uniqueid.first);
-  }
+  std::erase_if(uniqueIDs, [](const auto& uniqueid)
+                { return uniqueid.first.empty() || uniqueid.second.empty(); });
+
   if (!uniqueIDs.contains(m_strDefaultUniqueID))
   {
     const auto defaultUniqueId = GetUniqueID();
@@ -1644,14 +1713,14 @@ void CVideoInfoTag::SetUniqueIDs(std::map<std::string, std::string, std::less<>>
   m_uniqueIDs = std::move(uniqueIDs);
 }
 
-void CVideoInfoTag::SetSet(std::string set)
+void CVideoInfoTag::SetSet(std::string_view set)
 {
-  m_set.SetTitle(std::move(set));
+  m_set.SetTitle(set);
 }
 
-void CVideoInfoTag::SetSetOverview(std::string setOverview)
+void CVideoInfoTag::SetSetOverview(std::string_view setOverview)
 {
-  m_set.SetOverview(std::move(setOverview));
+  m_set.SetOverview(setOverview);
 }
 
 void CVideoInfoTag::SetTags(std::vector<std::string> tags)
@@ -1682,6 +1751,27 @@ void CVideoInfoTag::SetFileNameAndPath(std::string fileNameAndPath)
 void CVideoInfoTag::SetOriginalTitle(std::string originalTitle)
 {
   m_strOriginalTitle = Trim(std::move(originalTitle));
+}
+
+bool CVideoInfoTag::SetOriginalLanguage(std::string language, LanguageProcessing proc)
+{
+  StringUtils::Trim(language);
+
+  if (proc == LanguageProcessing::PROCESSING_NONE)
+  {
+    m_originalLanguage = language;
+    return true;
+  }
+
+  std::string normalized;
+  if (proc == LanguageProcessing::PROCESSING_NORMALIZE &&
+      g_LangCodeExpander.ConvertToISO6392B(language, normalized))
+  {
+    m_originalLanguage = normalized;
+    return true;
+  }
+
+  return false;
 }
 
 void CVideoInfoTag::SetEpisodeGuide(std::string episodeGuide)
@@ -1746,9 +1836,9 @@ void CVideoInfoTag::RemoveUniqueID(const std::string& type)
     m_uniqueIDs.erase(type);
 }
 
-void CVideoInfoTag::SetNamedSeasons(std::map<int, std::string> namedSeasons)
+void CVideoInfoTag::SetSeasons(std::map<int, SeasonAttributes> seasons)
 {
-  m_namedSeasons = std::move(namedSeasons);
+  m_seasons = std::move(seasons);
 }
 
 void CVideoInfoTag::SetUserrating(int userrating)
@@ -1862,6 +1952,7 @@ void CVideoInfoTag::CAssetInfo::ParseNative(const TiXmlElement* movie)
   if (XMLUtils::GetString(movie, "videoassettitle", value))
     m_title = value;
 
+  m_id = VIDEO_VERSION_ID_BEGIN;
   XMLUtils::GetInt(movie, "videoassetid", m_id);
 
   int assetType{-1};

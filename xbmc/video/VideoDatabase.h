@@ -85,88 +85,108 @@ enum VideoDbDetails
 } ;
 
 // these defines are based on how many columns we have and which column certain data is going to be in
-// when we do GetDetailsForMovie()
+// when we do GetDetailsForMovie() and similar for other media types
 constexpr int VIDEODB_MAX_COLUMNS = 24;
 constexpr int VIDEODB_DETAILS_FILEID = 1;
 
 // clang-format off
+// movie_view columns past idMovie idFile c00-cxx
 constexpr int VIDEODB_DETAILS_MOVIE_SET_ID              = VIDEODB_MAX_COLUMNS + 2;
 constexpr int VIDEODB_DETAILS_MOVIE_USER_RATING         = VIDEODB_MAX_COLUMNS + 3;
 constexpr int VIDEODB_DETAILS_MOVIE_PREMIERED           = VIDEODB_MAX_COLUMNS + 4;
-constexpr int VIDEODB_DETAILS_MOVIE_SET_NAME            = VIDEODB_MAX_COLUMNS + 5;
-constexpr int VIDEODB_DETAILS_MOVIE_SET_OVERVIEW        = VIDEODB_MAX_COLUMNS + 6;
-constexpr int VIDEODB_DETAILS_MOVIE_SET_ORIGINALNAME    = VIDEODB_MAX_COLUMNS + 7;
-constexpr int VIDEODB_DETAILS_MOVIE_FILE                = VIDEODB_MAX_COLUMNS + 8;
-constexpr int VIDEODB_DETAILS_MOVIE_PATH                = VIDEODB_MAX_COLUMNS + 9;
-constexpr int VIDEODB_DETAILS_MOVIE_PLAYCOUNT           = VIDEODB_MAX_COLUMNS + 10;
-constexpr int VIDEODB_DETAILS_MOVIE_LASTPLAYED          = VIDEODB_MAX_COLUMNS + 11;
-constexpr int VIDEODB_DETAILS_MOVIE_DATEADDED           = VIDEODB_MAX_COLUMNS + 12;
-constexpr int VIDEODB_DETAILS_MOVIE_RESUME_TIME         = VIDEODB_MAX_COLUMNS + 13;
-constexpr int VIDEODB_DETAILS_MOVIE_TOTAL_TIME          = VIDEODB_MAX_COLUMNS + 14;
-constexpr int VIDEODB_DETAILS_MOVIE_PLAYER_STATE        = VIDEODB_MAX_COLUMNS + 15;
-constexpr int VIDEODB_DETAILS_MOVIE_RATING              = VIDEODB_MAX_COLUMNS + 16;
-constexpr int VIDEODB_DETAILS_MOVIE_VOTES               = VIDEODB_MAX_COLUMNS + 17;
-constexpr int VIDEODB_DETAILS_MOVIE_RATING_TYPE         = VIDEODB_MAX_COLUMNS + 18;
-constexpr int VIDEODB_DETAILS_MOVIE_UNIQUEID_VALUE      = VIDEODB_MAX_COLUMNS + 19;
-constexpr int VIDEODB_DETAILS_MOVIE_UNIQUEID_TYPE       = VIDEODB_MAX_COLUMNS + 20;
-constexpr int VIDEODB_DETAILS_MOVIE_HASVERSIONS         = VIDEODB_MAX_COLUMNS + 21;
-constexpr int VIDEODB_DETAILS_MOVIE_HASEXTRAS           = VIDEODB_MAX_COLUMNS + 22;
-constexpr int VIDEODB_DETAILS_MOVIE_ISDEFAULTVERSION    = VIDEODB_MAX_COLUMNS + 23;
-constexpr int VIDEODB_DETAILS_MOVIE_VERSION_FILEID      = VIDEODB_MAX_COLUMNS + 24;
-constexpr int VIDEODB_DETAILS_MOVIE_VERSION_TYPEID      = VIDEODB_MAX_COLUMNS + 25;
-constexpr int VIDEODB_DETAILS_MOVIE_VERSION_TYPENAME    = VIDEODB_MAX_COLUMNS + 26;
-constexpr int VIDEODB_DETAILS_MOVIE_VERSION_ITEMTYPE    = VIDEODB_MAX_COLUMNS + 27;
+constexpr int VIDEODB_DETAILS_MOVIE_ORIGINAL_LANGUAGE   = VIDEODB_MAX_COLUMNS + 5;
+// *** IMPORTANT *** update the last attribute index after adding columns to the movie table
+constexpr int VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR     = VIDEODB_DETAILS_MOVIE_ORIGINAL_LANGUAGE;
 
+constexpr int VIDEODB_DETAILS_MOVIE_SET_NAME            = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 1;
+constexpr int VIDEODB_DETAILS_MOVIE_SET_OVERVIEW        = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 2;
+constexpr int VIDEODB_DETAILS_MOVIE_SET_ORIGINALNAME    = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 3;
+constexpr int VIDEODB_DETAILS_MOVIE_FILE                = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 4;
+constexpr int VIDEODB_DETAILS_MOVIE_PATH                = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 5;
+constexpr int VIDEODB_DETAILS_MOVIE_PLAYCOUNT           = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 6;
+constexpr int VIDEODB_DETAILS_MOVIE_LASTPLAYED          = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 7;
+constexpr int VIDEODB_DETAILS_MOVIE_DATEADDED           = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 8;
+constexpr int VIDEODB_DETAILS_MOVIE_RESUME_TIME         = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 9;
+constexpr int VIDEODB_DETAILS_MOVIE_TOTAL_TIME          = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 10;
+constexpr int VIDEODB_DETAILS_MOVIE_PLAYER_STATE        = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 11;
+constexpr int VIDEODB_DETAILS_MOVIE_RATING              = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 12;
+constexpr int VIDEODB_DETAILS_MOVIE_VOTES               = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 13;
+constexpr int VIDEODB_DETAILS_MOVIE_RATING_TYPE         = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 14;
+constexpr int VIDEODB_DETAILS_MOVIE_UNIQUEID_VALUE      = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 15;
+constexpr int VIDEODB_DETAILS_MOVIE_UNIQUEID_TYPE       = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 16;
+constexpr int VIDEODB_DETAILS_MOVIE_HASVERSIONS         = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 17;
+constexpr int VIDEODB_DETAILS_MOVIE_HASEXTRAS           = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 18;
+constexpr int VIDEODB_DETAILS_MOVIE_ISDEFAULTVERSION    = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 19;
+constexpr int VIDEODB_DETAILS_MOVIE_VERSION_FILEID      = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 20;
+constexpr int VIDEODB_DETAILS_MOVIE_VERSION_TYPEID      = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 21;
+constexpr int VIDEODB_DETAILS_MOVIE_VERSION_TYPENAME    = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 22;
+constexpr int VIDEODB_DETAILS_MOVIE_VERSION_ITEMTYPE    = VIDEODB_DETAILS_MOVIE_TABLE_LAST_ATTR + 23;
+
+// episode_view columns past idEpisode idFile c00-cxx
 constexpr int VIDEODB_DETAILS_EPISODE_TVSHOW_ID         = VIDEODB_MAX_COLUMNS + 2;
 constexpr int VIDEODB_DETAILS_EPISODE_USER_RATING       = VIDEODB_MAX_COLUMNS + 3;
 constexpr int VIDEODB_DETAILS_EPISODE_SEASON_ID         = VIDEODB_MAX_COLUMNS + 4;
-constexpr int VIDEODB_DETAILS_EPISODE_FILE              = VIDEODB_MAX_COLUMNS + 5;
-constexpr int VIDEODB_DETAILS_EPISODE_PATH              = VIDEODB_MAX_COLUMNS + 6;
-constexpr int VIDEODB_DETAILS_EPISODE_PLAYCOUNT         = VIDEODB_MAX_COLUMNS + 7;
-constexpr int VIDEODB_DETAILS_EPISODE_LASTPLAYED        = VIDEODB_MAX_COLUMNS + 8;
-constexpr int VIDEODB_DETAILS_EPISODE_DATEADDED         = VIDEODB_MAX_COLUMNS + 9;
-constexpr int VIDEODB_DETAILS_EPISODE_TVSHOW_NAME       = VIDEODB_MAX_COLUMNS + 10;
-constexpr int VIDEODB_DETAILS_EPISODE_TVSHOW_GENRE      = VIDEODB_MAX_COLUMNS + 11;
-constexpr int VIDEODB_DETAILS_EPISODE_TVSHOW_STUDIO     = VIDEODB_MAX_COLUMNS + 12;
-constexpr int VIDEODB_DETAILS_EPISODE_TVSHOW_AIRED      = VIDEODB_MAX_COLUMNS + 13;
-constexpr int VIDEODB_DETAILS_EPISODE_TVSHOW_MPAA       = VIDEODB_MAX_COLUMNS + 14;
-constexpr int VIDEODB_DETAILS_EPISODE_RESUME_TIME       = VIDEODB_MAX_COLUMNS + 15;
-constexpr int VIDEODB_DETAILS_EPISODE_TOTAL_TIME        = VIDEODB_MAX_COLUMNS + 16;
-constexpr int VIDEODB_DETAILS_EPISODE_PLAYER_STATE      = VIDEODB_MAX_COLUMNS + 17;
-constexpr int VIDEODB_DETAILS_EPISODE_RATING            = VIDEODB_MAX_COLUMNS + 18;
-constexpr int VIDEODB_DETAILS_EPISODE_VOTES             = VIDEODB_MAX_COLUMNS + 19;
-constexpr int VIDEODB_DETAILS_EPISODE_RATING_TYPE       = VIDEODB_MAX_COLUMNS + 20;
-constexpr int VIDEODB_DETAILS_EPISODE_UNIQUEID_VALUE    = VIDEODB_MAX_COLUMNS + 21;
-constexpr int VIDEODB_DETAILS_EPISODE_UNIQUEID_TYPE     = VIDEODB_MAX_COLUMNS + 22;
+// *** IMPORTANT *** update the last attribute index after adding columns to the episode table
+constexpr int VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR   = VIDEODB_DETAILS_EPISODE_SEASON_ID;
 
+constexpr int VIDEODB_DETAILS_EPISODE_FILE              = VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR + 1;
+constexpr int VIDEODB_DETAILS_EPISODE_PATH              = VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR + 2;
+constexpr int VIDEODB_DETAILS_EPISODE_PLAYCOUNT         = VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR + 3;
+constexpr int VIDEODB_DETAILS_EPISODE_LASTPLAYED        = VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR + 4;
+constexpr int VIDEODB_DETAILS_EPISODE_DATEADDED         = VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR + 5;
+constexpr int VIDEODB_DETAILS_EPISODE_TVSHOW_NAME       = VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR + 6;
+constexpr int VIDEODB_DETAILS_EPISODE_TVSHOW_GENRE      = VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR + 7;
+constexpr int VIDEODB_DETAILS_EPISODE_TVSHOW_STUDIO     = VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR + 8;
+constexpr int VIDEODB_DETAILS_EPISODE_TVSHOW_AIRED      = VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR + 9;
+constexpr int VIDEODB_DETAILS_EPISODE_TVSHOW_MPAA       = VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR + 10;
+constexpr int VIDEODB_DETAILS_EPISODE_TVSHOW_ORIGINAL_LANGUAGE = VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR + 11;
+constexpr int VIDEODB_DETAILS_EPISODE_RESUME_TIME       = VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR + 12;
+constexpr int VIDEODB_DETAILS_EPISODE_TOTAL_TIME        = VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR + 13;
+constexpr int VIDEODB_DETAILS_EPISODE_PLAYER_STATE      = VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR + 14;
+constexpr int VIDEODB_DETAILS_EPISODE_RATING            = VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR + 15;
+constexpr int VIDEODB_DETAILS_EPISODE_VOTES             = VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR + 16;
+constexpr int VIDEODB_DETAILS_EPISODE_RATING_TYPE       = VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR + 17;
+constexpr int VIDEODB_DETAILS_EPISODE_UNIQUEID_VALUE    = VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR + 18;
+constexpr int VIDEODB_DETAILS_EPISODE_UNIQUEID_TYPE     = VIDEODB_DETAILS_EPISODE_TABLE_LAST_ATTR + 19;
+
+// tvshow_view columns past idShow c00-cxx (tvshow table)
 constexpr int VIDEODB_DETAILS_TVSHOW_USER_RATING        = VIDEODB_MAX_COLUMNS + 1;
 constexpr int VIDEODB_DETAILS_TVSHOW_DURATION           = VIDEODB_MAX_COLUMNS + 2;
-constexpr int VIDEODB_DETAILS_TVSHOW_PARENTPATHID       = VIDEODB_MAX_COLUMNS + 3;
-constexpr int VIDEODB_DETAILS_TVSHOW_PATH               = VIDEODB_MAX_COLUMNS + 4;
-constexpr int VIDEODB_DETAILS_TVSHOW_DATEADDED          = VIDEODB_MAX_COLUMNS + 5;
-constexpr int VIDEODB_DETAILS_TVSHOW_LASTPLAYED         = VIDEODB_MAX_COLUMNS + 6;
-constexpr int VIDEODB_DETAILS_TVSHOW_NUM_EPISODES       = VIDEODB_MAX_COLUMNS + 7;
-constexpr int VIDEODB_DETAILS_TVSHOW_NUM_WATCHED        = VIDEODB_MAX_COLUMNS + 8;
-constexpr int VIDEODB_DETAILS_TVSHOW_NUM_SEASONS        = VIDEODB_MAX_COLUMNS + 9;
-constexpr int VIDEODB_DETAILS_TVSHOW_RATING             = VIDEODB_MAX_COLUMNS + 10;
-constexpr int VIDEODB_DETAILS_TVSHOW_VOTES              = VIDEODB_MAX_COLUMNS + 11;
-constexpr int VIDEODB_DETAILS_TVSHOW_RATING_TYPE        = VIDEODB_MAX_COLUMNS + 12;
-constexpr int VIDEODB_DETAILS_TVSHOW_UNIQUEID_VALUE     = VIDEODB_MAX_COLUMNS + 13;
-constexpr int VIDEODB_DETAILS_TVSHOW_UNIQUEID_TYPE      = VIDEODB_MAX_COLUMNS + 14;
-constexpr int VIDEODB_DETAILS_TVSHOW_NUM_INPROGRESS     = VIDEODB_MAX_COLUMNS + 15;
+constexpr int VIDEODB_DETAILS_TVSHOW_ORIGINAL_LANGUAGE  = VIDEODB_MAX_COLUMNS + 3;
+constexpr int VIDEODB_DETAILS_TVSHOW_TAGLINE            = VIDEODB_MAX_COLUMNS + 4;
+// *** IMPORTANT *** update the last attribute index below after adding columns to the tvshow table
+constexpr int VIDEODB_DETAILS_TVSHOW_TABLE_LAST_ATTR    = VIDEODB_DETAILS_TVSHOW_TAGLINE;
 
+constexpr int VIDEODB_DETAILS_TVSHOW_PARENTPATHID       = VIDEODB_DETAILS_TVSHOW_TABLE_LAST_ATTR + 1;
+constexpr int VIDEODB_DETAILS_TVSHOW_PATH               = VIDEODB_DETAILS_TVSHOW_TABLE_LAST_ATTR + 2;
+constexpr int VIDEODB_DETAILS_TVSHOW_DATEADDED          = VIDEODB_DETAILS_TVSHOW_TABLE_LAST_ATTR + 3;
+constexpr int VIDEODB_DETAILS_TVSHOW_LASTPLAYED         = VIDEODB_DETAILS_TVSHOW_TABLE_LAST_ATTR + 4;
+constexpr int VIDEODB_DETAILS_TVSHOW_NUM_EPISODES       = VIDEODB_DETAILS_TVSHOW_TABLE_LAST_ATTR + 5;
+constexpr int VIDEODB_DETAILS_TVSHOW_NUM_WATCHED        = VIDEODB_DETAILS_TVSHOW_TABLE_LAST_ATTR + 6;
+constexpr int VIDEODB_DETAILS_TVSHOW_NUM_SEASONS        = VIDEODB_DETAILS_TVSHOW_TABLE_LAST_ATTR + 7;
+constexpr int VIDEODB_DETAILS_TVSHOW_RATING             = VIDEODB_DETAILS_TVSHOW_TABLE_LAST_ATTR + 8;
+constexpr int VIDEODB_DETAILS_TVSHOW_VOTES              = VIDEODB_DETAILS_TVSHOW_TABLE_LAST_ATTR + 9;
+constexpr int VIDEODB_DETAILS_TVSHOW_RATING_TYPE        = VIDEODB_DETAILS_TVSHOW_TABLE_LAST_ATTR + 10;
+constexpr int VIDEODB_DETAILS_TVSHOW_UNIQUEID_VALUE     = VIDEODB_DETAILS_TVSHOW_TABLE_LAST_ATTR + 11;
+constexpr int VIDEODB_DETAILS_TVSHOW_UNIQUEID_TYPE      = VIDEODB_DETAILS_TVSHOW_TABLE_LAST_ATTR + 12;
+constexpr int VIDEODB_DETAILS_TVSHOW_NUM_INPROGRESS     = VIDEODB_DETAILS_TVSHOW_TABLE_LAST_ATTR + 13;
+
+// musicvideo_view columns past idMVideo idFile c00-cxx (musicvideo table)
 constexpr int VIDEODB_DETAILS_MUSICVIDEO_USER_RATING    = VIDEODB_MAX_COLUMNS + 2;
 constexpr int VIDEODB_DETAILS_MUSICVIDEO_PREMIERED      = VIDEODB_MAX_COLUMNS + 3;
-constexpr int VIDEODB_DETAILS_MUSICVIDEO_FILE           = VIDEODB_MAX_COLUMNS + 4;
-constexpr int VIDEODB_DETAILS_MUSICVIDEO_PATH           = VIDEODB_MAX_COLUMNS + 5;
-constexpr int VIDEODB_DETAILS_MUSICVIDEO_PLAYCOUNT      = VIDEODB_MAX_COLUMNS + 6;
-constexpr int VIDEODB_DETAILS_MUSICVIDEO_LASTPLAYED     = VIDEODB_MAX_COLUMNS + 7;
-constexpr int VIDEODB_DETAILS_MUSICVIDEO_DATEADDED      = VIDEODB_MAX_COLUMNS + 8;
-constexpr int VIDEODB_DETAILS_MUSICVIDEO_RESUME_TIME    = VIDEODB_MAX_COLUMNS + 9;
-constexpr int VIDEODB_DETAILS_MUSICVIDEO_TOTAL_TIME     = VIDEODB_MAX_COLUMNS + 10;
-constexpr int VIDEODB_DETAILS_MUSICVIDEO_PLAYER_STATE   = VIDEODB_MAX_COLUMNS + 11;
-constexpr int VIDEODB_DETAILS_MUSICVIDEO_UNIQUEID_VALUE = VIDEODB_MAX_COLUMNS + 12;
-constexpr int VIDEODB_DETAILS_MUSICVIDEO_UNIQUEID_TYPE  = VIDEODB_MAX_COLUMNS + 13;
+// *** IMPORTANT *** update the last attribute index after adding columns to the musicvideo table
+constexpr int VIDEODB_DETAILS_MUSICVIDEO_TABLE_LAST_ATTR = VIDEODB_DETAILS_MUSICVIDEO_PREMIERED;
+
+constexpr int VIDEODB_DETAILS_MUSICVIDEO_FILE           = VIDEODB_DETAILS_MUSICVIDEO_TABLE_LAST_ATTR + 1;
+constexpr int VIDEODB_DETAILS_MUSICVIDEO_PATH           = VIDEODB_DETAILS_MUSICVIDEO_TABLE_LAST_ATTR + 2;
+constexpr int VIDEODB_DETAILS_MUSICVIDEO_PLAYCOUNT      = VIDEODB_DETAILS_MUSICVIDEO_TABLE_LAST_ATTR + 3;
+constexpr int VIDEODB_DETAILS_MUSICVIDEO_LASTPLAYED     = VIDEODB_DETAILS_MUSICVIDEO_TABLE_LAST_ATTR + 4;
+constexpr int VIDEODB_DETAILS_MUSICVIDEO_DATEADDED      = VIDEODB_DETAILS_MUSICVIDEO_TABLE_LAST_ATTR + 5;
+constexpr int VIDEODB_DETAILS_MUSICVIDEO_RESUME_TIME    = VIDEODB_DETAILS_MUSICVIDEO_TABLE_LAST_ATTR + 6;
+constexpr int VIDEODB_DETAILS_MUSICVIDEO_TOTAL_TIME     = VIDEODB_DETAILS_MUSICVIDEO_TABLE_LAST_ATTR + 7;
+constexpr int VIDEODB_DETAILS_MUSICVIDEO_PLAYER_STATE   = VIDEODB_DETAILS_MUSICVIDEO_TABLE_LAST_ATTR + 8;
+constexpr int VIDEODB_DETAILS_MUSICVIDEO_UNIQUEID_VALUE = VIDEODB_DETAILS_MUSICVIDEO_TABLE_LAST_ATTR + 9;
+constexpr int VIDEODB_DETAILS_MUSICVIDEO_UNIQUEID_TYPE  = VIDEODB_DETAILS_MUSICVIDEO_TABLE_LAST_ATTR + 10;
 
 constexpr int VIDEODB_TYPE_UNUSED       = 0;
 constexpr int VIDEODB_TYPE_STRING       = 1;
@@ -205,19 +225,21 @@ private:
     using namespace std::literals::string_view_literals;
     switch (type)
     {
-      case VideoDbContentType::UNKNOWN:
+      using enum VideoDbContentType;
+
+      case UNKNOWN:
         return "unknown"sv;
-      case VideoDbContentType::MOVIES:
+      case MOVIES:
         return "movies"sv;
-      case VideoDbContentType::TVSHOWS:
+      case TVSHOWS:
         return "TV shows"sv;
-      case VideoDbContentType::MUSICVIDEOS:
+      case MUSICVIDEOS:
         return "music videos"sv;
-      case VideoDbContentType::EPISODES:
+      case EPISODES:
         return "episodes"sv;
-      case VideoDbContentType::MOVIE_SETS:
+      case MOVIE_SETS:
         return "movie sets"sv;
-      case VideoDbContentType::MUSICALBUMS:
+      case MUSICALBUMS:
         return "music albums"sv;
     };
     throw std::invalid_argument("no videodb content string found");
@@ -371,6 +393,7 @@ enum VIDEODB_SEASON_IDS // this enum MUST match the offset struct further down!!
   VIDEODB_ID_SEASON_EPISODES_WATCHED = 13,
   VIDEODB_ID_SEASON_PREMIERED = 14,
   VIDEODB_ID_SEASON_EPISODES_INPROGRESS = 15,
+  VIDEODB_ID_SEASON_PLOT = 16,
   VIDEODB_ID_SEASON_MAX
 };
 
@@ -479,7 +502,8 @@ enum class ArtFallbackOptions
 enum class DeleteMovieCascadeAction
 {
   DEFAULT_VERSION,
-  ALL_ASSETS
+  ALL_ASSETS,
+  ALL_ASSETS_NOT_STREAMDETAILS
 };
 
 enum class DeleteMovieHashAction
@@ -491,8 +515,27 @@ enum class DeleteMovieHashAction
 #define COMPARE_PERCENTAGE     0.90f // 90%
 #define COMPARE_PERCENTAGE_MIN 0.50f // 50%
 
+struct EpisodeInformation
+{
+  int index{0};
+  unsigned int duration{0};
+};
+
+using EpisodeFileMap = std::multimap<std::string, EpisodeInformation, std::less<>>;
+using EpisodeFileMapEntry = std::pair<std::string, EpisodeInformation>;
+
+static constexpr const char* MULTIPLE_EPISODES{"multiple_episodes"};
+
 class CVideoDatabase : public CDatabase
 {
+  struct FileInformation
+  {
+    std::string path;
+    int fileId{0};
+    int vvId{0};
+    std::string hash;
+  };
+
 public:
 
   class CActor    // used for actor retrieval for non-master users
@@ -641,12 +684,10 @@ public:
   void GetEpisodesByBlurayPath(const std::string& path, std::vector<CVideoInfoTag>& episodes);
   void GetEpisodesByFile(const std::string& strFilenameAndPath, std::vector<CVideoInfoTag>& episodes);
   void GetEpisodesByFileId(int idFile, std::vector<CVideoInfoTag>& episodes);
-
-  int SetDetailsForItem(CVideoInfoTag& details, const KODI::ART::Artwork& artwork);
-  int SetDetailsForItem(int id,
-                        const MediaType& mediaType,
-                        CVideoInfoTag& details,
-                        const KODI::ART::Artwork& artwork);
+  bool GetEpisodeMap(int idShow,
+                     EpisodeFileMap& fileMap,
+                     dbiplus::Dataset& pDS,
+                     int idFile = -1 /* = -1 */) const;
 
   int SetDetailsForMovie(CVideoInfoTag& details,
                          const KODI::ART::Artwork& artwork,
@@ -665,7 +706,7 @@ public:
    \param idTvShow the database id of the tvshow if known (defaults to -1)
    \return the id of the tvshow.
    */
-  int SetDetailsForTvShow(const std::vector<std::pair<std::string, std::string>>& paths,
+  int SetDetailsForTvShow(const std::vector<std::string>& paths,
                           CVideoInfoTag& details,
                           const KODI::ART::Artwork& artwork,
                           const KODI::ART::SeasonsArtwork& seasonArt,
@@ -682,15 +723,29 @@ public:
                            const KODI::ART::Artwork& artwork,
                            int idShow,
                            int idEpisode = -1);
+
+  /*!
+   * @brief The FileInfo structure represents a DB record of the files table.
+   */
+  struct FileRecord
+  {
+    int m_idFile{-1};
+    int m_playCount{-1};
+    CDateTime m_lastPlayed{};
+    CDateTime m_dateAdded{};
+  };
+
   int SetFileForMedia(const std::string& fileAndPath,
                       VideoDbContentType type,
                       int mediaId,
-                      int oldIdFile);
+                      const FileRecord& oldFile);
+
   int SetDetailsForMusicVideo(CVideoInfoTag& details,
                               const KODI::ART::Artwork& artwork,
                               int idMVideo = -1);
   bool SetStreamDetailsForFile(const CStreamDetails& details,
                                const std::string& strFileNameAndPath);
+
   /*!
    * \brief Clear any existing stream details and add the new provided details to a file.
    * \param[in] details New stream details
@@ -812,8 +867,9 @@ public:
    */
   bool EraseAllForFile(const std::string& fileNameAndPath);
 
-  bool GetStackTimes(const std::string &filePath, std::vector<uint64_t> &times);
-  void SetStackTimes(const std::string &filePath, const std::vector<uint64_t> &times);
+  bool GetStackTimes(const std::string& filePath, std::vector<std::chrono::milliseconds>& times);
+  void SetStackTimes(const std::string& filePath,
+                     const std::vector<std::chrono::milliseconds>& times);
 
   void GetBookMarksForFile(const std::string& strFilenameAndPath, VECBOOKMARKS& bookmarks, CBookmark::EType type = CBookmark::STANDARD, bool bAppend=false, long partNumber=0);
   bool AddBookMarkToFile(const std::string& strFilenameAndPath,
@@ -1030,6 +1086,17 @@ public:
                      const std::set<int>& paths = std::set<int>(),
                      bool showProgress = true);
 
+  enum class FileExistsAction
+  {
+    ACTION_NONE,
+    ACTION_UPDATE
+  };
+
+  int AddOrUpdateFile(const std::string& fileAndPath,
+                      const std::string& parentPath,
+                      const FileRecord& fileInfo,
+                      FileExistsAction existsAction);
+
   /*! \brief Add a file to the database, if necessary
    If the file is already in the database, we simply return its id.
    \param url - full path of the file to add.
@@ -1076,7 +1143,9 @@ public:
   void UpdateFileDateAdded(CVideoInfoTag& details);
 
   void ExportToXML(const std::string &path, bool singleFile = true, bool images=false, bool actorThumbs=false, bool overwrite=false);
+  void ExportArt(const CFileItem& item, const KODI::ART::Artwork& artwork, bool overwrite) const;
   void ExportActorThumbs(const std::string& path,
+                         const std::string& singlePath,
                          const CVideoInfoTag& tag,
                          bool singleFiles,
                          bool overwrite = false,
@@ -1157,8 +1226,20 @@ public:
   bool RemoveArtForItem(int mediaId,
                         const MediaType& mediaType,
                         const std::set<std::string, std::less<>>& artTypes);
+  /*!
+   * \brief Retrieve season information of a TV show.
+   * \param[in] showId ID of the show
+   * \param[out] seasons Map of the season information. Key = ID of the season, values = season number
+   * \return true for success, false otherwise
+   */
   bool GetTvShowSeasons(int showId, std::map<int, int> &seasons);
-  bool GetTvShowNamedSeasons(int showId, std::map<int, std::string> &seasons);
+  /*!
+   * \brief Retrieve season information of a TV show.
+   * \param[in] showId ID of the show
+   * \param[out] seasons Map of the season information. Key = season number, values = SeasonAttributes structure
+   * \return true for success, false otherwise
+   */
+  bool GetTvShowSeasons(int showId, std::map<int, CVideoInfoTag::SeasonAttributes>& seasons);
 
   /*!
    * \brief Get the custom named season.
@@ -1197,11 +1278,13 @@ public:
   bool GetFilter(CDbUrl &videoUrl, Filter &filter, SortDescription &sorting) override;
 
   /*! \brief Will check if the season exists and if that is not the case add it to the database.
-  \param showID The id of the show in question.
-  \param season The season number we want to add.
+  \param[in] showID The id of the show in question.
+  \param[in] season The season number we want to add.
+  \param[in] name Name of the season
+  \param[in] plot Plot of the season
   \return The dbId of the season.
   */
-  int AddSeason(int showID, int season, const std::string& name = "");
+  int AddSeason(int showID, int season, const std::string& name = "", const std::string& plot = "");
   int AddSet(const std::string& strSet,
              const std::string& strOverview = "",
              const std::string& strOriginalSet = "",
@@ -1215,6 +1298,7 @@ public:
 
   std::string GetVideoItemTitle(VideoDbContentType itemType, int dbId);
   std::string GetVideoVersionById(int id);
+  int GetVideoVersionByTitle(const std::string& title) const;
   void GetVideoVersions(VideoDbContentType itemType,
                         int dbId,
                         CFileItemList& items,
@@ -1229,15 +1313,34 @@ public:
    * \param dbIdTarget id that the video will be attached to
    * \param idVideoVersion new versiontype of the default version of the video
    * \param assetType new asset type of the default version of the video
+   * \param cascadeAction action to take on the assets of the video being converted
+   *        (used to preserve streamdetails for bluray playlists)
    * \return true for success, false otherwise
    */
   bool ConvertVideoToVersion(VideoDbContentType itemType,
                              int dbIdSource,
                              int dbIdTarget,
                              int idVideoVersion,
-                             VideoAssetType assetType);
+                             VideoAssetType assetType,
+                             DeleteMovieCascadeAction cascadeAction);
+
+  /*!
+   * \brief Adds or updates a version of an existing movie to the database
+   * \param itemType type of the video being converted
+   * \param dbIdSource id of the video being converted
+   * \param idVideoVersion new versiontype of the default version of the video
+   * \param assetType new asset type of the default version of the video
+   * \return true if success, false otherwise
+   */
+  bool AddOrUpdateVideoVersion(VideoDbContentType itemType,
+                               int dbIdSource,
+                               int idFile,
+                               int idVideoVersion,
+                               VideoAssetType assetType);
+
   void SetDefaultVideoVersion(VideoDbContentType itemType, int dbId, int idFile);
   void SetVideoVersion(int idFile, int idVideoVersion);
+  int AddOrValidateVideoVersionType(const std::string& typeVideoVersion);
   int AddVideoVersionType(const std::string& typeVideoVersion,
                           VideoAssetTypeOwner owner,
                           VideoAssetType assetType);
@@ -1262,7 +1365,7 @@ public:
                             VideoAssetType asset,
                             CFileItemList& items);
   bool SetVideoVersionDefaultArt(int dbId, int idFrom, const MediaType& mediaType);
-  void InitializeVideoVersionTypeTable(int schemaVersion);
+  void InitializeVideoVersionTypeTable();
   void UpdateVideoVersionTypeTable();
   bool GetVideoVersionsNav(const std::string& strBaseDir,
                            CFileItemList& items,
@@ -1273,9 +1376,19 @@ public:
 
   int GetMovieId(const std::string& strFilenameAndPath);
   std::string GetMovieTitle(int idMovie);
-  void GetSameVideoItems(const CFileItem& item, CFileItemList& items);
+
+  enum MatchingMask : uint8_t
+  {
+    None = 0x00,
+    UniqueId = 0x01,
+    Path = 0x02,
+    Title = 0x04
+  };
+
+  void GetSameVideoItems(const CFileItem& item,
+                         CFileItemList& items,
+                         int matchingMask = UniqueId | Title);
   int GetFileIdByMovie(int idMovie);
-  int GetFileIdByFile(const std::string& fullpath);
   std::string GetFileBasePathById(int idFile);
 
   /*!
@@ -1332,18 +1445,17 @@ protected:
   /*! \brief Adds a path to the tvshow link table.
    \param idShow the id of the show.
    \param path the path to add.
-   \param parentPath the parent path of the path to add.
    \param dateAdded date/time when the path was added
    \return true if successfully added, false otherwise.
    */
-  bool AddPathToTvShow(int idShow, const std::string &path, const std::string &parentPath, const CDateTime& dateAdded = CDateTime());
+  bool AddPathToTvShow(int idShow, const std::string& path, const CDateTime& dateAdded);
 
   /*! \brief Check whether a show is already in the library.
    Matches on unique identifier or matching title and premiered date.
    \param show the details of the show to check for.
    \return the show id if found, else -1.
    */
-  int GetMatchingTvShow(const CVideoInfoTag &show);
+  int GetMatchingTvShow(const CVideoInfoTag& show) const;
 
   // link functions - these two do all the work
   void AddLinkToActor(int mediaId, const char *mediaType, int actorId, const std::string &role, int order);
@@ -1367,16 +1479,16 @@ protected:
 
   CVideoInfoTag GetDetailsForMovie(dbiplus::Dataset& pDS, int getDetails = VideoDbDetailsNone);
   CVideoInfoTag GetDetailsForMovie(const dbiplus::sql_record* const record, int getDetails = VideoDbDetailsNone);
-  CSetInfoTag GetDetailsForSet(dbiplus::Dataset& pDS);
-  CSetInfoTag GetDetailsForSet(const dbiplus::sql_record* const record);
+  CSetInfoTag GetDetailsForSet(dbiplus::Dataset& pDS) const;
+  CSetInfoTag GetDetailsForSet(const dbiplus::sql_record* const record) const;
   CVideoInfoTag GetDetailsForTvShow(dbiplus::Dataset& pDS,
                                     int getDetails = VideoDbDetailsNone,
                                     CFileItem* item = nullptr);
   CVideoInfoTag GetDetailsForTvShow(const dbiplus::sql_record* const record,
                                     int getDetails = VideoDbDetailsNone,
                                     CFileItem* item = nullptr);
-  CVideoInfoTag GetBasicDetailsForEpisode(dbiplus::Dataset& pDS);
-  CVideoInfoTag GetBasicDetailsForEpisode(const dbiplus::sql_record* const record);
+  CVideoInfoTag GetBasicDetailsForEpisode(dbiplus::Dataset& pDS) const;
+  CVideoInfoTag GetBasicDetailsForEpisode(const dbiplus::sql_record* const record) const;
   CVideoInfoTag GetDetailsForEpisode(dbiplus::Dataset& pDS, int getDetails = VideoDbDetailsNone);
   CVideoInfoTag GetDetailsForEpisode(const dbiplus::sql_record* const record, int getDetails = VideoDbDetailsNone);
   CVideoInfoTag GetDetailsForMusicVideo(dbiplus::Dataset& pDS, int getDetails = VideoDbDetailsNone);
@@ -1411,7 +1523,7 @@ protected:
                         int max,
                         const T& offsets,
                         CSetInfoTag& details,
-                        int idxOffset);
+                        int idxOffset) const;
 
   template<typename T>
   std::string GetValueString(const CVideoInfoTag& details,
@@ -1419,9 +1531,12 @@ protected:
                              int max,
                              const T& offsets) const;
 
-  int SetFileForEpisode(const std::string& fileAndPath, int idEpisode, int oldIdFile);
-  int SetFileForMovie(const std::string& fileAndPath, int idMovie, int oldIdFile);
-  int SetFileForUnknown(const std::string& fileAndPath, int oldIdFile);
+  int SetFileForEpisode(const std::string& fileAndPath,
+                        int idEpisode,
+                        int oldIdFile,
+                        int newIdFile);
+  int SetFileForMovie(const std::string& fileAndPath, int idMovie, int oldIdFile, int newIdFile);
+  int SetFileForUnknown(const std::string& fileAndPath, int oldIdFile, int newIdFile);
 
 private:
   void CreateTables() override;

@@ -18,8 +18,7 @@
 
 #include <regex>
 
-using namespace KODI;
-using namespace SHADER;
+using namespace KODI::SHADER;
 
 CShaderPresetGL::CShaderPresetGL(RETRO::CRenderContext& context,
                                  unsigned int videoWidth,
@@ -30,27 +29,26 @@ CShaderPresetGL::CShaderPresetGL(RETRO::CRenderContext& context,
 
 bool CShaderPresetGL::CreateShaders()
 {
-  const unsigned int numPasses = static_cast<unsigned int>(m_passes.size());
+  const auto numPasses = static_cast<unsigned int>(m_passes.size());
 
   //! @todo Is this pass specific?
   std::vector<std::shared_ptr<IShaderLut>> passLUTsGL;
   for (unsigned int shaderIdx = 0; shaderIdx < numPasses; ++shaderIdx)
   {
     const ShaderPass& pass = m_passes[shaderIdx];
-    const unsigned int numPassLuts = static_cast<unsigned int>(pass.luts.size());
+    const auto numPassLuts = static_cast<unsigned int>(pass.luts.size());
 
     for (unsigned int i = 0; i < numPassLuts; ++i)
     {
       const ShaderLut& lutStruct = pass.luts[i];
 
-      std::shared_ptr<CShaderLutGL> passLut =
-          std::make_shared<CShaderLutGL>(lutStruct.strId, lutStruct.path);
-      if (passLut->Create(m_context, lutStruct))
+      auto passLut = std::make_shared<CShaderLutGL>(lutStruct.strId, lutStruct.path);
+      if (passLut->Create(lutStruct))
         passLUTsGL.emplace_back(std::move(passLut));
     }
 
     // Create the shader
-    std::unique_ptr<CShaderGL> videoShader = std::make_unique<CShaderGL>(m_context);
+    auto videoShader = std::make_unique<CShaderGL>();
 
     const std::string& shaderSource = pass.vertexSource; // Also contains fragment source
     const std::string& shaderPath = pass.sourcePath;
@@ -58,8 +56,8 @@ bool CShaderPresetGL::CreateShaders()
     // Get only the parameters belonging to this specific shader
     ShaderParameterMap passParameters = GetShaderParameters(pass.parameters, pass.vertexSource);
 
-    if (!videoShader->Create(shaderSource, shaderPath, passParameters, passLUTsGL, m_outputSize,
-                             shaderIdx, pass.frameCountMod))
+    if (!videoShader->Create(shaderSource, shaderPath, passParameters, passLUTsGL, shaderIdx,
+                             pass.frameCountMod))
     {
       CLog::Log(LOGERROR, "CShaderPresetGL::CreateShaders: Couldn't create a video shader");
       return false;
@@ -74,48 +72,23 @@ bool CShaderPresetGL::CreateShaderTextures()
 {
   m_pShaderTextures.clear();
 
-  unsigned int major, minor;
+  unsigned int major{0};
+  unsigned int minor{0};
   CServiceBroker::GetRenderSystem()->GetRenderVersion(major, minor);
 
   float2 prevSize = m_videoSize;
   float2 prevTextureSize = m_videoSize;
 
-  const unsigned int numPasses = static_cast<unsigned int>(m_passes.size());
+  const auto numPasses = static_cast<unsigned int>(m_passes.size());
 
   for (unsigned int shaderIdx = 0; shaderIdx < numPasses; ++shaderIdx)
   {
     const auto& pass = m_passes[shaderIdx];
 
     // Resolve final texture resolution, taking scale type and scale multiplier into account
-    float2 scaledSize, textureSize;
-    switch (pass.fbo.scaleX.scaleType)
-    {
-      case ScaleType::ABSOLUTE_SCALE:
-        scaledSize.x = static_cast<float>(pass.fbo.scaleX.abs);
-        break;
-      case ScaleType::VIEWPORT:
-        scaledSize.x =
-            pass.fbo.scaleX.scale ? pass.fbo.scaleX.scale * m_outputSize.x : m_outputSize.x;
-        break;
-      case ScaleType::INPUT:
-      default:
-        scaledSize.x = pass.fbo.scaleX.scale ? pass.fbo.scaleX.scale * prevSize.x : prevSize.x;
-        break;
-    }
-    switch (pass.fbo.scaleY.scaleType)
-    {
-      case ScaleType::ABSOLUTE_SCALE:
-        scaledSize.y = static_cast<float>(pass.fbo.scaleY.abs);
-        break;
-      case ScaleType::VIEWPORT:
-        scaledSize.y =
-            pass.fbo.scaleY.scale ? pass.fbo.scaleY.scale * m_outputSize.y : m_outputSize.y;
-        break;
-      case ScaleType::INPUT:
-      default:
-        scaledSize.y = pass.fbo.scaleY.scale ? pass.fbo.scaleY.scale * prevSize.y : prevSize.y;
-        break;
-    }
+    float2 scaledSize;
+    float2 textureSize;
+    CalculateScaledSize(pass, prevSize, scaledSize);
 
     if (shaderIdx + 1 == numPasses)
     {
@@ -166,9 +139,9 @@ bool CShaderPresetGL::CreateShaderTextures()
       //
       textureSize = scaledSize; // CShaderUtils::GetOptimalTextureSize(scaledSize)
 
-      std::shared_ptr<CGLTexture> textureGL = std::make_shared<CGLTexture>(
-          static_cast<unsigned int>(textureSize.x), static_cast<unsigned int>(textureSize.y),
-          XB_FMT_A8R8G8B8); // Format is not used
+      auto textureGL = std::make_shared<CGLTexture>(static_cast<unsigned int>(textureSize.x),
+                                                    static_cast<unsigned int>(textureSize.y),
+                                                    XB_FMT_A8R8G8B8); // Format is not used
 
       textureGL->CreateTextureObject();
 
@@ -181,7 +154,7 @@ bool CShaderPresetGL::CreateShaderTextures()
         return false;
       }
 
-      ShaderPass& nextPass = m_passes[shaderIdx + 1];
+      const ShaderPass& nextPass = m_passes[shaderIdx + 1];
 
       if (nextPass.mipmap)
         textureGL->SetMipmapping();
@@ -204,7 +177,7 @@ bool CShaderPresetGL::CreateShaderTextures()
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrapType);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrapType);
       glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, textureSize.x, textureSize.y, 0, pixelFormat,
-                   internalFormat == GL_RGBA32F ? GL_FLOAT : GL_UNSIGNED_BYTE, (void*)0);
+                   internalFormat == GL_RGBA32F ? GL_FLOAT : GL_UNSIGNED_BYTE, nullptr);
 
       GLfloat blackBorder[4] = {0.0f, 0.0f, 0.0f, 0.0f};
       glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, blackBorder);

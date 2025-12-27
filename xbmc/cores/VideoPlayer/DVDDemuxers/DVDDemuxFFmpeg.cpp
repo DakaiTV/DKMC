@@ -1032,7 +1032,7 @@ DemuxPacket* CDVDDemuxFFmpeg::ReadInternal(bool keep)
 
           pPacket = CDVDDemuxUtils::AllocateDemuxPacket(0);
           pPacket->iStreamId = DMX_SPECIALID_STREAMCHANGE;
-          pPacket->demuxerId = m_demuxerId;
+          pPacket->demuxerId = GetDemuxerId();
 
           return pPacket;
         }
@@ -1146,7 +1146,7 @@ DemuxPacket* CDVDDemuxFFmpeg::ReadInternal(bool keep)
       stream = AddStream(pPacket->iStreamId);
     }
     // we already check for a valid m_streams[pPacket->iStreamId] above
-    else if (stream->type == STREAM_AUDIO)
+    else if (stream->type == StreamType::AUDIO)
     {
       CDemuxStreamAudioFFmpeg* audiostream = dynamic_cast<CDemuxStreamAudioFFmpeg*>(stream);
       int codecparChannels =
@@ -1159,7 +1159,7 @@ DemuxPacket* CDVDDemuxFFmpeg::ReadInternal(bool keep)
         stream = AddStream(pPacket->iStreamId);
       }
     }
-    else if (stream->type == STREAM_VIDEO)
+    else if (stream->type == StreamType::VIDEO)
     {
       if (static_cast<CDemuxStreamVideo*>(stream)->iWidth != m_pFormatContext->streams[pPacket->iStreamId]->codecpar->width ||
           static_cast<CDemuxStreamVideo*>(stream)->iHeight != m_pFormatContext->streams[pPacket->iStreamId]->codecpar->height)
@@ -1179,7 +1179,7 @@ DemuxPacket* CDVDDemuxFFmpeg::ReadInternal(bool keep)
     }
 
     pPacket->iStreamId = stream->uniqueId;
-    pPacket->demuxerId = m_demuxerId;
+    pPacket->demuxerId = GetDemuxerId();
   }
   return pPacket;
 }
@@ -1545,6 +1545,14 @@ CDemuxStream* CDVDDemuxFFmpeg::AddStream(int streamIdx)
       return nullptr;
     }
 
+    // FFmpeg adds the image attachments as video streams
+    if ((pStream->disposition & AV_DISPOSITION_ATTACHED_PIC) != 0)
+    {
+      CLog::LogF(LOGDEBUG, "discarding image attachment");
+      pStream->discard = AVDISCARD_ALL;
+      return nullptr;
+    }
+
     CDemuxStream* stream = nullptr;
 
     switch (pStream->codecpar->codec_type)
@@ -1727,8 +1735,24 @@ CDemuxStream* CDVDDemuxFFmpeg::AddStream(int streamIdx)
       }
       case AVMEDIA_TYPE_DATA:
       {
-        stream = new CDemuxStream();
-        stream->type = STREAM_DATA;
+        if (pStream->codecpar->codec_tag == MKTAG('w', 'v', 't', 't'))
+        {
+          // WebVTT ISOBMFF format
+          CDemuxStreamSubtitleFFmpeg* st = new CDemuxStreamSubtitleFFmpeg(pStream);
+          if (av_dict_get(pStream->metadata, "title", nullptr, 0))
+            st->m_description = av_dict_get(pStream->metadata, "title", nullptr, 0)->value;
+
+          stream = st;
+
+          // To use COverlayCodecWebVTT decoder set codec id and extradata
+          pStream->codecpar->codec_id = AV_CODEC_ID_WEBVTT;
+          stream->extraData = FFmpegExtraData(reinterpret_cast<const uint8_t*>("fmp4"), 4);
+        }
+        else
+        {
+          stream = new CDemuxStream();
+          stream->type = StreamType::DATA;
+        }
         break;
       }
       case AVMEDIA_TYPE_SUBTITLE:
@@ -1737,7 +1761,7 @@ CDemuxStream* CDVDDemuxFFmpeg::AddStream(int streamIdx)
         {
           CDemuxStreamTeletext* st = new CDemuxStreamTeletext();
           stream = st;
-          stream->type = STREAM_TELETEXT;
+          stream->type = StreamType::TELETEXT;
           break;
         }
         else
@@ -1745,9 +1769,14 @@ CDemuxStream* CDVDDemuxFFmpeg::AddStream(int streamIdx)
           CDemuxStreamSubtitleFFmpeg* st = new CDemuxStreamSubtitleFFmpeg(pStream);
           stream = st;
 
+          if (pStream->codecpar->codec_id == AV_CODEC_ID_WEBVTT)
+          {
+            stream->flags = static_cast<StreamFlags>(static_cast<int>(stream->flags) |
+                                                     FLAG_WEBVTT_DATA_PACKETS);
+          }
+
           if (av_dict_get(pStream->metadata, "title", NULL, 0))
             st->m_description = av_dict_get(pStream->metadata, "title", NULL, 0)->value;
-
           break;
         }
       }
@@ -1789,7 +1818,7 @@ CDemuxStream* CDVDDemuxFFmpeg::AddStream(int streamIdx)
           }
         }
         stream = new CDemuxStream();
-        stream->type = STREAM_NONE;
+        stream->type = StreamType::NONE;
         break;
       }
       default:
@@ -1802,7 +1831,7 @@ CDemuxStream* CDVDDemuxFFmpeg::AddStream(int streamIdx)
           return nullptr;
         }
         stream = new CDemuxStream();
-        stream->type = STREAM_NONE;
+        stream->type = StreamType::NONE;
       }
     }
 
@@ -1817,7 +1846,8 @@ CDemuxStream* CDVDDemuxFFmpeg::AddStream(int streamIdx)
 
     stream->source = STREAM_SOURCE_DEMUX;
     stream->pPrivate = pStream;
-    stream->flags = (StreamFlags)pStream->disposition;
+    stream->flags =
+        static_cast<StreamFlags>(static_cast<int>(stream->flags) | pStream->disposition);
 
     AVDictionaryEntry* langTag = av_dict_get(pStream->metadata, "language", NULL, 0);
     if (!langTag)
@@ -1858,7 +1888,8 @@ CDemuxStream* CDVDDemuxFFmpeg::AddStream(int streamIdx)
       }
     }
 
-    if (stream->type != STREAM_NONE && pStream->codecpar->extradata && pStream->codecpar->extradata_size > 0)
+    if (stream->type != StreamType::NONE && pStream->codecpar->extradata &&
+        pStream->codecpar->extradata_size > 0)
     {
       stream->extraData =
           FFmpegExtraData(pStream->codecpar->extradata, pStream->codecpar->extradata_size);
@@ -1926,7 +1957,7 @@ CDemuxStream* CDVDDemuxFFmpeg::AddStream(int streamIdx)
     }
 
     stream->uniqueId = pStream->index;
-    stream->demuxerId = m_demuxerId;
+    stream->demuxerId = GetDemuxerId();
 
     AddStream(stream->uniqueId, stream);
     return stream;

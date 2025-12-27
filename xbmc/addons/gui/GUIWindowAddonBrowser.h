@@ -9,7 +9,6 @@
 #pragma once
 
 #include "ThumbLoader.h"
-#include "addons/RepositoryUpdater.h"
 #include "windows/GUIMediaWindow.h"
 
 #include <string>
@@ -20,7 +19,6 @@ class CFileItemList;
 namespace ADDON
 {
 enum class AddonType;
-struct AddonEvent;
 }
 
 class CGUIWindowAddonBrowser : public CGUIMediaWindow
@@ -108,8 +106,6 @@ protected:
 
 private:
   void SetProperties();
-  void UpdateStatus(const CFileItemPtr& item);
-  void OnEvent(const ADDON::CRepositoryUpdater::RepositoryUpdated& event);
-  void OnEvent(const ADDON::AddonEvent& event);
+  void UpdateStatus(const CFileItemPtr& item) const;
   CProgramThumbLoader m_thumbLoader;
 };

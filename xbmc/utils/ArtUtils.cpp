@@ -26,6 +26,8 @@
 #include "video/VideoFileItemClassify.h"
 #include "video/VideoInfoTag.h"
 
+#include <fmt/format.h>
+
 using namespace XFILE;
 
 namespace KODI::ART
@@ -178,13 +180,16 @@ std::string GetFolderThumb(const CFileItem& item, const std::string& folderJPG /
   return URIUtils::AddFileToFolder(strFolder, folderJPG);
 }
 
-std::string GetLocalArt(const CFileItem& item, const std::string& artFile, bool useFolder)
+std::string GetLocalArt(const CFileItem& item,
+                        const std::string& artFile,
+                        bool useFolder,
+                        AdditionalIdentifiers additionalIdentifiers)
 {
   // no retrieving of empty art files from folders
   if (useFolder && artFile.empty())
     return "";
 
-  std::string strFile = GetLocalArtBaseFilename(item, useFolder);
+  std::string strFile = GetLocalArtBaseFilename(item, useFolder, additionalIdentifiers);
   if (strFile.empty()) // empty filepath -> nothing to find
     return "";
 
@@ -203,16 +208,13 @@ std::string GetLocalArt(const CFileItem& item, const std::string& artFile, bool 
   return "";
 }
 
-std::string GetLocalArtBaseFilename(const CFileItem& item, bool& useFolder)
+std::string GetLocalArtBaseFilename(const CFileItem& item,
+                                    bool& useFolder,
+                                    AdditionalIdentifiers additionalIdentifiers /* = none */)
 {
   std::string strFile;
   if (item.IsStack())
-  {
-    std::string strPath;
-    URIUtils::GetParentPath(item.GetPath(), strPath);
-    strFile = URIUtils::AddFileToFolder(
-        strPath, URIUtils::GetFileName(CStackDirectory::GetStackedTitlePath(item.GetPath())));
-  }
+    strFile = CStackDirectory::GetStackTitlePath(item.GetPath());
 
   std::string file = strFile.empty() ? item.GetPath() : strFile;
   if (URIUtils::IsInRAR(file) || URIUtils::IsInZIP(file))
@@ -226,10 +228,53 @@ std::string GetLocalArtBaseFilename(const CFileItem& item, bool& useFolder)
   if (item.IsMultiPath())
     strFile = CMultiPathDirectory::GetFirstPath(item.GetPath());
 
-  if (item.IsOpticalMediaFile())
-  { // optical media files should be treated like folders
-    useFolder = true;
-    strFile = item.GetLocalMetadataPath();
+  if (URIUtils::IsBlurayPath(item.GetDynPath()))
+    file = strFile = URIUtils::GetDiscFile(item.GetDynPath());
+
+  if (URIUtils::IsOpticalMediaFile(file))
+  {
+    // Optical media files (VIDEO_TS.IFO/INDEX.BDMV) should be treated like folders
+    useFolder = true; // ByRef so changes behaviour in GetLocalArt()
+    strFile = URIUtils::GetBasePath(file);
+  }
+
+  if (!URIUtils::GetFileName(file).empty() && item.HasVideoInfoTag() &&
+      additionalIdentifiers != AdditionalIdentifiers::NONE)
+  {
+    using enum AdditionalIdentifiers;
+    switch (additionalIdentifiers)
+    {
+      case SEASON_AND_EPISODE:
+      {
+        // Note this is an exception to the optical media rule above - episode art files will be stored alongside the episode .nfo
+        const CVideoInfoTag* tag{item.GetVideoInfoTag()};
+        if (tag->m_iSeason > -1 && tag->m_iEpisode > -1)
+        {
+          std::string baseFile{file};
+          URIUtils::RemoveExtension(baseFile);
+          strFile = fmt::format("{}-S{:02}E{:02}{}", baseFile, tag->m_iSeason, tag->m_iEpisode,
+                                URIUtils::GetExtension(file));
+          useFolder = false;
+        }
+        break;
+      }
+      case PLAYLIST:
+      {
+        const CVideoInfoTag* tag{item.GetVideoInfoTag()};
+        if (tag->m_iTrack > -1)
+        {
+          std::string baseFile{file};
+          URIUtils::RemoveExtension(baseFile);
+          strFile =
+              fmt::format("{}-{:05}{}", baseFile, tag->m_iTrack, URIUtils::GetExtension(file));
+          useFolder = false;
+        }
+        break;
+      }
+      case NONE:
+      default:
+        break;
+    }
   }
   else if (useFolder && !(item.IsFolder() && !item.IsFileFolder()))
   {
@@ -263,7 +308,7 @@ std::string GetLocalFanart(const CFileItem& item)
     URIUtils::GetParentPath(item.GetPath(), path);
     CStackDirectory dir;
     std::string path2;
-    path2 = dir.GetStackedTitlePath(file);
+    path2 = dir.GetStackTitlePath(file);
     file = URIUtils::AddFileToFolder(path, URIUtils::GetFileName(path2));
     CFileItem fan_item(dir.GetFirstStackedFile(item.GetPath()), false);
     std::string TBNFile(URIUtils::ReplaceExtension(GetTBNFile(fan_item), "-fanart"));
@@ -329,24 +374,24 @@ std::string GetLocalFanart(const CFileItem& item)
 }
 
 // Gets the .tbn filename from a file or folder name.
-// <filename>.ext -> <filename>.tbn
-// <foldername>/ -> <foldername>.tbn
-std::string GetTBNFile(const CFileItem& item)
+// <filename>.ext -> <filename>(-<SxxEyy>).tbn
+// <foldername>/ -> <foldername>(-<SxxEyy>).tbn
+std::string GetTBNFile(const CFileItem& item, int season /* = - 1 */, int episode /* = -1 */)
 {
   std::string thumbFile;
-  std::string file = item.GetPath();
+  std::string file{item.GetPath()};
 
   if (item.IsStack())
   {
-    std::string path, returnPath;
+    std::string path;
     URIUtils::GetParentPath(item.GetPath(), path);
     CFileItem item(CStackDirectory::GetFirstStackedFile(file), false);
-    const std::string TBNFile = GetTBNFile(item);
-    returnPath = URIUtils::AddFileToFolder(path, URIUtils::GetFileName(TBNFile));
+    const std::string TBNFile{GetTBNFile(item)};
+    const std::string returnPath{URIUtils::AddFileToFolder(path, URIUtils::GetFileName(TBNFile))};
     if (CFile::Exists(returnPath))
       return returnPath;
 
-    const std::string& stackPath = CStackDirectory::GetStackedTitlePath(file);
+    const std::string& stackPath{CStackDirectory::GetStackTitlePath(file)};
     file = URIUtils::AddFileToFolder(path, URIUtils::GetFileName(stackPath));
   }
 
@@ -357,6 +402,9 @@ std::string GetTBNFile(const CFileItem& item)
     URIUtils::GetParentPath(path, parent);
     file = URIUtils::AddFileToFolder(parent, URIUtils::GetFileName(item.GetPath()));
   }
+
+  if (URIUtils::IsBlurayPath(file))
+    file = URIUtils::GetDiscFile(file);
 
   CURL url(file);
   file = url.GetFileName();
@@ -369,7 +417,16 @@ std::string GetTBNFile(const CFileItem& item)
     if (item.IsFolder() && !item.IsFileFolder())
       thumbFile = file + ".tbn"; // folder, so just add ".tbn"
     else
-      thumbFile = URIUtils::ReplaceExtension(file, ".tbn");
+    {
+      if (season > -1 && episode > -1)
+      {
+        URIUtils::RemoveExtension(file);
+        thumbFile = fmt::format("{}-S{:02}E{:02}.tbn", file, season, episode);
+      }
+      else
+        thumbFile = URIUtils::ReplaceExtension(file, ".tbn");
+    }
+
     url.SetFileName(thumbFile);
     thumbFile = url.Get();
   }

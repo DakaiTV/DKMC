@@ -59,14 +59,20 @@ class TestFileItemMovieName : public AdvancedSettingsResetBase,
 {
 };
 
+class TestFileItemLocalMetadataPath : public AdvancedSettingsResetBase,
+                                      public WithParamInterface<TestFileData>
+{
+};
+
 const TestFileData BaseMovies[] = {
-    {"/home/user/movies/movie/disc 1/video_ts/VIDEO_TS.IFO", false, "/home/user/movies/movie/"},
     {"c:\\dir\\filename.avi", false, "c:\\dir\\filename.avi"},
     {"c:\\dir\\filename.avi", true, "c:\\dir\\"},
     {"/dir/filename.avi", false, "/dir/filename.avi"},
     {"/dir/filename.avi", true, "/dir/"},
     {"smb://somepath/file.avi", false, "smb://somepath/file.avi"},
     {"smb://somepath/file.avi", true, "smb://somepath/"},
+    {"smb://somepath/disc 1/file.avi", false, "smb://somepath/disc 1/file.avi"},
+    {"smb://somepath/disc 1/file.avi", true, "smb://somepath/"},
     {"stack:///path/to/movie_name/cd1/some_file1.avi , /path/to/movie_name/cd2/some_file2.avi",
      false,
      "stack:///path/to/movie_name/cd1/some_file1.avi , /path/to/movie_name/cd2/some_file2.avi"},
@@ -116,6 +122,8 @@ const TestNameData BaseNames[] = {
     {"/movie/filename.avi", true, "movie"},
     {"smb://somepath/movie.avi", false, "movie"},
     {"smb://somepath/movie/file.avi", true, "movie"},
+    {"smb://somepath/disc 1/movie.avi", false, "movie"},
+    {"smb://somepath/movie/disc 1/file.avi", true, "movie"},
     {"/home/user/movies/movie/video_ts/VIDEO_TS.IFO", false, "movie"},
     {"/home/user/movies/movie/video_ts/VIDEO_TS.IFO", true, "movie"},
     {"/home/user/movies/movie/disc 1/video_ts/VIDEO_TS.IFO", false, "movie"},
@@ -139,3 +147,106 @@ TEST_P(TestFileItemMovieName, GetMovieName)
 }
 
 INSTANTIATE_TEST_SUITE_P(NameMovies, TestFileItemMovieName, ValuesIn(BaseNames));
+
+const TestFileData BasePaths[] = {
+    {"c:\\dir\\", true, "c:\\dir\\"},
+    {"/dir/filename.avi", false, "/dir/"},
+    {"/dir/", true, "/dir/"},
+    {"smb://somepath/file.avi", false, "smb://somepath/"},
+    {"smb://somepath/", true, "smb://somepath/"},
+    {"smb://somepath/disc 1/file.avi", false, "smb://somepath/disc 1/"},
+    {"smb://somepath/disc 1/", true, "smb://somepath/disc 1/"},
+    {"/home/user/TV Shows/Dexter/S1/1x01.avi", false, "/home/user/TV Shows/Dexter/S1/"},
+    {"/home/user/TV Shows/Dexter/S1/", true, "/home/user/TV Shows/Dexter/S1/"},
+    {"/home/user/movies/movie/video_ts/VIDEO_TS.IFO", false, "/home/user/movies/movie/"},
+    {"/home/user/movies/movie/disc 1/video_ts/VIDEO_TS.IFO", false,
+     "/home/user/movies/movie/disc 1/"},
+    {"/home/user/movies/movie/BDMV/index.bdmv", false, "/home/user/movies/movie/"},
+    {"/home/user/movies/movie/disc 1/BDMV/index.bdmv", false, "/home/user/movies/movie/disc 1/"},
+    {"/home/user/movies/movie/movie.iso", false, "/home/user/movies/movie/"},
+    {"/home/user/movies/movie/disc 1/movie.iso", false, "/home/user/movies/movie/disc 1/"},
+    {"bluray://udf%3a%2f%2fsmb%253a%252f%252fsomepath%252fmovie.iso%2f/BDMV/PLAYLIST/00800.mpls",
+     false, "smb://somepath/"},
+    {"bluray://udf%3a%2f%2fsmb%253a%252f%252fsomepath%252fdisc%201%252fmovie.iso%2f/BDMV/PLAYLIST/"
+     "00800.mpls",
+     false, "smb://somepath/disc 1/"},
+    {"bluray://smb%3a%2f%2fsomepath%2f/BDMV/PLAYLIST/00800.mpls", false, "smb://somepath/"},
+    {"bluray://smb%3a%2f%2fsomepath%2fdisc%201%2f/BDMV/PLAYLIST/00800.mpls", false,
+     "smb://somepath/disc 1/"},
+    {"/dir/filename.m3u8", true, "/dir/"},
+    {"/dir/filename.zip", true, "/dir/"},
+    {"smb://somepath/filename.rar", true, "smb://somepath/"}};
+
+TEST_P(TestFileItemLocalMetadataPath, GetLocalMetadataPath)
+{
+  CFileItem item;
+  item.SetPath(GetParam().file);
+  item.SetFolder(GetParam().use_folder);
+  EXPECT_EQ(GetParam().base, item.GetLocalMetadataPath());
+}
+
+INSTANTIATE_TEST_SUITE_P(NameMovies, TestFileItemLocalMetadataPath, ValuesIn(BasePaths));
+
+TEST(TestFileItem, TestSimplePathSet)
+{
+  CFileItem item;
+  item.SetPath("/local/path/regular/file.txt");
+  item.SetDynPath("/local/path/dynamic/file.txt");
+
+  EXPECT_EQ("/local/path/regular/file.txt", item.GetURL().Get());
+  EXPECT_EQ("/local/path/dynamic/file.txt", item.GetDynURL().Get());
+}
+
+TEST(TestFileItem, TestLabel)
+{
+  CFileItem item("My Item Label");
+  item.SetPath("/local/path/file.txt");
+
+  EXPECT_EQ("My Item Label", item.GetLabel());
+  EXPECT_EQ("/local/path/file.txt", item.GetURL().Get());
+  EXPECT_EQ("/local/path/file.txt", item.GetDynURL().Get());
+}
+
+TEST(TestFileItem, TestCURLConstructor)
+{
+  CFileItem folderItem(CURL("/local/path/file.txt"), true);
+
+  EXPECT_EQ("", folderItem.GetLabel());
+  EXPECT_EQ("/local/path/file.txt/", folderItem.GetURL().Get());
+  EXPECT_EQ("/local/path/file.txt/", folderItem.GetDynURL().Get());
+
+  CFileItem fileItem(CURL("/local/path/file.txt"), false);
+
+  EXPECT_EQ("", fileItem.GetLabel());
+  EXPECT_EQ("/local/path/file.txt", fileItem.GetURL().Get());
+  EXPECT_EQ("/local/path/file.txt", fileItem.GetDynURL().Get());
+}
+
+TEST(TestFileItem, TestAssignment)
+{
+  CFileItem itemToCopy("My Item Label");
+  itemToCopy.SetPath("/local/path/file.txt");
+
+  CFileItem item("Alternative Label");
+  item = itemToCopy;
+
+  EXPECT_EQ("My Item Label", item.GetLabel());
+  EXPECT_EQ("/local/path/file.txt", item.GetURL().Get());
+  EXPECT_EQ("/local/path/file.txt", item.GetDynURL().Get());
+}
+
+TEST(TestFileItem, MimeType)
+{
+  CFileItem item("Internet Movies List");
+  item.SetPath("http://testdomain.com/api/movies");
+
+  item.FillInMimeType(true);
+  EXPECT_EQ("Internet Movies List", item.GetLabel());
+  EXPECT_EQ("http://testdomain.com/api/movies", item.GetURL().Get());
+  EXPECT_EQ("http://testdomain.com/api/movies", item.GetDynURL().Get());
+
+  item.FillInMimeType(false);
+  EXPECT_EQ("Internet Movies List", item.GetLabel());
+  EXPECT_EQ("http://testdomain.com/api/movies", item.GetURL().Get());
+  EXPECT_EQ("http://testdomain.com/api/movies", item.GetDynURL().Get());
+}

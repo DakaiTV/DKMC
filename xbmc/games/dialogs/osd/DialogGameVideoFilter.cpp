@@ -25,10 +25,10 @@
 #include "guilib/GUIWindowManager.h"
 #include "guilib/LocalizeStrings.h"
 #include "guilib/WindowIDs.h"
+#include "jobs/JobManager.h"
 #include "settings/GameSettings.h"
 #include "settings/MediaSettings.h"
 #include "threads/SystemClock.h"
-#include "utils/JobManager.h"
 #include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
 #include "utils/Variant.h"
@@ -41,13 +41,12 @@ using namespace KODI;
 using namespace GAME;
 using namespace std::chrono_literals;
 
-#define PRESETS_ADDON_NAME "game.shader.presets"
-
 namespace
 {
 
-constexpr auto ICON_VIDEO = "DefaultVideo.png";
-constexpr auto ICON_GET_MORE = "DefaultAddSource.png";
+constexpr const char* PRESETS_ADDON_NAME = "game.shader.presets";
+constexpr const char* ICON_VIDEO = "DefaultVideo.png";
+constexpr const char* ICON_GET_MORE = "DefaultAddSource.png";
 
 struct ScalingMethodProperties
 {
@@ -116,6 +115,18 @@ void CDialogGameVideoFilter::InitScalingMethods()
   }
 }
 
+namespace
+{
+TiXmlNode* GetFirstChildOfNode(TiXmlNode& node, const char* childName)
+{
+  TiXmlNode* ret{node.FirstChild(childName)};
+  if (ret)
+    return ret->FirstChild();
+
+  return ret;
+}
+} // unnamed namespace
+
 void CDialogGameVideoFilter::InitVideoFilters()
 {
 
@@ -126,10 +137,12 @@ void CDialogGameVideoFilter::InitVideoFilters()
 
   //! @todo Have the add-on give us the xml as a string (or parse it)
   std::string xmlFilename;
-#ifdef TARGET_WINDOWS
-  xmlFilename = "ShaderPresetsHLSLP.xml";
-#else
+#if defined(HAS_GLES)
+  xmlFilename = "ShaderPresetsGLSLP_GLES.xml";
+#elif defined(HAS_GL)
   xmlFilename = "ShaderPresetsGLSLP.xml";
+#else
+  xmlFilename = "ShaderPresetsHLSLP.xml";
 #endif
 
   const std::string homeAddonPath = CSpecialProtocol::TranslatePath(
@@ -169,21 +182,18 @@ void CDialogGameVideoFilter::InitVideoFilters()
     if (child->FirstChild() == nullptr)
       continue;
 
-    TiXmlNode* pathNode;
-    if ((pathNode = child->FirstChild("path")))
-      if ((pathNode = pathNode->FirstChild()))
-        videoFilter.path =
-            URIUtils::AddFileToFolder(URIUtils::GetBasePath(xmlPath), pathNode->Value());
+    const TiXmlNode* pathNode{GetFirstChildOfNode(*child, "path")};
+    if (pathNode)
+      videoFilter.path =
+          URIUtils::AddFileToFolder(URIUtils::GetBasePath(xmlPath), pathNode->Value());
 
-    TiXmlNode* nameNode;
-    if ((nameNode = child->FirstChild("name")))
-      if ((nameNode = nameNode->FirstChild()))
-        videoFilter.name = nameNode->Value();
+    const TiXmlNode* nameNode{GetFirstChildOfNode(*child, "name")};
+    if (nameNode)
+      videoFilter.name = nameNode->Value();
 
-    TiXmlNode* folderNode;
-    if ((folderNode = child->FirstChild("folder")))
-      if ((folderNode = folderNode->FirstChild()))
-        videoFilter.folder = folderNode->Value();
+    const TiXmlNode* folderNode{GetFirstChildOfNode(*child, "folder")};
+    if (folderNode)
+      videoFilter.folder = folderNode->Value();
 
     videoFilters.emplace_back(videoFilter);
   }
@@ -199,10 +209,10 @@ void CDialogGameVideoFilter::InitVideoFilters()
     if (!canLoadPreset)
       continue;
 
-    CFileItem item{videoFilter.name};
-    item.SetLabel2(videoFilter.folder);
-    item.SetProperty("game.videofilter", CVariant{videoFilter.path});
-    item.SetArt("icon", ICON_VIDEO);
+    auto item{std::make_shared<CFileItem>(videoFilter.name)};
+    item->SetLabel2(videoFilter.folder);
+    item->SetProperty("game.videofilter", CVariant{videoFilter.path});
+    item->SetArt("icon", ICON_VIDEO);
 
     m_items.Add(std::move(item));
   }
@@ -269,7 +279,7 @@ void CDialogGameVideoFilter::OnItemFocus(unsigned int index)
 
 unsigned int CDialogGameVideoFilter::GetFocusedItem() const
 {
-  ::CGameSettings& gameSettings = CMediaSettings::GetInstance().GetCurrentGameSettings();
+  const ::CGameSettings& gameSettings = CMediaSettings::GetInstance().GetCurrentGameSettings();
 
   for (int i = 0; i < m_items.Size(); i++)
   {
